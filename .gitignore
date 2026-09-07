@@ -33,6 +33,11 @@ artifacts/
 *.sqlite
 *.sqlite3
 
+# ...but not the SQLite migrations project. Git matches these patterns against
+# directory names too, case-insensitively on Windows, so "*.sqlite" swallows
+# the whole of DentalSurgery.Migrations.Sqlite - which is source, not data.
+!src/DentalSurgery.Migrations.Sqlite/
+
 # Generated claim files: X12 837D interchanges carry patient identifiers.
 **/claims/outbound/
 **/claims/archive/
