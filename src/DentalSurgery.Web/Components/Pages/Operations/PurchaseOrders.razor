@@ -1,0 +1,182 @@
+@page "/purchase-orders"
+@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject InventoryService Inventory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Purchase orders - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Purchase orders" Subtitle="Ordering, goods-in and supplier performance." />
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Open orders" Value="@_orders.Count(o => o.Status is not (PurchaseOrderStatus.Received or PurchaseOrderStatus.Cancelled)).ToString()"
+              Accent="primary" Icon="truck" />
+    <StatTile Label="Drafts" Value="@_orders.Count(o => o.Status == PurchaseOrderStatus.Draft).ToString()" Accent="neutral" />
+    <StatTile Label="Overdue deliveries" Value="@_orders.Count(o => o.IsOverdue).ToString()"
+              Accent="@(_orders.Any(o => o.IsOverdue) ? "danger" : "success")" />
+    <StatTile Label="Committed spend" Value="@Ui.MoneyCompact(_orders.Where(o => o.Status is not (PurchaseOrderStatus.Received or PurchaseOrderStatus.Cancelled)).Sum(o => o.Total))"
+              Accent="warning" />
+    <StatTile Label="Spend this year" Value="@Ui.MoneyCompact(_orders.Where(o => o.OrderDate.Year == Clock.Today.Year).Sum(o => o.Total))"
+              Accent="accent" />
+</div>
+
+@if (_orders.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="truck" Title="No purchase orders"
+                    Message="Use “Draft reorders” on the stock screen to raise orders for anything below its reorder level.">
+            <a href="/inventory" class="btn btn-sm btn-primary">Go to stock control</a>
+        </EmptyState>
+    </div>
+}
+else
+{
+    <div class="d-flex flex-column gap-2">
+        @foreach (var order in _orders)
+        {
+            <div class="card-ds">
+                <div class="card-ds-header">
+                    <span class="mono" style="font-weight:600;">@order.OrderNumber</span>
+                    <span class="badge-ds @Ui.BadgeFor(order.Status)">@Ui.Humanise(order.Status)</span>
+                    <span style="font-size:.86rem;">@(order.Supplier?.Name ?? "Unknown supplier")</span>
+                    <span class="text-muted" style="font-size:.79rem;">
+                        Ordered @Ui.Date(order.OrderDate)
+                        @if (order.ExpectedDate.HasValue)
+                        {
+                            <span class="@(order.IsOverdue ? "text-danger fw-semibold" : "")">
+                                &middot; expected @Ui.Date(order.ExpectedDate)
+                            </span>
+                        }
+                        &middot; @order.Lines.Count line(s)
+                    </span>
+                    <span class="ms-auto d-flex align-items-center gap-2">
+                        <span class="mono" style="font-weight:600;">@Ui.Money(order.Total)</span>
+                        @if (order.Status == PurchaseOrderStatus.Draft)
+                        {
+                            <button class="btn btn-sm btn-primary" @onclick="() => Send(order.Id)">Send</button>
+                        }
+                        else if (order.Status is PurchaseOrderStatus.Submitted or PurchaseOrderStatus.Acknowledged
+                                 or PurchaseOrderStatus.PartiallyReceived)
+                        {
+                            <button class="btn btn-sm btn-primary" @onclick="() => ReceiveAll(order.Id)">
+                                Receive in full
+                            </button>
+                        }
+                        <button class="btn-ghost" @onclick="() => Toggle(order.Id)">
+                            <Icon Name="@(_expanded.Contains(order.Id) ? "chevron-down" : "chevron-right")" Size="14" />
+                        </button>
+                    </span>
+                </div>
+
+                @if (_expanded.Contains(order.Id))
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="num">Ordered</th>
+                                    <th class="num">Received</th>
+                                    <th class="num">Outstanding</th>
+                                    <th class="num">Unit cost</th>
+                                    <th class="num">Line total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var line in order.Lines.OrderBy(l => l.Sequence))
+                                {
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:500;">@(line.InventoryItem?.Name ?? "-")</div>
+                                            <div class="text-faint mono" style="font-size:.72rem;">@line.InventoryItem?.Sku</div>
+                                        </td>
+                                        <td class="num mono">@line.QuantityOrdered.ToString("0.##")</td>
+                                        <td class="num mono">@line.QuantityReceived.ToString("0.##")</td>
+                                        <td class="num mono @(line.QuantityOutstanding > 0 ? "text-warning" : "")">
+                                            @line.QuantityOutstanding.ToString("0.##")
+                                        </td>
+                                        <td class="num mono">@Ui.Money(line.UnitCost)</td>
+                                        <td class="num mono">@Ui.Money(line.LineTotal)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<PurchaseOrder> _orders = new();
+    private HashSet<Guid> _expanded = new();
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _orders = await db.PurchaseOrders.AsNoTracking()
+            .Include(o => o.Supplier)
+            .Include(o => o.Lines).ThenInclude(l => l.InventoryItem)
+            .OrderByDescending(o => o.OrderDate)
+            .Take(200)
+            .ToListAsync();
+    }
+
+    private void Toggle(Guid id)
+    {
+        if (!_expanded.Add(id)) _expanded.Remove(id);
+    }
+
+    private async Task Send(Guid orderId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var order = await db.PurchaseOrders.FirstOrDefaultAsync(o => o.Id == orderId);
+        if (order is null) return;
+
+        order.Status = PurchaseOrderStatus.Submitted;
+        await db.SaveChangesAsync();
+
+        _message = $"Order {order.OrderNumber} marked as sent to the supplier.";
+        _isError = false;
+        await LoadAsync();
+    }
+
+    /// <summary>Books in every outstanding line, creating lots where the item is tracked.</summary>
+    private async Task ReceiveAll(Guid orderId)
+    {
+        var order = _orders.FirstOrDefault(o => o.Id == orderId);
+        if (order is null) return;
+
+        var receipts = order.Lines
+            .Where(l => l.QuantityOutstanding > 0)
+            .Select(l => (l.Id, l.QuantityOutstanding, (string?)null, (DateOnly?)Clock.Today.AddYears(2)))
+            .ToList();
+
+        if (receipts.Count == 0)
+        {
+            _message = "Everything on this order has already been received.";
+            _isError = true;
+            return;
+        }
+
+        var result = await Inventory.ReceiveOrderAsync(orderId, receipts);
+        _message = result.Succeeded
+            ? $"Booked in {receipts.Count} line(s) on order {order.OrderNumber}."
+            : result.ErrorMessage;
+        _isError = result.Failed;
+
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>DentalSurgery.Web</RootNamespace>
+    <UserSecretsId>aspnet-DentalSurgery.Web-9207d3fc-0bb1-439f-aeca-862eddf5c853</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DentalSurgery.Infrastructure\DentalSurgery.Infrastructure.csproj" />
+    <ProjectReference Include="..\DentalSurgery.Migrations.SqlServer\DentalSurgery.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\DentalSurgery.Migrations.Sqlite\DentalSurgery.Migrations.Sqlite.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="8.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EFCoreVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$(EFCoreVersion)">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.10" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,62 @@
+@page "/Account/SignOut"
+@attribute [Authorize]
+
+<PageTitle>Sign out - Meridian Dental Surgery</PageTitle>
+
+@*
+    Sign-out is confirmed here rather than posted straight from the topbar menu.
+
+    The application shell renders in InteractiveServer mode, and an antiforgery
+    token produced inside an interactive circuit is refused by the endpoint —
+    either absent, or bound to a different principal than the one making the
+    request. Everything under /Account renders statically (see RenderModeForPage
+    in App.razor), so the token below is minted for this exact request and this
+    exact user, which is what the endpoint validates against.
+
+    A confirmation step is also the right behaviour for a clinical system: a
+    mis-clicked sign-out in the middle of charting loses the operator their place.
+*@
+
+<h2>Sign out</h2>
+<p class="text-muted">You are signed in as <strong>@_userName</strong>.</p>
+
+<form action="/Account/Logout" method="post">
+    <AntiforgeryToken />
+    <input type="hidden" name="ReturnUrl" value="@_returnUrl" />
+
+    <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary">Sign out</button>
+        <a class="btn btn-outline-secondary" href="@_cancelUrl">Cancel</a>
+    </div>
+</form>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    /// <summary>Where the user lands after signing out. Relative, because the
+    /// endpoint resolves it with LocalRedirect and rejects anything absolute.</summary>
+    private string _returnUrl = string.Empty;
+
+    private string _cancelUrl = "/";
+    private string? _userName;
+
+    protected override void OnInitialized()
+    {
+        _userName = HttpContext.User.Identity?.Name;
+
+        // Returning to the page they came from would immediately bounce them to
+        // the login screen, so signing out lands on the sign-in page instead.
+        _returnUrl = string.Empty;
+
+        var referer = HttpContext.Request.Headers.Referer.ToString();
+
+        if (!string.IsNullOrWhiteSpace(referer)
+            && Uri.TryCreate(referer, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Host, HttpContext.Request.Host.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            // Only a same-host referer is trusted, so Cancel cannot be pointed
+            // at another site by a crafted link.
+            _cancelUrl = uri.PathAndQuery;
+        }
+    }
+}

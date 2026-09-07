@@ -1,0 +1,292 @@
+@page "/sterilisation"
+@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@inject InventoryService Inventory
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Sterilisation - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Sterilisation and decontamination"
+            Subtitle="Cycle log, instrument sets and equipment validation." />
+
+@if (_failedCycles.Count > 0)
+{
+    <div class="alert-ds a-danger mb-3">
+        <Icon Name="alert-triangle" Size="16" />
+        <div class="flex-grow-1">
+            <strong>@_failedCycles.Count failed cycle(s) in this period.</strong>
+            Every set in a failed load must be reprocessed, and any instrument already used must be traced.
+        </div>
+    </div>
+}
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Cycles" Value="@_cycles.Count.ToString()" Accent="primary" Icon="shield" />
+    <StatTile Label="Passed" Value="@_cycles.Count(c => c.Result == SterilisationResult.Pass).ToString()"
+              Accent="success" Icon="check-circle" />
+    <StatTile Label="Failed" Value="@_failedCycles.Count.ToString()"
+              Accent="@(_failedCycles.Count > 0 ? "danger" : "success")"
+              Caption="@($"{FailureRate:0.##}% failure rate")" />
+    <StatTile Label="Sets available" Value="@_sets.Count(s => s.IsAvailable).ToString()"
+              Accent="accent" Caption="@($"of {_sets.Count} total")" />
+    <StatTile Label="Quarantined" Value="@_sets.Count(s => s.Status == InstrumentSetStatus.Quarantined).ToString()"
+              Accent="@(_sets.Any(s => s.Status == InstrumentSetStatus.Quarantined) ? "danger" : "neutral")" />
+    <StatTile Label="Service overdue" Value="@_sterilisers.Count(s => s.ServiceOverdue).ToString()"
+              Accent="@(_sterilisers.Any(s => s.ServiceOverdue) ? "danger" : "success")" Icon="alert-circle" />
+</div>
+
+<div class="tabs-ds">
+    <button class="tab-ds @(_view == "cycles" ? "active" : "")" @onclick='() => _view = "cycles"'>
+        Cycle log <span class="count">@_cycles.Count</span>
+    </button>
+    <button class="tab-ds @(_view == "sets" ? "active" : "")" @onclick='() => _view = "sets"'>
+        Instrument sets <span class="count">@_sets.Count</span>
+    </button>
+    <button class="tab-ds @(_view == "equipment" ? "active" : "")" @onclick='() => _view = "equipment"'>
+        Equipment <span class="count">@_sterilisers.Count</span>
+    </button>
+</div>
+
+@if (_view == "cycles")
+{
+    <DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">Started</th>
+                    <th>Steriliser</th>
+                    <th class="num">Cycle</th>
+                    <th>Program</th>
+                    <th class="num nowrap">Peak temp</th>
+                    <th class="num nowrap">Pressure</th>
+                    <th class="nowrap">Duration</th>
+                    <th>Indicators</th>
+                    <th class="num">Items</th>
+                    <th>Operator</th>
+                    <th style="width:100px;">Result</th>
+                    <th style="width:34px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var cycle in _cycles.Take(200))
+                {
+                    <tr>
+                        <td class="nowrap">@cycle.StartedAtUtc.ToString("dd/MM/yy HH:mm")</td>
+                        <td style="font-size:.8rem;">@(cycle.Steriliser?.Name ?? "-")</td>
+                        <td class="num mono">@cycle.CycleNumber</td>
+                        <td style="font-size:.79rem;">@Ui.Humanise(cycle.Program)</td>
+                        <td class="num mono @(cycle.Result == SterilisationResult.Fail ? "text-danger fw-bold" : "")">
+                            @(cycle.PeakTemperatureCelsius?.ToString("0.0") ?? "-")
+                        </td>
+                        <td class="num mono">@(cycle.PeakPressureBar?.ToString("0.00") ?? "-")</td>
+                        <td class="mono nowrap">@(cycle.DurationMinutes.HasValue ? $"{cycle.DurationMinutes}m" : "-")</td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <span class="badge-ds @(cycle.ChemicalIndicatorPass ? "b-success" : "b-danger")" title="Chemical indicator">CI</span>
+                                <span class="badge-ds @(cycle.HelixTestPass ? "b-success" : "b-danger")" title="Helix test">Helix</span>
+                                <span class="badge-ds @(cycle.VacuumLeakTestPass ? "b-success" : "b-danger")" title="Vacuum leak test">Vac</span>
+                                @if (cycle.BiologicalIndicatorPass.HasValue)
+                                {
+                                    <span class="badge-ds @(cycle.BiologicalIndicatorPass.Value ? "b-success" : "b-danger")" title="Biological indicator">BI</span>
+                                }
+                            </div>
+                        </td>
+                        <td class="num">@cycle.ItemCount</td>
+                        <td class="nowrap" style="font-size:.79rem;">@(cycle.OperatorStaff?.Name.Display ?? "-")</td>
+                        <td><span class="badge-ds @Ui.BadgeFor(cycle.Result)">@Ui.Humanise(cycle.Result)</span></td>
+                        <td>
+                            @if (cycle.Result == SterilisationResult.Fail)
+                            {
+                                <button class="btn-ghost" title="Trace the instruments from this cycle"
+                                        @onclick="() => Trace(cycle.Id)">
+                                    <Icon Name="search" Size="14" />
+                                </button>
+                            }
+                        </td>
+                    </tr>
+
+                    @if (cycle.Result == SterilisationResult.Fail && !string.IsNullOrWhiteSpace(cycle.CorrectiveAction))
+                    {
+                        <tr>
+                            <td colspan="12" style="background:var(--ds-danger-soft);">
+                                <div class="p-2" style="font-size:.82rem;">
+                                    <strong>Failure:</strong> @cycle.FailureReason<br />
+                                    <strong>Corrective action:</strong> @cycle.CorrectiveAction
+                                </div>
+                            </td>
+                        </tr>
+                    }
+
+                    @if (_traceResults.TryGetValue(cycle.Id, out var usages))
+                    {
+                        <tr>
+                            <td colspan="12" style="background:var(--ds-surface-2);">
+                                <div class="p-2">
+                                    <strong style="font-size:.85rem;">Instrument trace</strong>
+                                    @if (usages.Count == 0)
+                                    {
+                                        <div class="text-success" style="font-size:.83rem;">
+                                            No instruments from this cycle were used on a patient.
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-danger" style="font-size:.83rem;">
+                                            @usages.Count use(s) recorded from this cycle. Each patient must be reviewed.
+                                        </div>
+                                        <ul style="font-size:.82rem; margin-top:.4rem;">
+                                            @foreach (var usage in usages)
+                                            {
+                                                <li>
+                                                    @usage.InstrumentSet?.Name used @usage.UsedAtUtc.ToString("d MMM yyyy HH:mm")
+                                                    @if (usage.PatientId.HasValue)
+                                                    {
+                                                        <a href="/patients/@usage.PatientId"> - open the patient record</a>
+                                                    }
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else if (_view == "sets")
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Set</th>
+                    <th>Contents</th>
+                    <th class="num">Items</th>
+                    <th class="nowrap">Sterilised</th>
+                    <th class="nowrap">Expires</th>
+                    <th class="num">Uses</th>
+                    <th style="width:120px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var set in _sets)
+                {
+                    <tr>
+                        <td class="mono">@set.SetCode</td>
+                        <td>
+                            @set.Name
+                            @if (set.IsSurgicalSet)
+                            {
+                                <span class="badge-ds b-purple ms-1">Surgical</span>
+                            }
+                        </td>
+                        <td style="font-size:.78rem;">@Ui.Truncate(set.Contents, 70)</td>
+                        <td class="num">@set.ItemCount</td>
+                        <td class="nowrap">@Ui.DateShort(set.SterilisedOn)</td>
+                        <td class="nowrap @(set.IsExpired ? "text-danger fw-semibold" : "")">
+                            @Ui.DateShort(set.SterilityExpiryDate)
+                        </td>
+                        <td class="num">@set.UsageCount</td>
+                        <td>
+                            <span class="badge-ds @(set.Status switch
+                            {
+                                InstrumentSetStatus.Sterile when !set.IsExpired => "b-success",
+                                InstrumentSetStatus.Sterile => "b-warning",
+                                InstrumentSetStatus.Contaminated or InstrumentSetStatus.InProcessing => "b-warning",
+                                InstrumentSetStatus.Quarantined => "b-danger",
+                                _ => "b-neutral"
+                            })">
+                                @(set.IsExpired && set.Status == InstrumentSetStatus.Sterile ? "Expired" : Ui.Humanise(set.Status))
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var steriliser in _sterilisers)
+        {
+            <div class="col-12 col-lg-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <h3>@steriliser.Name</h3>
+                        <span class="badge-ds @(steriliser.ServiceOverdue ? "b-danger" : "b-success") ms-auto">
+                            @(steriliser.ServiceOverdue ? "Service overdue" : "In service")
+                        </span>
+                    </div>
+                    <div class="card-ds-body">
+                        <dl class="kv">
+                            <dt>Manufacturer</dt><dd>@steriliser.Manufacturer @steriliser.Model</dd>
+                            <dt>Serial number</dt><dd class="mono">@steriliser.SerialNumber</dd>
+                            <dt>Installed</dt><dd>@Ui.Date(steriliser.InstallationDate)</dd>
+                            <dt>Last service</dt><dd>@Ui.Date(steriliser.LastServiceDate)</dd>
+                            <dt>Next service</dt>
+                            <dd class="@(steriliser.ServiceOverdue ? "text-danger fw-semibold" : "")">
+                                @Ui.Date(steriliser.NextServiceDue)
+                            </dd>
+                            <dt>Last validation</dt><dd>@Ui.Date(steriliser.LastValidationDate)</dd>
+                            <dt>Next validation</dt><dd>@Ui.Date(steriliser.NextValidationDue)</dd>
+                            <dt>Pressure vessel cert</dt><dd>@Ui.Date(steriliser.PressureVesselCertExpiry)</dd>
+                            <dt>Next cycle number</dt><dd class="mono">@steriliser.NextCycleNumber</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private string _view = "cycles";
+
+    private List<SterilisationCycle> _cycles = new();
+    private List<SterilisationCycle> _failedCycles = new();
+    private List<InstrumentSet> _sets = new();
+    private List<Steriliser> _sterilisers = new();
+    private Dictionary<Guid, List<InstrumentSetUsage>> _traceResults = new();
+
+    private decimal FailureRate =>
+        _cycles.Count == 0 ? 0 : Math.Round(100m * _failedCycles.Count / _cycles.Count, 2);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.Today;
+        _from = _to.AddDays(-60);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cycles = await Inventory.GetCyclesAsync(_from, _to);
+        _failedCycles = _cycles.Where(c => c.Result == SterilisationResult.Fail).ToList();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _sets = await db.InstrumentSets.AsNoTracking().OrderBy(s => s.SetCode).ToListAsync();
+        _sterilisers = await db.Sterilisers.AsNoTracking().OrderBy(s => s.Name).ToListAsync();
+    }
+
+    private async Task OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+    }
+
+    private async Task Trace(Guid cycleId)
+    {
+        if (_traceResults.Remove(cycleId)) return;
+        _traceResults[cycleId] = await Inventory.TraceCycleAsync(cycleId);
+    }
+}

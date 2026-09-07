@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore DentalSurgery.sln
+
+      # Warnings are not errors in the build props, so the CI applies the
+      # stricter bar rather than changing local development.
+      - run: dotnet build DentalSurgery.sln -c Release --no-restore -warnaserror
+
+      - name: Test
+        run: >
+          dotnet test DentalSurgery.sln -c Release --no-build
+          --logger "trx;LogFileName=results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults
+
+  migrations:
+    name: Migrations are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - run: dotnet tool restore
+      - run: dotnet restore DentalSurgery.sln
+
+      # A model change committed without its migration would otherwise be found
+      # at deploy time, against a real database. This catches it at review time.
+      - name: Check for un-scaffolded model changes (SQL Server)
+        env:
+          DENTAL_MIGRATION_PROVIDER: SqlServer
+        run: |
+          dotnet ef migrations has-pending-model-changes \
+            --project src/DentalSurgery.Migrations.SqlServer \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
+      - name: Check for un-scaffolded model changes (SQLite)
+        env:
+          DENTAL_MIGRATION_PROVIDER: Sqlite
+        run: |
+          dotnet ef migrations has-pending-model-changes \
+            --project src/DentalSurgery.Migrations.Sqlite \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
+      # The deployable migration artefact. Idempotent, so it is safe to run
+      # against a database at any prior version.
+      - name: Generate the SQL Server migration script
+        env:
+          DENTAL_MIGRATION_PROVIDER: SqlServer
+        run: |
+          dotnet ef migrations script --idempotent --output migrate.sql \
+            --project src/DentalSurgery.Migrations.SqlServer \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migration-script
+          path: migrate.sql
+
+  container:
+    name: Container builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: dental-surgery:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  security:
+    name: Vulnerable and deprecated packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore DentalSurgery.sln
+
+      # A known-vulnerable transitive package in a system holding patient
+      # records should fail the build, not appear in a report nobody reads.
+      - name: Fail on vulnerable packages
+        run: |
+          dotnet list DentalSurgery.sln package --vulnerable --include-transitive 2>&1 | tee vuln.txt
+          if grep -q "has the following vulnerable packages" vuln.txt; then
+            echo "::error::Vulnerable packages found"
+            exit 1
+          fi
+
+      - name: Report deprecated packages
+        continue-on-error: true
+        run: dotnet list DentalSurgery.sln package --deprecated --include-transitive

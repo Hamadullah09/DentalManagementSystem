@@ -1,0 +1,176 @@
+@page "/treatment-plans"
+@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@inject ReportingService Reporting
+@inject IDateTimeProvider Clock
+@inject IJSRuntime JS
+
+<PageTitle>Treatment plans - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Treatment plans"
+            Subtitle="Every plan created in the selected period, with acceptance against value.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="ExportCsv">
+            <Icon Name="download" Size="13" /> Export
+        </button>
+    </Actions>
+</PageHeader>
+
+<DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Plans" Value="@_rows.Count.ToString()" Accent="primary" Icon="clipboard" />
+    <StatTile Label="Presented value" Value="@Ui.MoneyCompact(_rows.Sum(r => r.TotalFee))" Accent="accent" />
+    <StatTile Label="Accepted value" Value="@Ui.MoneyCompact(_rows.Sum(r => r.AcceptedValue))" Accent="success" />
+    <StatTile Label="Acceptance rate" Value="@($"{AcceptanceRate:0.#}%")"
+              Accent="@(AcceptanceRate >= 70 ? "success" : AcceptanceRate >= 45 ? "warning" : "danger")"
+              Icon="trending-up" />
+    <StatTile Label="Awaiting a decision" Value="@_rows.Count(r => r.Status == TreatmentPlanStatus.Presented).ToString()"
+              Accent="warning" />
+    <StatTile Label="Declined" Value="@_rows.Count(r => r.Status == TreatmentPlanStatus.Declined).ToString()"
+              Accent="danger" />
+</div>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Status</label>
+        <select class="form-select form-select-sm" @bind="_statusFilter">
+            <option value="">All statuses</option>
+            @foreach (var status in Enum.GetValues<TreatmentPlanStatus>())
+            {
+                <option value="@status">@Ui.Humanise(status)</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label class="form-label">Only stale</label>
+        <button class="btn btn-sm @(_staleOnly ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _staleOnly = !_staleOnly">
+            Presented over 14 days ago
+        </button>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="clipboard" Title="No plans in this period"
+                    Message="Widen the date range or clear the filters." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Plan</th>
+                    <th>Patient</th>
+                    <th>Provider</th>
+                    <th class="nowrap">Created</th>
+                    <th class="nowrap">Presented</th>
+                    <th class="num">Value</th>
+                    <th class="num">Accepted</th>
+                    <th style="width:150px;">Acceptance</th>
+                    <th style="width:130px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Filtered)
+                {
+                    <tr>
+                        <td class="mono">@row.PlanNumber</td>
+                        <td><a href="/patients/@row.PatientId/plans" style="font-weight:600;">@row.PatientName</a></td>
+                        <td class="nowrap">@(row.ProviderName ?? "-")</td>
+                        <td class="nowrap">@Ui.DateShort(row.CreatedOn)</td>
+                        <td class="nowrap">
+                            @Ui.DateShort(row.PresentedOn)
+                            @if (row.Status == TreatmentPlanStatus.Presented && row.DaysSincePresented is > 14)
+                            {
+                                <div class="text-warning" style="font-size:.7rem;">@row.DaysSincePresented days ago</div>
+                            }
+                        </td>
+                        <td class="num mono">@Ui.Money(row.TotalFee)</td>
+                        <td class="num mono text-success">@Ui.Money(row.AcceptedValue)</td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bar-track flex-grow-1">
+                                    <div class="bar-fill @(row.AcceptancePercent >= 70 ? "success" : row.AcceptancePercent >= 40 ? "warning" : "danger")"
+                                         style="width:@((int)row.AcceptancePercent)%"></div>
+                                </div>
+                                <span class="mono" style="font-size:.76rem; min-width:38px;">@row.AcceptancePercent.ToString("0")%</span>
+                            </div>
+                        </td>
+                        <td><span class="badge-ds @Ui.BadgeFor(row.Status)">@Ui.Humanise(row.Status)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private List<TreatmentAcceptanceRow> _rows = new();
+    private string _statusFilter = string.Empty;
+    private bool _staleOnly;
+
+    private decimal AcceptanceRate
+    {
+        get
+        {
+            var presented = _rows.Sum(r => r.TotalFee);
+            return presented == 0 ? 0 : Math.Round(100m * _rows.Sum(r => r.AcceptedValue) / presented, 1);
+        }
+    }
+
+    private List<TreatmentAcceptanceRow> Filtered
+    {
+        get
+        {
+            var query = _rows.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_statusFilter) &&
+                Enum.TryParse<TreatmentPlanStatus>(_statusFilter, out var status))
+                query = query.Where(r => r.Status == status);
+
+            if (_staleOnly)
+                query = query.Where(r => r.Status == TreatmentPlanStatus.Presented && r.DaysSincePresented > 14);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.Today;
+        _from = _to.AddMonths(-6);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _rows = await Reporting.GetTreatmentAcceptanceAsync(_from, _to);
+
+    private async Task OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        var csv = CsvExport.Build(Filtered,
+            ("Plan", r => r.PlanNumber),
+            ("Patient", r => r.PatientName),
+            ("Provider", r => r.ProviderName ?? ""),
+            ("Created", r => CsvExport.Date(r.CreatedOn)),
+            ("Presented", r => CsvExport.Date(r.PresentedOn)),
+            ("Status", r => r.Status.ToString()),
+            ("Total fee", r => CsvExport.Money(r.TotalFee)),
+            ("Accepted value", r => CsvExport.Money(r.AcceptedValue)),
+            ("Acceptance %", r => r.AcceptancePercent.ToString("0.0")));
+
+        await CsvExport.DownloadAsync(JS, "treatment-plans.csv", csv);
+    }
+}

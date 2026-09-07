@@ -1,0 +1,290 @@
+@page "/surgery"
+@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@inject ProcedureService Procedures
+@inject IDateTimeProvider Clock
+@inject IJSRuntime JS
+
+<PageTitle>Surgical register - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Surgical register"
+            Subtitle="Every operative procedure carried out, with outcomes and complications.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="ExportCsv">
+            <Icon Name="download" Size="13" /> Export
+        </button>
+    </Actions>
+</PageHeader>
+
+<DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Procedures" Value="@_cases.Count.ToString()" Accent="primary" Icon="scissors" />
+    <StatTile Label="Complications" Value="@ComplicationCount.ToString()"
+              Accent="@(ComplicationCount > 0 ? "warning" : "success")"
+              Caption="@($"{ComplicationRate:0.##}% of cases")" />
+    <StatTile Label="Mean duration" Value="@($"{MeanDuration:0} min")" Accent="accent" Icon="clock" />
+    <StatTile Label="Grafts placed" Value="@_cases.Count(c => c.SurgicalRecord?.GraftPlaced == true).ToString()"
+              Accent="purple" />
+    <StatTile Label="Specimens sent" Value="@_cases.Count(c => c.SurgicalRecord?.SpecimenSentForHistology == true).ToString()"
+              Accent="info" />
+    <StatTile Label="Value" Value="@Ui.MoneyCompact(_cases.Sum(c => c.NetFee))" Accent="success" />
+</div>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Surgery type</label>
+        <select class="form-select form-select-sm" @bind="_typeFilter">
+            <option value="">All types</option>
+            @foreach (var type in _cases.Where(c => c.SurgicalRecord is not null)
+                                        .Select(c => c.SurgicalRecord!.SurgeryType).Distinct().OrderBy(t => t.ToString()))
+            {
+                <option value="@type">@Ui.Humanise(type)</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label class="form-label">Outcome</label>
+        <select class="form-select form-select-sm" @bind="_outcomeFilter">
+            <option value="">All outcomes</option>
+            @foreach (var outcome in Enum.GetValues<SurgicalOutcome>())
+            {
+                <option value="@outcome">@Ui.Humanise(outcome)</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="scissors" Title="No surgical cases"
+                    Message="Nothing matches the current period and filters." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">Date</th>
+                    <th>Patient</th>
+                    <th>Procedure</th>
+                    <th style="width:56px;">Tooth</th>
+                    <th>Surgeon</th>
+                    <th class="nowrap">Duration</th>
+                    <th>Details</th>
+                    <th style="width:120px;">Outcome</th>
+                    <th style="width:34px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var procedure in Filtered)
+                {
+                    var record = procedure.SurgicalRecord!;
+                    <tr>
+                        <td class="nowrap">@procedure.DateOfService.ToString("dd/MM/yy")</td>
+                        <td>
+                            <a href="/patients/@procedure.PatientId/treatment" style="font-weight:600;">
+                                @(procedure.Patient?.Name.Display ?? "Unknown")
+                            </a>
+                        </td>
+                        <td>
+                            <div>@Ui.Humanise(record.SurgeryType)</div>
+                            <div class="text-faint mono" style="font-size:.72rem;">
+                                @procedure.ProcedureCode?.Code
+                            </div>
+                        </td>
+                        <td class="mono">@(procedure.Tooth?.FdiNumber.ToString() ?? "-")</td>
+                        <td class="nowrap">@(procedure.Provider?.Name.Display ?? "-")</td>
+                        <td class="mono nowrap">@(record.DurationMinutes.HasValue ? $"{record.DurationMinutes} min" : "-")</td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                @if (record.FlapRaised)
+                                {
+                                    <span class="badge-ds b-neutral">Flap</span>
+                                }
+                                @if (record.BoneRemoval)
+                                {
+                                    <span class="badge-ds b-neutral">Bone removal</span>
+                                }
+                                @if (record.ToothSectioned)
+                                {
+                                    <span class="badge-ds b-neutral">Sectioned</span>
+                                }
+                                @if (record.GraftPlaced)
+                                {
+                                    <span class="badge-ds b-purple">Graft</span>
+                                }
+                                @if (record.MembranePlaced)
+                                {
+                                    <span class="badge-ds b-purple">Membrane</span>
+                                }
+                                @if (record.SutureRequired)
+                                {
+                                    <span class="badge-ds b-neutral">@record.SutureCount sutures</span>
+                                }
+                                @if (record.SpecimenSentForHistology)
+                                {
+                                    <span class="badge-ds b-info">Histology</span>
+                                }
+                                @if (record.SinusExposure)
+                                {
+                                    <span class="badge-ds b-danger">Sinus</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge-ds @(record.Outcome switch
+                            {
+                                SurgicalOutcome.Uneventful => "b-success",
+                                SurgicalOutcome.MinorComplication => "b-warning",
+                                SurgicalOutcome.MajorComplication => "b-danger",
+                                _ => "b-neutral"
+                            })">@Ui.Humanise(record.Outcome)</span>
+                        </td>
+                        <td>
+                            <button class="btn-ghost" @onclick="() => Toggle(procedure.Id)">
+                                <Icon Name="@(_expanded.Contains(procedure.Id) ? "chevron-down" : "chevron-right")" Size="14" />
+                            </button>
+                        </td>
+                    </tr>
+
+                    @if (_expanded.Contains(procedure.Id))
+                    {
+                        <tr>
+                            <td colspan="9" style="background:var(--ds-surface-2);">
+                                <div class="p-2">
+                                    @if (!string.IsNullOrWhiteSpace(record.OperativeNote))
+                                    {
+                                        <div class="form-label">Operative note</div>
+                                        <div style="font-size:.85rem; white-space:pre-wrap;">@record.OperativeNote</div>
+                                    }
+                                    <div class="row g-3 mt-1" style="font-size:.82rem;">
+                                        @if (!string.IsNullOrWhiteSpace(record.Findings))
+                                        {
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-label">Findings</div>@record.Findings
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(record.GraftMaterial))
+                                        {
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-label">Graft</div>@record.GraftMaterial
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(record.PostOperativeMedication))
+                                        {
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-label">Post-operative medication</div>@record.PostOperativeMedication
+                                            </div>
+                                        }
+                                        @if (record.SutureRemovalDue.HasValue)
+                                        {
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-label">Suture removal due</div>@Ui.Date(record.SutureRemovalDue)
+                                            </div>
+                                        }
+                                        @if (record.FollowUpDue.HasValue)
+                                        {
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-label">Follow-up due</div>@Ui.Date(record.FollowUpDue)
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(record.Complications))
+                                        {
+                                            <div class="col-12">
+                                                <div class="form-label text-danger">Complications</div>@record.Complications
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private List<Procedure> _cases = new();
+    private HashSet<Guid> _expanded = new();
+    private string _typeFilter = string.Empty;
+    private string _outcomeFilter = string.Empty;
+
+    private int ComplicationCount =>
+        _cases.Count(c => c.SurgicalRecord?.Outcome != SurgicalOutcome.Uneventful);
+
+    private decimal ComplicationRate =>
+        _cases.Count == 0 ? 0 : Math.Round(100m * ComplicationCount / _cases.Count, 2);
+
+    private double MeanDuration
+    {
+        get
+        {
+            var durations = _cases
+                .Where(c => c.SurgicalRecord?.DurationMinutes.HasValue == true)
+                .Select(c => c.SurgicalRecord!.DurationMinutes!.Value)
+                .ToList();
+            return durations.Count == 0 ? 0 : durations.Average();
+        }
+    }
+
+    private List<Procedure> Filtered
+    {
+        get
+        {
+            var query = _cases.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_typeFilter) && Enum.TryParse<SurgeryType>(_typeFilter, out var type))
+                query = query.Where(c => c.SurgicalRecord?.SurgeryType == type);
+
+            if (!string.IsNullOrEmpty(_outcomeFilter) && Enum.TryParse<SurgicalOutcome>(_outcomeFilter, out var outcome))
+                query = query.Where(c => c.SurgicalRecord?.Outcome == outcome);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.Today;
+        _from = _to.AddYears(-2);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _cases = await Procedures.GetSurgicalCasesAsync(_from, _to);
+
+    private async Task OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+    }
+
+    private void Toggle(Guid id)
+    {
+        if (!_expanded.Add(id)) _expanded.Remove(id);
+    }
+
+    private async Task ExportCsv()
+    {
+        var csv = CsvExport.Build(Filtered,
+            ("Date", p => CsvExport.DateTimeIso(p.DateOfService)),
+            ("Patient", p => p.Patient?.Name.Display ?? ""),
+            ("Code", p => p.ProcedureCode?.Code ?? ""),
+            ("Surgery type", p => p.SurgicalRecord?.SurgeryType.ToString() ?? ""),
+            ("Tooth", p => p.Tooth?.FdiNumber.ToString() ?? ""),
+            ("Surgeon", p => p.Provider?.DisplayName ?? ""),
+            ("Duration minutes", p => p.SurgicalRecord?.DurationMinutes?.ToString() ?? ""),
+            ("Outcome", p => p.SurgicalRecord?.Outcome.ToString() ?? ""),
+            ("Complications", p => p.SurgicalRecord?.Complications ?? ""),
+            ("Fee", p => CsvExport.Money(p.NetFee)));
+
+        await CsvExport.DownloadAsync(JS, "surgical-register.csv", csv);
+    }
+}

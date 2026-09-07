@@ -1,0 +1,299 @@
+@inject BillingService Billing
+@inject IDateTimeProvider Clock
+
+@if (_account is null)
+{
+    <div class="skeleton" style="height:300px;"></div>
+}
+else
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Balance" Value="@Ui.Money(_account.Balance)"
+                  Accent="@(_account.Balance > 0 ? "danger" : _account.Balance < 0 ? "success" : "neutral")"
+                  Icon="credit-card"
+                  Caption="@(_account.IsInCredit ? "In credit" : _account.Balance > 0 ? "Owed by the patient" : "Settled")" />
+        <StatTile Label="Charged to date" Value="@Ui.Money(_account.TotalCharged)" Accent="primary" Icon="receipt" />
+        <StatTile Label="Paid to date" Value="@Ui.Money(_account.TotalPaid)" Accent="success" />
+        <StatTile Label="Adjustments" Value="@Ui.Money(_account.TotalAdjusted)" Accent="neutral" />
+        <StatTile Label="Over 90 days" Value="@Ui.Money(_account.Aging.Over90Days)"
+                  Accent="@(_account.Aging.Over90Days > 0 ? "danger" : "neutral")" />
+        <StatTile Label="Unallocated credit" Value="@Ui.Money(_account.UnallocatedCredit)" Accent="accent" />
+    </div>
+
+    <AuthorizeView Policy="@Policies.CanManageBilling">
+        <Authorized>
+            <div class="card-ds mb-3">
+                <div class="card-ds-header">
+                    <h3>Take a payment</h3>
+                    <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _takingPayment = !_takingPayment">
+                        @(_takingPayment ? "Cancel" : "Record a payment")
+                    </button>
+                </div>
+                @if (_takingPayment)
+                {
+                    <div class="card-ds-body">
+                        @if (!string.IsNullOrEmpty(_message))
+                        {
+                            <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-2">
+                                <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+                            </div>
+                        }
+                        <div class="row g-2 align-items-end">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Amount</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="_paymentAmount" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Method</label>
+                                <select class="form-select form-select-sm" @bind="_paymentMethod">
+                                    @foreach (var method in Enum.GetValues<PaymentMethod>())
+                                    {
+                                        <option value="@method">@Ui.Humanise(method)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Reference</label>
+                                <input class="form-control form-control-sm" @bind="_paymentReference"
+                                       placeholder="Card authorisation, cheque number or bank reference" />
+                            </div>
+                            <div class="col-12 col-md-2">
+                                <button class="btn btn-sm btn-primary w-100" @onclick="TakePayment" disabled="@_working">
+                                    Take payment
+                                </button>
+                            </div>
+                        </div>
+                        <div class="text-faint mt-2" style="font-size:.76rem;">
+                            The payment is applied to the oldest outstanding invoices first. Anything left over
+                            is held on the account as credit.
+                        </div>
+                    </div>
+                }
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+    <div class="row g-3">
+        <div class="col-12 col-xl-7">
+            <div class="card-ds h-100">
+                <div class="card-ds-header">
+                    <h3>Invoices</h3>
+                    <span class="badge-ds b-neutral">@_account.Invoices.Count</span>
+                    @if (_account.HasOverdueInvoices)
+                    {
+                        <span class="badge-ds b-danger">Overdue items</span>
+                    }
+                </div>
+                @if (_account.Invoices.Count == 0)
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.86rem;">No invoices raised.</div>
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr>
+                                    <th>Number</th>
+                                    <th class="nowrap">Issued</th>
+                                    <th class="nowrap">Due</th>
+                                    <th class="num">Total</th>
+                                    <th class="num">Paid</th>
+                                    <th class="num">Balance</th>
+                                    <th style="width:110px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var invoice in _account.Invoices)
+                                {
+                                    <tr>
+                                        <td class="mono">@invoice.InvoiceNumber</td>
+                                        <td class="nowrap">@Ui.DateShort(invoice.IssueDate)</td>
+                                        <td class="nowrap @(invoice.IsOverdue ? "text-danger" : "")">
+                                            @Ui.DateShort(invoice.DueDate)
+                                            @if (invoice.IsOverdue)
+                                            {
+                                                <div style="font-size:.7rem;">@invoice.DaysOverdue days</div>
+                                            }
+                                        </td>
+                                        <td class="num mono">@Ui.Money(invoice.Total)</td>
+                                        <td class="num mono text-muted">@Ui.Money(invoice.AmountPaid)</td>
+                                        <td class="num mono @(invoice.Balance > 0 ? "text-danger fw-semibold" : "")">
+                                            @Ui.Money(invoice.Balance)
+                                        </td>
+                                        <td><span class="badge-ds @Ui.BadgeFor(invoice.Status)">@Ui.Humanise(invoice.Status)</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <div class="card-ds mb-3">
+                <div class="card-ds-header"><h3>Ageing</h3></div>
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var bucket in _account.Aging.Buckets)
+                    {
+                        <div>
+                            <div class="d-flex justify-content-between" style="font-size:.83rem;">
+                                <span>@bucket.Label</span>
+                                <span class="mono">@Ui.Money(bucket.Amount)</span>
+                            </div>
+                            <div class="bar-track mt-1">
+                                <div class="bar-fill @BucketClass(bucket.Label)"
+                                     style="width:@(_account.Aging.Total == 0 ? 0 : (int)(bucket.Amount / _account.Aging.Total * 100))%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card-ds">
+                <div class="card-ds-header">
+                    <h3>Payments</h3>
+                    <span class="badge-ds b-neutral">@_account.Payments.Count</span>
+                </div>
+                @if (_account.Payments.Count == 0)
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.86rem;">No payments received.</div>
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0; max-height:280px; overflow-y:auto;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr><th class="nowrap">Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var payment in _account.Payments)
+                                {
+                                    <tr>
+                                        <td class="nowrap">@Ui.DateShort(payment.PaymentDate)</td>
+                                        <td>@Ui.Humanise(payment.Method)</td>
+                                        <td class="mono" style="font-size:.76rem;">@Ui.Truncate(payment.ReferenceNumber, 18)</td>
+                                        <td class="num mono">
+                                            @Ui.Money(payment.Amount)
+                                            @if (payment.RefundedAmount > 0)
+                                            {
+                                                <div class="text-danger" style="font-size:.7rem;">
+                                                    -@Ui.Money(payment.RefundedAmount) refunded
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card-ds mt-3">
+        <div class="card-ds-header">
+            <h3>Account ledger</h3>
+            <span class="text-muted ms-auto" style="font-size:.79rem;">Most recent first</span>
+        </div>
+        @if (_account.Ledger.Count == 0)
+        {
+            <div class="card-ds-body text-muted" style="font-size:.86rem;">No ledger entries.</div>
+        }
+        else
+        {
+            <div class="table-wrap" style="border:0; border-radius:0; max-height:380px; overflow-y:auto;">
+                <table class="table-ds">
+                    <thead>
+                        <tr>
+                            <th class="nowrap">Date</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th class="num">Charge</th>
+                            <th class="num">Credit</th>
+                            <th class="num">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _account.Ledger.Take(80))
+                        {
+                            <tr>
+                                <td class="nowrap">@Ui.DateShort(entry.EntryDate)</td>
+                                <td><span class="badge-ds b-neutral">@Ui.Humanise(entry.EntryType)</span></td>
+                                <td>@entry.Description</td>
+                                <td class="num mono">@(entry.Debit > 0 ? Ui.Money(entry.Debit) : "")</td>
+                                <td class="num mono text-success">@(entry.Credit > 0 ? Ui.Money(entry.Credit) : "")</td>
+                                <td class="num mono">@Ui.Money(entry.RunningBalance)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private PatientAccount? _account;
+    private bool _takingPayment;
+    private bool _working;
+    private string? _message;
+    private bool _isError;
+
+    private decimal _paymentAmount;
+    private PaymentMethod _paymentMethod = PaymentMethod.DebitCard;
+    private string _paymentReference = string.Empty;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _account = await Billing.GetAccountAsync(PatientId);
+        if (_paymentAmount == 0 && _account.Balance > 0) _paymentAmount = _account.Balance;
+    }
+
+    private async Task TakePayment()
+    {
+        if (_paymentAmount <= 0)
+        {
+            _message = "Enter an amount greater than zero.";
+            _isError = true;
+            return;
+        }
+
+        _working = true;
+        var result = await Billing.TakePaymentAsync(
+            PatientId, _paymentAmount, _paymentMethod,
+            string.IsNullOrWhiteSpace(_paymentReference) ? null : _paymentReference);
+        _working = false;
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        _message = $"Payment of {Ui.Money(_paymentAmount)} recorded as {result.Value!.PaymentNumber}.";
+        _isError = false;
+        _paymentAmount = 0;
+        _paymentReference = string.Empty;
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private static string BucketClass(string label) => label switch
+    {
+        "Over 90 days" => "danger",
+        "61-90 days" => "danger",
+        "31-60 days" => "warning",
+        "1-30 days" => "warning",
+        _ => "success"
+    };
+}

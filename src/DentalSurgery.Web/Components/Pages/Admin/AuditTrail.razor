@@ -1,0 +1,215 @@
+@page "/admin/audit"
+@attribute [Authorize(Policy = Policies.CanAdminister)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Audit trail - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Audit trail"
+            Subtitle="Every change to a record, written automatically and never edited." />
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">From</label>
+        <input type="date" class="form-control form-control-sm"
+               value="@_from.ToString("yyyy-MM-dd")"
+               @onchange="e => { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _from = d; }" />
+    </div>
+    <div class="field">
+        <label class="form-label">Entity</label>
+        <select class="form-select form-select-sm" @bind="_entityFilter">
+            <option value="">All entities</option>
+            @foreach (var entity in _entityNames)
+            {
+                <option value="@entity">@entity</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label class="form-label">Action</label>
+        <select class="form-select form-select-sm" @bind="_actionFilter">
+            <option value="">All actions</option>
+            @foreach (var action in Enum.GetValues<AuditAction>())
+            {
+                <option value="@action">@Ui.Humanise(action)</option>
+            }
+        </select>
+    </div>
+    <div class="field grow">
+        <label class="form-label">User</label>
+        <input class="form-control form-control-sm" placeholder="Username" @bind="_userFilter" />
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">&nbsp;</label>
+        <button class="btn btn-sm btn-primary" @onclick="LoadAsync">Apply</button>
+    </div>
+</div>
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Entries shown" Value="@_entries.Count.ToString()" Accent="primary" Icon="shield" />
+    <StatTile Label="Creates" Value="@_entries.Count(e => e.Action == AuditAction.Create).ToString()" Accent="success" />
+    <StatTile Label="Updates" Value="@_entries.Count(e => e.Action == AuditAction.Update).ToString()" Accent="info" />
+    <StatTile Label="Deletes" Value="@_entries.Count(e => e.Action == AuditAction.Delete).ToString()"
+              Accent="@(_entries.Any(e => e.Action == AuditAction.Delete) ? "warning" : "neutral")" />
+    <StatTile Label="Distinct users" Value="@_entries.Select(e => e.UserName).Distinct().Count().ToString()" Accent="neutral" Icon="users" />
+</div>
+
+@if (_entries.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="shield" Title="No audit entries"
+                    Message="Nothing matches these filters." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">When</th>
+                    <th style="width:80px;">Action</th>
+                    <th>Entity</th>
+                    <th>Record</th>
+                    <th>User</th>
+                    <th>Changed</th>
+                    <th style="width:34px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _entries)
+                {
+                    <tr>
+                        <td class="nowrap mono" style="font-size:.77rem;">
+                            @entry.TimestampUtc.ToString("dd/MM/yy HH:mm:ss")
+                        </td>
+                        <td>
+                            <span class="badge-ds @(entry.Action switch
+                            {
+                                AuditAction.Create => "b-success",
+                                AuditAction.Update => "b-info",
+                                AuditAction.Delete => "b-danger",
+                                _ => "b-neutral"
+                            })">@Ui.Humanise(entry.Action)</span>
+                        </td>
+                        <td>@entry.EntityName</td>
+                        <td class="mono" style="font-size:.72rem;">
+                            @Ui.Truncate(entry.EntityId, 12)
+                            @if (entry.PatientId.HasValue)
+                            {
+                                <a href="/patients/@entry.PatientId" class="ms-1">patient</a>
+                            }
+                        </td>
+                        <td style="font-size:.79rem;">@entry.UserName</td>
+                        <td style="font-size:.77rem;">@Ui.Truncate(entry.ChangedColumns, 60)</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(entry.OldValues) || !string.IsNullOrEmpty(entry.NewValues))
+                            {
+                                <button class="btn-ghost" @onclick="() => Toggle(entry.Id)">
+                                    <Icon Name="@(_expanded.Contains(entry.Id) ? "chevron-down" : "chevron-right")" Size="14" />
+                                </button>
+                            }
+                        </td>
+                    </tr>
+
+                    @if (_expanded.Contains(entry.Id))
+                    {
+                        <tr>
+                            <td colspan="7" style="background:var(--ds-surface-2);">
+                                <div class="p-2 row g-2">
+                                    @if (!string.IsNullOrEmpty(entry.OldValues))
+                                    {
+                                        <div class="col-12 col-md-6">
+                                            <div class="form-label">Before</div>
+                                            <pre class="mono" style="font-size:.72rem; white-space:pre-wrap; margin:0;">@Pretty(entry.OldValues)</pre>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(entry.NewValues))
+                                    {
+                                        <div class="col-12 col-md-6">
+                                            <div class="form-label">After</div>
+                                            <pre class="mono" style="font-size:.72rem; white-space:pre-wrap; margin:0;">@Pretty(entry.NewValues)</pre>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="text-muted mt-2" style="font-size:.8rem;">
+        Showing the most recent @_entries.Count entries. Narrow the filters to look further back.
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private string _entityFilter = string.Empty;
+    private string _actionFilter = string.Empty;
+    private string _userFilter = string.Empty;
+
+    private List<AuditLog> _entries = new();
+    private List<string> _entityNames = new();
+    private HashSet<long> _expanded = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _from = Clock.Today.AddDays(-7);
+        await LoadEntityNamesAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadEntityNamesAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _entityNames = await db.AuditLogs.AsNoTracking()
+            .Select(a => a.EntityName).Distinct().OrderBy(n => n).ToListAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var start = _from.ToDateTime(TimeOnly.MinValue);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var query = db.AuditLogs.AsNoTracking().Where(a => a.TimestampUtc >= start);
+
+        if (!string.IsNullOrEmpty(_entityFilter))
+            query = query.Where(a => a.EntityName == _entityFilter);
+
+        if (!string.IsNullOrEmpty(_actionFilter) && Enum.TryParse<AuditAction>(_actionFilter, out var action))
+            query = query.Where(a => a.Action == action);
+
+        if (!string.IsNullOrWhiteSpace(_userFilter))
+            query = query.Where(a => a.UserName != null && a.UserName.Contains(_userFilter));
+
+        _entries = await query
+            .OrderByDescending(a => a.TimestampUtc)
+            .Take(300)
+            .ToListAsync();
+    }
+
+    private void Toggle(long id)
+    {
+        if (!_expanded.Add(id)) _expanded.Remove(id);
+    }
+
+    /// <summary>Formats the stored JSON snapshot as readable key/value lines.</summary>
+    private static string Pretty(string json)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            var lines = document.RootElement.EnumerateObject()
+                .Select(p => $"{p.Name}: {p.Value}")
+                .Take(40);
+            return string.Join("\n", lines);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return json;
+        }
+    }
+}

@@ -1,0 +1,35 @@
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
+@using Microsoft.EntityFrameworkCore
+
+@using DentalSurgery.Web
+@using DentalSurgery.Web.Components
+@using DentalSurgery.Web.Components.Shared
+@using DentalSurgery.Web.Services
+
+@using DentalSurgery.Domain.Common
+@using DentalSurgery.Domain.Entities
+@using DentalSurgery.Domain.Enums
+@using DentalSurgery.Application.Abstractions
+@using DentalSurgery.Application.Billing
+@using DentalSurgery.Application.Clinical
+@using DentalSurgery.Application.Common
+@using DentalSurgery.Application.Reporting
+@using DentalSurgery.Application.Scheduling
+@using DentalSurgery.Application.Exporting
+@using DentalSurgery.Infrastructure.Claims
+@using DentalSurgery.Infrastructure.Exporting
+@using DentalSurgery.Infrastructure.Identity
+@using DentalSurgery.Infrastructure.Notifications
+@using DentalSurgery.Infrastructure.Persistence
+@using DentalSurgery.Infrastructure.Services
+@using Microsoft.Extensions.Options

@@ -1,0 +1,16 @@
+<div class="empty-state">
+    <div class="icon"><Icon Name="@IconName" Size="38" StrokeWidth="1.2" /></div>
+    <h4>@Title</h4>
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <p>@Message</p>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public string IconName { get; set; } = "search";
+    [Parameter] public string Title { get; set; } = "Nothing to show";
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,132 @@
+@inject AppointmentService Appointments
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <div class="btn-group btn-group-sm">
+        <button class="btn @(!_futureOnly ? "btn-primary" : "btn-outline-secondary")" @onclick="() => SetFilter(false)">
+            All appointments
+        </button>
+        <button class="btn @(_futureOnly ? "btn-primary" : "btn-outline-secondary")" @onclick="() => SetFilter(true)">
+            Upcoming only
+        </button>
+    </div>
+    <a href="/schedule?patient=@PatientId" class="btn btn-sm btn-primary ms-auto d-inline-flex align-items-center gap-1">
+        <Icon Name="calendar" Size="13" /> Book an appointment
+    </a>
+</div>
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Total booked" Value="@_all.Count.ToString()" Accent="primary" Icon="calendar" />
+    <StatTile Label="Attended" Value="@_all.Count(a => a.Status is AppointmentStatus.Completed or AppointmentStatus.CheckedOut).ToString()"
+              Accent="success" Icon="check-circle" />
+    <StatTile Label="Missed" Value="@_all.Count(a => a.Status == AppointmentStatus.NoShow).ToString()"
+              Accent="@(_all.Any(a => a.Status == AppointmentStatus.NoShow) ? "danger" : "neutral")" Icon="alert-circle"
+              Caption="@($"{NoShowRate:0.#}% of bookings")" />
+    <StatTile Label="Cancelled" Value="@_all.Count(a => a.Status == AppointmentStatus.Cancelled).ToString()"
+              Accent="warning" />
+    <StatTile Label="Average wait" Value="@($"{AverageWait:0} min")" Accent="accent" Icon="clock"
+              Caption="from arrival to being seated" />
+</div>
+
+@if (_appointments.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="calendar" Title="No appointments"
+                    Message="@(_futureOnly ? "Nothing is booked for this patient." : "This patient has never been booked in.")" />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">Date</th>
+                    <th class="nowrap">Time</th>
+                    <th>Type</th>
+                    <th>Provider</th>
+                    <th>Surgery</th>
+                    <th>Reason</th>
+                    <th class="nowrap">Wait / chair</th>
+                    <th style="width:120px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var appointment in _appointments)
+                {
+                    <tr>
+                        <td class="nowrap">
+                            @appointment.StartUtc.ToString("ddd d MMM yyyy")
+                            @if (appointment.StartUtc.Date == Clock.LocalNow.Date)
+                            {
+                                <span class="badge-ds b-primary ms-1">Today</span>
+                            }
+                        </td>
+                        <td class="nowrap mono">
+                            @appointment.StartUtc.ToString("HH:mm")
+                            <span class="text-faint">(@appointment.DurationMinutes m)</span>
+                        </td>
+                        <td>@Ui.Humanise(appointment.AppointmentType)</td>
+                        <td class="nowrap">
+                            <span class="dot me-1" style="background:@(appointment.Provider?.ColourHex ?? "#6c757d")"></span>
+                            @(appointment.Provider?.Name.Display ?? "-")
+                        </td>
+                        <td>@(appointment.Operatory?.Name ?? "-")</td>
+                        <td>
+                            @Ui.Truncate(appointment.Reason, 46)
+                            @if (!string.IsNullOrWhiteSpace(appointment.CancellationReason))
+                            {
+                                <div class="text-danger" style="font-size:.74rem;">@appointment.CancellationReason</div>
+                            }
+                        </td>
+                        <td class="nowrap mono" style="font-size:.78rem;">
+                            @(appointment.WaitingMinutes.HasValue ? $"{appointment.WaitingMinutes}m" : "-")
+                            /
+                            @(appointment.ChairMinutes.HasValue ? $"{appointment.ChairMinutes}m" : "-")
+                        </td>
+                        <td><span class="badge-ds @Ui.BadgeFor(appointment.Status)">@Ui.Humanise(appointment.Status)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<Appointment> _all = new();
+    private List<Appointment> _appointments = new();
+    private bool _futureOnly;
+
+    private decimal NoShowRate => _all.Count == 0
+        ? 0
+        : Math.Round(100m * _all.Count(a => a.Status == AppointmentStatus.NoShow) / _all.Count, 1);
+
+    private double AverageWait
+    {
+        get
+        {
+            var waits = _all.Where(a => a.WaitingMinutes.HasValue).Select(a => a.WaitingMinutes!.Value).ToList();
+            return waits.Count == 0 ? 0 : Math.Round(waits.Average(), 1);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _all = await Appointments.GetForPatientAsync(PatientId);
+        ApplyFilter();
+    }
+
+    private void SetFilter(bool futureOnly)
+    {
+        _futureOnly = futureOnly;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter() =>
+        _appointments = _futureOnly
+            ? _all.Where(a => a.StartUtc >= Clock.UtcNow).OrderBy(a => a.StartUtc).ToList()
+            : _all;
+}

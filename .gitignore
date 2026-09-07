@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------- build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.dll
+*.pdb
+*.exe
+*.user
+*.suo
+*.cache
+
+# ---------------------------------------------------------------- IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---------------------------------------------------------------- application data
+# The runtime database and everything uploaded into the document store.
+#
+# These carry patient records. Even the demonstration set is a full clinical
+# dataset - charts, notes, invoices, radiograph exposures - and a database file
+# in source control is exactly how such data ends up somewhere it should not be.
+# The schema comes from migrations and the data from the seeder, so nothing here
+# needs to be tracked.
+**/App_Data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Generated claim files: X12 837D interchanges carry patient identifiers.
+**/claims/outbound/
+**/claims/archive/
+
+# ---------------------------------------------------------------- secrets
+# Belt and braces. appsettings.json deliberately holds no secrets and every
+# credential comes from the environment or a secret store, but a local override
+# file must never be committed.
+appsettings.*.local.json
+appsettings.Local.json
+*.pfx
+*.p12
+*.key
+*.pem
+secrets.json
+.env
+.env.*
+
+# ---------------------------------------------------------------- misc
+*.log
+TestResults/
+coverage*.xml
+coverage*.json
+migrate.sql

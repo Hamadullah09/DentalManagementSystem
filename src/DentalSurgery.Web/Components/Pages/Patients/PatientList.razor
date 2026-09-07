@@ -1,0 +1,341 @@
+@page "/patients"
+@attribute [Authorize]
+@inject PatientService Patients
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject NavigationManager Navigation
+
+<PageTitle>Patients - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Patients"
+            Subtitle="@($"{_result.TotalCount:N0} record{(_result.TotalCount == 1 ? "" : "s")} matching the current filters")">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="ExportCsv">
+            <Icon Name="download" Size="14" /> Export
+        </button>
+        <a href="/patients/new" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
+            <Icon Name="user-plus" Size="14" /> Register patient
+        </a>
+    </Actions>
+</PageHeader>
+
+<div class="filter-bar">
+    <div class="field grow">
+        <label class="form-label">Search</label>
+        <input class="form-control form-control-sm" placeholder="Name, patient number, phone, email or postcode"
+               value="@_criteria.SearchText" @oninput="OnSearchInput" />
+    </div>
+
+    <div class="field">
+        <label class="form-label">Status</label>
+        <select class="form-select form-select-sm" value="@(_criteria.Status?.ToString() ?? "")"
+                @onchange="OnStatusChanged">
+            <option value="">All statuses</option>
+            @foreach (var status in Enum.GetValues<PatientStatus>())
+            {
+                <option value="@status">@Ui.Humanise(status)</option>
+            }
+        </select>
+    </div>
+
+    <div class="field">
+        <label class="form-label">Provider</label>
+        <select class="form-select form-select-sm" value="@(_criteria.ProviderId?.ToString() ?? "")"
+                @onchange="OnProviderChanged">
+            <option value="">All providers</option>
+            @foreach (var provider in _providers)
+            {
+                <option value="@provider.Id">@provider.DisplayName</option>
+            }
+        </select>
+    </div>
+
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Quick filters</label>
+        <div class="d-flex gap-1">
+            <button class="btn btn-sm @(_criteria.OnlyRecallDue ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => ToggleFilter(nameof(_criteria.OnlyRecallDue))">Recall due</button>
+            <button class="btn btn-sm @(_criteria.OnlyWithBalance ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => ToggleFilter(nameof(_criteria.OnlyWithBalance))">Owes money</button>
+            <button class="btn btn-sm @(_criteria.OnlyWithAlerts ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => ToggleFilter(nameof(_criteria.OnlyWithAlerts))">Has alerts</button>
+        </div>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="loading-bar mb-2"></div>
+}
+
+@if (_result.Items.Count == 0 && !_loading)
+{
+    <div class="card-ds">
+        <EmptyState IconName="users" Title="No patients match"
+                    Message="Try widening the search, or clear the quick filters.">
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ResetFilters">Clear filters</button>
+        </EmptyState>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th style="width:38px;"></th>
+                    <SortableHeader Label="Patient" Field="Name" Current="@_criteria.SortBy"
+                                    Descending="_criteria.SortDescending" OnSort="Sort" />
+                    <SortableHeader Label="Number" Field="Number" Current="@_criteria.SortBy"
+                                    Descending="_criteria.SortDescending" OnSort="Sort" />
+                    <th class="nowrap">Age / DOB</th>
+                    <th>Contact</th>
+                    <th>Provider</th>
+                    <SortableHeader Label="Recall due" Field="Recall" Current="@_criteria.SortBy"
+                                    Descending="_criteria.SortDescending" OnSort="Sort" />
+                    <SortableHeader Label="Balance" Field="Balance" Current="@_criteria.SortBy"
+                                    Descending="_criteria.SortDescending" OnSort="Sort" Align="num" />
+                    <th style="width:96px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var patient in _result.Items)
+                {
+                    <tr class="row-clickable" @onclick="() => Open(patient.Id)">
+                        <td><span class="avatar sm">@patient.DisplayName[..1]</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-1" style="font-weight:600;">
+                                @patient.DisplayName
+                                @if (patient.CriticalAlertCount > 0)
+                                {
+                                    <span title="@patient.CriticalAlertCount critical alert(s)" style="color:var(--ds-danger);">
+                                        <Icon Name="alert-triangle" Size="13" />
+                                    </span>
+                                }
+                                else if (patient.ActiveAlertCount > 0)
+                                {
+                                    <span title="@patient.ActiveAlertCount alert(s)" style="color:var(--ds-warning);">
+                                        <Icon Name="alert-circle" Size="13" />
+                                    </span>
+                                }
+                            </div>
+                            <div class="text-faint" style="font-size:.72rem;">
+                                Last exam @Ui.DateShort(patient.LastExamDate)
+                            </div>
+                        </td>
+                        <td class="mono nowrap">@patient.PatientNumber</td>
+                        <td class="nowrap">
+                            @if (patient.Age.HasValue)
+                            {
+                                <span>@patient.Age</span>
+                                <span class="text-faint" style="font-size:.72rem;"> &middot; @Ui.DateShort(patient.DateOfBirth)</span>
+                            }
+                            else
+                            {
+                                <span class="text-faint">Not recorded</span>
+                            }
+                        </td>
+                        <td style="font-size:.8rem;">
+                            @if (!string.IsNullOrEmpty(patient.Phone))
+                            {
+                                <div>@patient.Phone</div>
+                            }
+                            @if (!string.IsNullOrEmpty(patient.Email))
+                            {
+                                <div class="text-faint">@Ui.Truncate(patient.Email, 26)</div>
+                            }
+                        </td>
+                        <td class="nowrap">@(patient.ProviderName ?? "-")</td>
+                        <td class="nowrap">
+                            @if (patient.NextRecallDue.HasValue)
+                            {
+                                <span class="@(patient.RecallOverdue ? "text-danger fw-semibold" : "")">
+                                    @Ui.DateShort(patient.NextRecallDue)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-faint">-</span>
+                            }
+                        </td>
+                        <td class="num mono @(patient.Balance > 0 ? "text-danger" : patient.Balance < 0 ? "text-success" : "text-faint")">
+                            @Ui.Money(patient.Balance)
+                        </td>
+                        <td>
+                            <span class="badge-ds @Ui.BadgeFor(patient.Status)">@Ui.Humanise(patient.Status)</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+        <span class="text-muted" style="font-size:.8rem;">
+            Showing @_result.FirstItemIndex-@_result.LastItemIndex of @_result.TotalCount.ToString("N0")
+        </span>
+
+        <div class="d-flex align-items-center gap-2">
+            <select class="form-select form-select-sm" style="width:auto;" value="@_criteria.PageSize"
+                    @onchange="OnPageSizeChanged">
+                @foreach (var size in new[] { 25, 50, 100 })
+                {
+                    <option value="@size">@size per page</option>
+                }
+            </select>
+
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" disabled="@(!_result.HasPrevious)" @onclick="() => GoToPage(1)">
+                    <Icon Name="chevron-left" Size="13" /><Icon Name="chevron-left" Size="13" />
+                </button>
+                <button class="btn btn-outline-secondary" disabled="@(!_result.HasPrevious)" @onclick="() => GoToPage(_criteria.Page - 1)">
+                    <Icon Name="chevron-left" Size="13" />
+                </button>
+                <span class="btn btn-outline-secondary disabled">@_result.Page / @Math.Max(1, _result.TotalPages)</span>
+                <button class="btn btn-outline-secondary" disabled="@(!_result.HasNext)" @onclick="() => GoToPage(_criteria.Page + 1)">
+                    <Icon Name="chevron-right" Size="13" />
+                </button>
+                <button class="btn btn-outline-secondary" disabled="@(!_result.HasNext)" @onclick="() => GoToPage(_result.TotalPages)">
+                    <Icon Name="chevron-right" Size="13" /><Icon Name="chevron-right" Size="13" />
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PatientSearchCriteria _criteria = new();
+    private PagedResult<PatientListItem> _result = PagedResult<PatientListItem>.Empty();
+    private List<Staff> _providers = new();
+    private bool _loading = true;
+    private CancellationTokenSource? _debounce;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _providers = await db.Staff.AsNoTracking()
+            .Where(s => s.IsActive && s.IsProvider)
+            .OrderBy(s => s.Name.LastName)
+            .ToListAsync();
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _result = await Patients.SearchAsync(_criteria);
+        _loading = false;
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs args)
+    {
+        _criteria.SearchText = args.Value?.ToString();
+        _criteria.Page = 1;
+
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+
+        try
+        {
+            await Task.Delay(280, token);
+            if (token.IsCancellationRequested) return;
+            await LoadAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a later keystroke.
+        }
+    }
+
+    private async Task OnStatusChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        _criteria.Status = string.IsNullOrEmpty(value) ? null : Enum.Parse<PatientStatus>(value);
+        _criteria.Page = 1;
+        await LoadAsync();
+    }
+
+    private async Task OnProviderChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        _criteria.ProviderId = string.IsNullOrEmpty(value) ? null : Guid.Parse(value);
+        _criteria.Page = 1;
+        await LoadAsync();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs args)
+    {
+        _criteria.PageSize = int.Parse(args.Value?.ToString() ?? "25");
+        _criteria.Page = 1;
+        await LoadAsync();
+    }
+
+    private async Task ToggleFilter(string name)
+    {
+        switch (name)
+        {
+            case nameof(_criteria.OnlyRecallDue): _criteria.OnlyRecallDue = !_criteria.OnlyRecallDue; break;
+            case nameof(_criteria.OnlyWithBalance): _criteria.OnlyWithBalance = !_criteria.OnlyWithBalance; break;
+            case nameof(_criteria.OnlyWithAlerts): _criteria.OnlyWithAlerts = !_criteria.OnlyWithAlerts; break;
+        }
+        _criteria.Page = 1;
+        await LoadAsync();
+    }
+
+    private async Task ResetFilters()
+    {
+        _criteria = new PatientSearchCriteria();
+        await LoadAsync();
+    }
+
+    private async Task Sort(string field)
+    {
+        if (_criteria.SortBy == field) _criteria.SortDescending = !_criteria.SortDescending;
+        else { _criteria.SortBy = field; _criteria.SortDescending = false; }
+        await LoadAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _criteria.Page = Math.Clamp(page, 1, Math.Max(1, _result.TotalPages));
+        await LoadAsync();
+    }
+
+    private void Open(Guid id) => Navigation.NavigateTo($"/patients/{id}");
+
+    private async Task ExportCsv()
+    {
+        var all = await Patients.SearchAsync(new PatientSearchCriteria
+        {
+            SearchText = _criteria.SearchText,
+            Status = _criteria.Status,
+            ProviderId = _criteria.ProviderId,
+            OnlyRecallDue = _criteria.OnlyRecallDue,
+            OnlyWithBalance = _criteria.OnlyWithBalance,
+            OnlyWithAlerts = _criteria.OnlyWithAlerts,
+            SortBy = _criteria.SortBy,
+            SortDescending = _criteria.SortDescending,
+            Page = 1,
+            PageSize = 200
+        });
+
+        var csv = CsvExport.Build(all.Items,
+            ("Patient number", p => p.PatientNumber),
+            ("Name", p => p.DisplayName),
+            ("Date of birth", p => p.DateOfBirth?.ToString("yyyy-MM-dd") ?? ""),
+            ("Age", p => p.Age?.ToString() ?? ""),
+            ("Phone", p => p.Phone ?? ""),
+            ("Email", p => p.Email ?? ""),
+            ("Status", p => p.Status.ToString()),
+            ("Provider", p => p.ProviderName ?? ""),
+            ("Recall due", p => p.NextRecallDue?.ToString("yyyy-MM-dd") ?? ""),
+            ("Balance", p => p.Balance.ToString("0.00")));
+
+        await CsvExport.DownloadAsync(JS, "patients.csv", csv);
+    }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+}

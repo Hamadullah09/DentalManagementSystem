@@ -1,0 +1,415 @@
+@inject ClinicalService Clinical
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <select class="form-select form-select-sm" style="width:auto;"
+            value="@(_selectedChartId?.ToString() ?? "")" @onchange="OnChartChanged">
+        <option value="">Select an examination</option>
+        @foreach (var chart in _charts)
+        {
+            <option value="@chart.Id">
+                @Ui.Date(chart.ExamDate) - @Ui.Humanise(chart.Diagnosis)
+            </option>
+        }
+    </select>
+
+    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="StartNewChart" disabled="@_working">
+        <Icon Name="plus" Size="13" /> New full-mouth chart
+    </button>
+
+    @if (_chart is not null)
+    {
+        <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="SaveChart" disabled="@_working">
+            <Icon Name="save" Size="13" /> Save and analyse
+        </button>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_messageIsError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_messageIsError ? "alert-circle" : "check-circle")" Size="15" />
+        <div>@_message</div>
+    </div>
+}
+
+@if (_chart is null)
+{
+    <div class="card-ds">
+        <EmptyState IconName="activity" Title="No periodontal examination selected"
+                    Message="Choose an existing chart above, or start a new full-mouth examination." />
+    </div>
+}
+else
+{
+    @* ------------------------------------------------ summary *@
+    @if (_summary is not null)
+    {
+        <div class="stat-grid mb-3">
+            <StatTile Label="Diagnosis" Value="@ShortDiagnosis(_summary.SuggestedDiagnosis)"
+                      Accent="@(_summary.RiskLevel >= RiskLevel.High ? "danger" : _summary.RiskLevel == RiskLevel.Moderate ? "warning" : "success")"
+                      Icon="activity" Caption="@Ui.Humanise(_summary.SuggestedDiagnosis)" />
+            <StatTile Label="Bleeding on probing" Value="@($"{_summary.BleedingPercent:0.#}%")"
+                      Accent="@(_summary.BleedingPercent >= 30 ? "danger" : _summary.BleedingPercent >= 10 ? "warning" : "success")" />
+            <StatTile Label="Plaque score" Value="@($"{_summary.PlaquePercent:0.#}%")"
+                      Accent="@(_summary.PlaquePercent >= 30 ? "warning" : "success")" />
+            <StatTile Label="Mean pocket depth" Value="@($"{_summary.MeanPocketDepth:0.0} mm")"
+                      Accent="primary" Caption="@($"deepest {_summary.MaxPocketDepth} mm")" />
+            <StatTile Label="Sites 4-5 mm" Value="@_summary.Sites4To5mm.ToString()" Accent="warning" />
+            <StatTile Label="Sites 6 mm or more" Value="@((_summary.Sites6To7mm + _summary.Sites8mmPlus).ToString())" Accent="danger" />
+            <StatTile Label="Furcation involvement" Value="@_summary.FurcationInvolvedTeeth.ToString()"
+                      Accent="purple" Caption="teeth affected" />
+            <StatTile Label="Recommended recall" Value="@($"{_summary.RecommendedRecallMonths} months")" Accent="accent" />
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-7">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header"><h3>Basic periodontal examination</h3></div>
+                    <div class="card-ds-body">
+                        <table class="perio-grid" style="width:100%; max-width:420px;">
+                            <tbody>
+                                <tr>
+                                    <td style="width:33%;" class="@BpeClass(_chart.BpeUpperRight)">@(_chart.BpeUpperRight ?? "-")</td>
+                                    <td style="width:33%;" class="@BpeClass(_chart.BpeUpperAnterior)">@(_chart.BpeUpperAnterior ?? "-")</td>
+                                    <td style="width:33%;" class="@BpeClass(_chart.BpeUpperLeft)">@(_chart.BpeUpperLeft ?? "-")</td>
+                                </tr>
+                                <tr>
+                                    <td class="@BpeClass(_chart.BpeLowerRight)">@(_chart.BpeLowerRight ?? "-")</td>
+                                    <td class="@BpeClass(_chart.BpeLowerAnterior)">@(_chart.BpeLowerAnterior ?? "-")</td>
+                                    <td class="@BpeClass(_chart.BpeLowerLeft)">@(_chart.BpeLowerLeft ?? "-")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="text-faint mt-2" style="font-size:.74rem;">
+                            Codes are derived from the recorded sites and refresh when the chart is saved.
+                            An asterisk marks furcation involvement or attachment loss of 7 mm or more.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-5">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header"><h3>Recommendations</h3></div>
+                    <div class="card-ds-body">
+                        <p class="text-muted" style="font-size:.82rem;">@_summary.StagingRationale</p>
+                        <ul style="font-size:.85rem; padding-left:1.1rem; margin-bottom:0;">
+                            @foreach (var recommendation in _summary.Recommendations)
+                            {
+                                <li>@recommendation</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ------------------------------------------------ the grid *@
+    <div class="card-ds">
+        <div class="card-ds-header">
+            <h3>Pocket chart</h3>
+            <span class="text-muted ms-auto" style="font-size:.78rem;">
+                Six sites per tooth. Enter the probing depth in millimetres; tick BOP where the site bled.
+            </span>
+        </div>
+        <div class="card-ds-body" style="overflow-x:auto;">
+            @RenderArch(DentalArch.Upper)
+            <div class="divider"></div>
+            @RenderArch(DentalArch.Lower)
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<PeriodontalChart> _charts = new();
+    private PeriodontalChart? _chart;
+    private PeriodontalSummary? _summary;
+    private Guid? _selectedChartId;
+    private bool _working;
+    private string? _message;
+    private bool _messageIsError;
+
+    private static readonly PeriodontalSite[] BuccalSites =
+        { PeriodontalSite.MesioBuccal, PeriodontalSite.Buccal, PeriodontalSite.DistoBuccal };
+
+    private static readonly PeriodontalSite[] LingualSites =
+        { PeriodontalSite.MesioLingual, PeriodontalSite.Lingual, PeriodontalSite.DistoLingual };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _charts = await Clinical.GetPerioChartsAsync(PatientId);
+
+        if (_selectedChartId is null && _charts.Count > 0)
+        {
+            _selectedChartId = _charts[0].Id;
+            await LoadChartAsync(_selectedChartId.Value);
+        }
+    }
+
+    private async Task LoadChartAsync(Guid chartId)
+    {
+        _chart = await Clinical.GetPerioChartAsync(chartId);
+        if (_chart is not null)
+            _summary = await Clinical.AnalysePerioAsync(_chart, null, false, false);
+    }
+
+    private async Task OnChartChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        if (string.IsNullOrEmpty(value))
+        {
+            _chart = null;
+            _summary = null;
+            _selectedChartId = null;
+            return;
+        }
+
+        _selectedChartId = Guid.Parse(value);
+        await LoadChartAsync(_selectedChartId.Value);
+    }
+
+    private async Task StartNewChart()
+    {
+        _working = true;
+        _message = null;
+
+        var result = await Clinical.StartPerioChartAsync(PatientId);
+        _working = false;
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _messageIsError = true;
+            return;
+        }
+
+        _charts = await Clinical.GetPerioChartsAsync(PatientId);
+        _selectedChartId = result.Value!.Id;
+        await LoadChartAsync(_selectedChartId.Value);
+
+        _message = "A new full-mouth chart has been created with every present tooth. Enter the readings and save.";
+        _messageIsError = false;
+    }
+
+    private async Task SaveChart()
+    {
+        if (_chart is null) return;
+
+        _working = true;
+        var result = await Clinical.SavePerioChartAsync(_chart);
+        _working = false;
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _messageIsError = true;
+            return;
+        }
+
+        _summary = result.Value;
+        _charts = await Clinical.GetPerioChartsAsync(PatientId);
+        _message = $"Chart saved. Suggested diagnosis: {Ui.Humanise(_summary!.SuggestedDiagnosis)}.";
+        _messageIsError = false;
+    }
+
+    private RenderFragment RenderArch(DentalArch arch) => builder =>
+    {
+        if (_chart is null) return;
+
+        var teeth = _chart.Measurements
+            .Where(m => m.Tooth is not null && m.Tooth.Arch == arch)
+            .Select(m => m.Tooth!)
+            .DistinctBy(t => t.Id)
+            .OrderBy(t => t.ChartOrder)
+            .ToList();
+
+        if (teeth.Count == 0) return;
+
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "style", "overflow-x:auto;");
+
+        builder.OpenElement(seq++, "table");
+        builder.AddAttribute(seq++, "class", "perio-grid");
+
+        // Header row: tooth numbers
+        builder.OpenElement(seq++, "thead");
+        builder.OpenElement(seq++, "tr");
+        AddCell(builder, ref seq, "th", arch == DentalArch.Upper ? "Upper" : "Lower", "text-align:left; min-width:78px;");
+        foreach (var tooth in teeth) AddCell(builder, ref seq, "th", tooth.FdiNumber.ToString(), "min-width:96px;");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "tbody");
+
+        AddMeasurementRow(builder, ref seq, teeth, BuccalSites, "Buccal PD", isDepth: true);
+        AddMeasurementRow(builder, ref seq, teeth, BuccalSites, "Buccal BOP", isDepth: false);
+        AddMeasurementRow(builder, ref seq, teeth, BuccalSites, "Buccal GM", isDepth: null);
+        AddMeasurementRow(builder, ref seq, teeth, LingualSites, arch == DentalArch.Upper ? "Palatal PD" : "Lingual PD", isDepth: true);
+        AddMeasurementRow(builder, ref seq, teeth, LingualSites, arch == DentalArch.Upper ? "Palatal BOP" : "Lingual BOP", isDepth: false);
+        AddMobilityRow(builder, ref seq, teeth);
+
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private void AddMeasurementRow(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, List<Tooth> teeth, PeriodontalSite[] sites, string label, bool? isDepth)
+    {
+        builder.OpenElement(seq++, "tr");
+        AddCell(builder, ref seq, "th", label, "text-align:left; white-space:nowrap;");
+
+        foreach (var tooth in teeth)
+        {
+            builder.OpenElement(seq++, "td");
+            builder.AddAttribute(seq++, "style", "padding:0;");
+
+            builder.OpenElement(seq++, "div");
+            builder.AddAttribute(seq++, "style", "display:flex;");
+
+            foreach (var site in sites)
+            {
+                var measurement = _chart!.Measurements
+                    .FirstOrDefault(m => m.ToothId == tooth.Id && m.Site == site);
+
+                if (measurement is null) { builder.AddContent(seq++, ""); continue; }
+
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "style", "flex:1; text-align:center;");
+                builder.AddAttribute(seq++, "class",
+                    isDepth == true ? Ui.PocketClass(measurement.PocketDepthMm) : null);
+
+                if (isDepth == true)
+                {
+                    AddNumberInput(builder, ref seq, measurement.PocketDepthMm,
+                        value => measurement.PocketDepthMm = Math.Clamp(value, 0, 15));
+                }
+                else if (isDepth == false)
+                {
+                    var current = measurement;
+                    builder.OpenElement(seq++, "input");
+                    builder.AddAttribute(seq++, "type", "checkbox");
+                    builder.AddAttribute(seq++, "checked", current.BleedingOnProbing);
+                    builder.AddAttribute(seq++, "style", "width:14px;height:14px;");
+                    builder.AddAttribute(seq++, "onchange",
+                        EventCallback.Factory.Create<ChangeEventArgs>(this,
+                            e => current.BleedingOnProbing = (bool)(e.Value ?? false)));
+                    builder.CloseElement();
+                }
+                else
+                {
+                    AddNumberInput(builder, ref seq, measurement.GingivalMarginMm,
+                        value => measurement.GingivalMarginMm = Math.Clamp(value, -12, 12));
+                }
+
+                builder.CloseElement();
+            }
+
+            builder.CloseElement();
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    }
+
+    private void AddMobilityRow(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, List<Tooth> teeth)
+    {
+        builder.OpenElement(seq++, "tr");
+        AddCell(builder, ref seq, "th", "Mobility", "text-align:left;");
+
+        foreach (var tooth in teeth)
+        {
+            var measurement = _chart!.Measurements.FirstOrDefault(m => m.ToothId == tooth.Id);
+            builder.OpenElement(seq++, "td");
+
+            if (measurement is not null)
+            {
+                var current = measurement;
+                builder.OpenElement(seq++, "select");
+                builder.AddAttribute(seq++, "style",
+                    "border:0;background:transparent;font-size:.7rem;color:var(--ds-text);width:100%;");
+                builder.AddAttribute(seq++, "value", ((int)current.Mobility).ToString());
+                builder.AddAttribute(seq++, "onchange",
+                    EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+                    {
+                        if (int.TryParse(e.Value?.ToString(), out var grade))
+                            ApplyMobility(tooth.Id, (MobilityGrade)grade);
+                    }));
+
+                foreach (var grade in Enum.GetValues<MobilityGrade>())
+                {
+                    builder.OpenElement(seq++, "option");
+                    builder.AddAttribute(seq++, "value", ((int)grade).ToString());
+                    builder.AddContent(seq++, grade == MobilityGrade.None ? "-" : ((int)grade).ToString());
+                    builder.CloseElement();
+                }
+
+                builder.CloseElement();
+            }
+
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    }
+
+    private void ApplyMobility(Guid toothId, MobilityGrade grade)
+    {
+        if (_chart is null) return;
+        foreach (var measurement in _chart.Measurements.Where(m => m.ToothId == toothId))
+            measurement.Mobility = grade;
+    }
+
+    private void AddNumberInput(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, int value, Action<int> setter)
+    {
+        builder.OpenElement(seq++, "input");
+        builder.AddAttribute(seq++, "type", "number");
+        builder.AddAttribute(seq++, "value", value.ToString());
+        builder.AddAttribute(seq++, "onchange",
+            EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+            {
+                if (int.TryParse(e.Value?.ToString(), out var parsed)) setter(parsed);
+            }));
+        builder.CloseElement();
+    }
+
+    private static void AddCell(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, string element, string content, string? style = null)
+    {
+        builder.OpenElement(seq++, element);
+        if (style is not null) builder.AddAttribute(seq++, "style", style);
+        builder.AddContent(seq++, content);
+        builder.CloseElement();
+    }
+
+    private static string BpeClass(string? code) => code switch
+    {
+        null or "-" or "X" => "",
+        var c when c.StartsWith("4") => "pd-deep",
+        var c when c.StartsWith("3") => "pd-moderate",
+        _ => ""
+    };
+
+    private static string ShortDiagnosis(PeriodontalDiagnosis diagnosis) => diagnosis switch
+    {
+        PeriodontalDiagnosis.Healthy => "Healthy",
+        PeriodontalDiagnosis.Gingivitis => "Gingivitis",
+        _ when diagnosis.ToString().Contains("StageIV") => "Stage IV",
+        _ when diagnosis.ToString().Contains("StageIII") => "Stage III",
+        _ when diagnosis.ToString().Contains("StageII") => "Stage II",
+        _ when diagnosis.ToString().Contains("StageI") => "Stage I",
+        _ => Ui.Humanise(diagnosis)
+    };
+}

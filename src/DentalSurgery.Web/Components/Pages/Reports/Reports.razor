@@ -1,0 +1,326 @@
+@page "/reports"
+@attribute [Authorize(Policy = Policies.CanViewReports)]
+@inject ReportingService Reporting
+@inject IDateTimeProvider Clock
+@inject IJSRuntime JS
+
+<PageTitle>Reports - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Reports" Subtitle="Production, collections, the appointment book and clinical activity.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="Print">
+            <Icon Name="printer" Size="13" /> Print
+        </button>
+    </Actions>
+</PageHeader>
+
+<DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+
+<div class="tabs-ds no-print">
+    <button class="tab-ds @(_view == "financial" ? "active" : "")" @onclick='() => _view = "financial"'>Financial</button>
+    <button class="tab-ds @(_view == "schedule" ? "active" : "")" @onclick='() => _view = "schedule"'>Appointment book</button>
+    <button class="tab-ds @(_view == "clinical" ? "active" : "")" @onclick='() => _view = "clinical"'>Clinical activity</button>
+</div>
+
+@if (_loading)
+{
+    <div class="loading-bar mb-3"></div>
+    <div class="skeleton" style="height:320px;"></div>
+}
+else if (_view == "financial" && _financial is not null)
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Gross production" Value="@Ui.Money(_financial.GrossProduction)" Accent="primary" Icon="trending-up" />
+        <StatTile Label="Discounts" Value="@Ui.Money(_financial.Discounts)" Accent="neutral" />
+        <StatTile Label="Write-offs" Value="@Ui.Money(_financial.WriteOffs)" Accent="warning" />
+        <StatTile Label="Net production" Value="@Ui.Money(_financial.NetProduction)" Accent="accent" />
+        <StatTile Label="Collections" Value="@Ui.Money(_financial.TotalCollections)" Accent="success" Icon="credit-card"
+                  Caption="@($"{Ui.Money(_financial.InsuranceCollections)} from insurers")" />
+        <StatTile Label="Collection rate" Value="@($"{_financial.CollectionRatePercent:0.#}%")"
+                  Accent="@(_financial.CollectionRatePercent >= 95 ? "success" : _financial.CollectionRatePercent >= 80 ? "warning" : "danger")" />
+        <StatTile Label="Invoices issued" Value="@_financial.InvoicesIssued.ToString()" Accent="neutral" Icon="receipt" />
+        <StatTile Label="Closing receivables" Value="@Ui.Money(_financial.ClosingReceivables)" Accent="warning" />
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-8">
+            <div class="card-ds h-100">
+                <div class="card-ds-header">
+                    <h3>Daily production and collections</h3>
+                    <span class="ms-auto d-flex gap-3" style="font-size:.78rem;">
+                        <span class="legend-item"><span class="legend-swatch" style="background:var(--ds-primary)"></span>Production</span>
+                        <span class="legend-item"><span class="legend-swatch" style="background:var(--ds-success)"></span>Collections</span>
+                    </span>
+                </div>
+                <div class="card-ds-body">
+                    <Sparkline Values="@_financial.DailyProduction.Select(p => p.Value)" Width="720" Height="90"
+                               Colour="var(--ds-primary)" AriaLabel="Daily production" />
+                    <Sparkline Values="@_financial.DailyCollections.Select(p => p.Value)" Width="720" Height="90"
+                               Colour="var(--ds-success)" AriaLabel="Daily collections" />
+                    <div class="d-flex justify-content-between text-faint mt-1" style="font-size:.72rem;">
+                        <span>@Ui.Date(_from)</span>
+                        <span>@Ui.Date(_to)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Payment methods</h3></div>
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @if (_financial.ByPaymentMethod.Count == 0)
+                    {
+                        <span class="text-muted" style="font-size:.85rem;">No payments in this period.</span>
+                    }
+                    else
+                    {
+                        @foreach (var method in _financial.ByPaymentMethod)
+                        {
+                            <div>
+                                <div class="d-flex justify-content-between" style="font-size:.83rem;">
+                                    <span>@method.Label</span>
+                                    <span class="mono">@Ui.Money(method.Amount)</span>
+                                </div>
+                                <div class="bar-track mt-1">
+                                    <div class="bar-fill success"
+                                         style="width:@((int)method.PercentOf(_financial.TotalCollections))%"></div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-ds">
+        <div class="card-ds-header">
+            <h3>Production by category</h3>
+            <button class="btn btn-sm btn-outline-secondary ms-auto no-print" @onclick="ExportFinancialCsv">
+                <Icon Name="download" Size="13" /> Export
+            </button>
+        </div>
+        <div class="table-wrap" style="border:0; border-radius:0;">
+            <table class="table-ds">
+                <thead>
+                    <tr><th>Category</th><th class="num">Procedures</th><th class="num">Value</th><th style="width:220px;">Share</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var category in _financial.ByCategory)
+                    {
+                        <tr>
+                            <td>@category.Label</td>
+                            <td class="num">@category.Count</td>
+                            <td class="num mono">@Ui.Money(category.Amount)</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="bar-track flex-grow-1">
+                                        <div class="bar-fill"
+                                             style="width:@((int)category.PercentOf(_financial.GrossProduction))%"></div>
+                                    </div>
+                                    <span class="mono" style="font-size:.75rem; min-width:40px;">
+                                        @category.PercentOf(_financial.GrossProduction).ToString("0.#")%
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else if (_view == "schedule" && _schedule is not null)
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Appointments" Value="@_schedule.TotalAppointments.ToString()" Accent="primary" Icon="calendar" />
+        <StatTile Label="Completed" Value="@_schedule.Completed.ToString()" Accent="success" />
+        <StatTile Label="No-shows" Value="@_schedule.NoShows.ToString()"
+                  Accent="@(_schedule.NoShowRatePercent > 5 ? "danger" : "success")"
+                  Caption="@($"{_schedule.NoShowRatePercent:0.#}% of bookings")" />
+        <StatTile Label="Cancellations" Value="@_schedule.Cancelled.ToString()" Accent="warning"
+                  Caption="@($"{_schedule.CancellationRatePercent:0.#}%")" />
+        <StatTile Label="Chair utilisation" Value="@($"{_schedule.UtilisationPercent:0.#}%")"
+                  Accent="@(_schedule.UtilisationPercent >= 80 ? "success" : _schedule.UtilisationPercent >= 60 ? "warning" : "danger")" />
+        <StatTile Label="Average wait" Value="@($"{_schedule.AverageWaitMinutes:0} min")" Accent="accent" Icon="clock" />
+        <StatTile Label="Average chair time" Value="@($"{_schedule.AverageChairMinutes:0} min")" Accent="purple" />
+        <StatTile Label="Booked hours" Value="@($"{_schedule.TotalBookedMinutes / 60:N0}")" Accent="neutral"
+                  Caption="@($"of {_schedule.TotalAvailableMinutes / 60:N0} rostered")" />
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Utilisation by provider</h3></div>
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var provider in _schedule.ByProvider)
+                    {
+                        <div>
+                            <div class="d-flex justify-content-between" style="font-size:.83rem;">
+                                <span>@provider.ProviderName</span>
+                                <span class="mono">@provider.UtilisationPercent.ToString("0.#")% &middot; @provider.Appointments appts</span>
+                            </div>
+                            <div class="bar-track mt-1">
+                                <div class="bar-fill @(provider.UtilisationPercent >= 80 ? "success" : provider.UtilisationPercent >= 60 ? "warning" : "danger")"
+                                     style="width:@((int)Math.Min(100, provider.UtilisationPercent))%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Appointment types</h3></div>
+                <div class="table-wrap" style="border:0; border-radius:0; max-height:360px; overflow-y:auto;">
+                    <table class="table-ds">
+                        <thead><tr><th>Type</th><th class="num">Count</th><th style="width:130px;">Share</th></tr></thead>
+                        <tbody>
+                            @foreach (var type in _schedule.ByAppointmentType)
+                            {
+                                <tr>
+                                    <td>@type.Label</td>
+                                    <td class="num">@type.Count</td>
+                                    <td>
+                                        <div class="bar-track">
+                                            <div class="bar-fill"
+                                                 style="width:@(_schedule.TotalAppointments == 0 ? 0 : type.Count * 100 / _schedule.TotalAppointments)%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else if (_view == "clinical" && _clinical is not null)
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Procedures" Value="@_clinical.ProceduresCompleted.ToString()" Accent="primary" Icon="activity" />
+        <StatTile Label="Surgical cases" Value="@_clinical.SurgicalProcedures.ToString()" Accent="danger" Icon="scissors" />
+        <StatTile Label="Complication rate" Value="@($"{_clinical.ComplicationRatePercent:0.##}%")"
+                  Accent="@(_clinical.ComplicationRatePercent > 5 ? "danger" : "success")"
+                  Caption="@($"{_clinical.ComplicationCount} of {_clinical.SurgicalProcedures} cases")" />
+        <StatTile Label="Implants placed" Value="@_clinical.ImplantsPlaced.ToString()" Accent="purple" />
+        <StatTile Label="Extractions" Value="@_clinical.ExtractionsPerformed.ToString()" Accent="warning" />
+        <StatTile Label="Root canals" Value="@_clinical.RootCanalsCompleted.ToString()" Accent="accent" />
+        <StatTile Label="Restorations" Value="@_clinical.RestorationsPlaced.ToString()" Accent="success" />
+        <StatTile Label="Hygiene visits" Value="@_clinical.HygieneVisits.ToString()" Accent="accent" />
+        <StatTile Label="Radiographs" Value="@_clinical.RadiographsTaken.ToString()" Accent="neutral" Icon="x-ray" />
+        <StatTile Label="Prescriptions" Value="@_clinical.PrescriptionsIssued.ToString()" Accent="neutral" Icon="pill" />
+        <StatTile Label="Referrals out" Value="@_clinical.ReferralsOut.ToString()" Accent="neutral" />
+        <StatTile Label="Redo work" Value="@_clinical.RedoProcedures.ToString()"
+                  Accent="@(_clinical.RedoProcedures > 0 ? "warning" : "success")" />
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Most frequent procedures</h3></div>
+                <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+                    <table class="table-ds">
+                        <thead><tr><th>Procedure</th><th class="num">Count</th><th class="num">Value</th></tr></thead>
+                        <tbody>
+                            @foreach (var procedure in _clinical.TopProcedures)
+                            {
+                                <tr>
+                                    <td>@procedure.Label</td>
+                                    <td class="num">@procedure.Count</td>
+                                    <td class="num mono">@Ui.Money(procedure.Amount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Surgery by type</h3></div>
+                @if (_clinical.BySurgeryType.Count == 0)
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.85rem;">No surgery in this period.</div>
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+                        <table class="table-ds">
+                            <thead><tr><th>Type</th><th class="num">Count</th><th class="num">Value</th></tr></thead>
+                            <tbody>
+                                @foreach (var surgery in _clinical.BySurgeryType)
+                                {
+                                    <tr>
+                                        <td>@surgery.Label</td>
+                                        <td class="num">@surgery.Count</td>
+                                        <td class="num mono">@Ui.Money(surgery.Amount)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private string _view = "financial";
+    private bool _loading = true;
+
+    private FinancialSummary? _financial;
+    private ScheduleAnalytics? _schedule;
+    private ClinicalAnalytics? _clinical;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.Today;
+        _from = new DateOnly(_to.Year, _to.Month, 1);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        // All three views come from one round trip so switching tabs is instant.
+        _financial = await Reporting.GetFinancialSummaryAsync(_from, _to);
+        _schedule = await Reporting.GetScheduleAnalyticsAsync(_from, _to);
+        _clinical = await Reporting.GetClinicalAnalyticsAsync(_from, _to);
+
+        _loading = false;
+    }
+
+    private async Task OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+    }
+
+    private async Task Print()
+    {
+        try { await JS.InvokeVoidAsync("dentalApp.print"); }
+        catch (JSException) { /* printing unavailable */ }
+    }
+
+    private async Task ExportFinancialCsv()
+    {
+        if (_financial is null) return;
+
+        var csv = CsvExport.Build(_financial.ByCategory,
+            ("Category", c => c.Label),
+            ("Procedures", c => c.Count.ToString()),
+            ("Value", c => CsvExport.Money(c.Amount)));
+
+        await CsvExport.DownloadAsync(JS, $"production-{_from:yyyyMMdd}-{_to:yyyyMMdd}.csv", csv);
+    }
+}

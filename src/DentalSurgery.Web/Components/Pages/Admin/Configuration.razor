@@ -1,0 +1,426 @@
+@page "/admin"
+@attribute [Authorize(Policy = Policies.CanAdminister)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+
+<PageTitle>Configuration - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Configuration" Subtitle="Practice details, sites, fee schedules and the reference catalogues." />
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds a-success mb-3">
+        <Icon Name="check-circle" Size="15" /><div>@_message</div>
+    </div>
+}
+
+<div class="tabs-ds">
+    <button class="tab-ds @(_view == "practice" ? "active" : "")" @onclick='() => _view = "practice"'>Practice</button>
+    <button class="tab-ds @(_view == "locations" ? "active" : "")" @onclick='() => _view = "locations"'>
+        Sites and surgeries <span class="count">@_locations.Count</span>
+    </button>
+    <button class="tab-ds @(_view == "codes" ? "active" : "")" @onclick='() => _view = "codes"'>
+        Procedure codes <span class="count">@_codes.Count</span>
+    </button>
+    <button class="tab-ds @(_view == "fees" ? "active" : "")" @onclick='() => _view = "fees"'>Fee schedules</button>
+    <button class="tab-ds @(_view == "settings" ? "active" : "")" @onclick='() => _view = "settings"'>
+        Settings <span class="count">@_settings.Count</span>
+    </button>
+</div>
+
+@if (_view == "practice" && _practice is not null)
+{
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card-ds">
+                <div class="card-ds-header">
+                    <h3>Practice details</h3>
+                    <button class="btn btn-sm btn-primary ms-auto" @onclick="SavePractice" disabled="@_saving">Save</button>
+                </div>
+                <div class="card-ds-body">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label">Trading name</label>
+                            <input class="form-control form-control-sm" @bind="_practice.Name" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Legal name</label>
+                            <input class="form-control form-control-sm" @bind="_practice.LegalName" />
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Company no.</label>
+                            <input class="form-control form-control-sm" @bind="_practice.RegistrationNumber" />
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Regulator no.</label>
+                            <input class="form-control form-control-sm" @bind="_practice.RegulatorNumber" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <input class="form-control form-control-sm mb-1" @bind="_practice.Address.Line1" />
+                            <div class="row g-1">
+                                <div class="col-6"><input class="form-control form-control-sm" @bind="_practice.Address.City" placeholder="Town" /></div>
+                                <div class="col-6"><input class="form-control form-control-sm" @bind="_practice.Address.PostCode" placeholder="Postcode" /></div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Telephone</label>
+                            <input class="form-control form-control-sm" @bind="_practice.Contact.HomePhone" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Email</label>
+                            <input class="form-control form-control-sm" @bind="_practice.Contact.Email" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card-ds">
+                <div class="card-ds-header"><h3>Defaults</h3></div>
+                <div class="card-ds-body">
+                    <div class="row g-2">
+                        <div class="col-6 col-md-4">
+                            <label class="form-label">Currency</label>
+                            <input class="form-control form-control-sm" @bind="_practice.CurrencyCode" maxlength="3" />
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label class="form-label">Symbol</label>
+                            <input class="form-control form-control-sm" @bind="_practice.CurrencySymbol" maxlength="3" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Appointment length</label>
+                            <input type="number" class="form-control form-control-sm" @bind="_practice.DefaultAppointmentMinutes" />
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label class="form-label">Recall (months)</label>
+                            <input type="number" class="form-control form-control-sm" @bind="_practice.DefaultRecallIntervalMonths" />
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label class="form-label">Payment terms (days)</label>
+                            <input type="number" class="form-control form-control-sm" @bind="_practice.InvoicePaymentTermDays" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Tax rate %</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" @bind="_practice.DefaultTaxRatePercent" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Invoice footer</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="_practice.InvoiceFooterText"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Bank details</label>
+                            <input class="form-control form-control-sm" @bind="_practice.BankDetails" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else if (_view == "locations")
+{
+    <div class="row g-3">
+        @foreach (var location in _locations)
+        {
+            <div class="col-12 col-lg-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <span class="dot" style="background:@(location.ColourHex ?? "#6c757d")"></span>
+                        <h3>@location.Name</h3>
+                        @if (location.IsPrimary)
+                        {
+                            <span class="badge-ds b-primary">Main site</span>
+                        }
+                        <span class="mono ms-auto text-muted" style="font-size:.78rem;">@location.Code</span>
+                    </div>
+                    <div class="card-ds-body">
+                        <div class="text-muted mb-2" style="font-size:.83rem;">@location.Address.ToSingleLine()</div>
+                        @if (!string.IsNullOrWhiteSpace(location.Notes))
+                        {
+                            <div class="mb-2" style="font-size:.82rem;">@location.Notes</div>
+                        }
+
+                        <div class="form-label">Surgeries</div>
+                        <div class="table-wrap">
+                            <table class="table-ds">
+                                <thead>
+                                    <tr><th>Code</th><th>Name</th><th>Equipment</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var operatory in location.Operatories.OrderBy(o => o.DisplayOrder))
+                                    {
+                                        <tr>
+                                            <td class="mono">@operatory.Code</td>
+                                            <td>
+                                                <span class="dot me-1" style="background:@(operatory.ColourHex ?? "#6c757d")"></span>
+                                                @operatory.Name
+                                            </td>
+                                            <td>
+                                                <div class="d-flex gap-1 flex-wrap">
+                                                    @if (operatory.IsSurgicalSuite)
+                                                    {
+                                                        <span class="badge-ds b-danger">Surgical</span>
+                                                    }
+                                                    @if (operatory.HasXRay)
+                                                    {
+                                                        <span class="badge-ds b-info">X-ray</span>
+                                                    }
+                                                    @if (operatory.HasIntraoralScanner)
+                                                    {
+                                                        <span class="badge-ds b-accent">Scanner</span>
+                                                    }
+                                                    @if (operatory.HasSedationEquipment)
+                                                    {
+                                                        <span class="badge-ds b-purple">Sedation</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="form-label mt-3">Opening hours</div>
+                        <div class="d-flex flex-column gap-1">
+                            @foreach (var hours in location.BusinessHours.OrderBy(h => ((int)h.DayOfWeek + 6) % 7))
+                            {
+                                <div class="d-flex justify-content-between" style="font-size:.8rem;">
+                                    <span>@hours.DayOfWeek</span>
+                                    <span class="mono @(hours.IsClosed ? "text-faint" : "")">
+                                        @(hours.IsClosed
+                                            ? "Closed"
+                                            : $"{hours.OpenTime:hh\\:mm} - {hours.CloseTime:hh\\:mm}")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else if (_view == "codes")
+{
+    <div class="filter-bar">
+        <div class="field grow">
+            <label class="form-label">Search</label>
+            <input class="form-control form-control-sm" placeholder="Code or description"
+                   @bind="_codeSearch" @bind:event="oninput" />
+        </div>
+        <div class="field">
+            <label class="form-label">Category</label>
+            <select class="form-select form-select-sm" @bind="_categoryFilter">
+                <option value="">All categories</option>
+                @foreach (var category in Enum.GetValues<ProcedureCategory>())
+                {
+                    <option value="@category">@Ui.Humanise(category)</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th style="width:80px;">Code</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th class="num">Fee</th>
+                    <th class="num">Minutes</th>
+                    <th>Requires</th>
+                    <th>Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var procedureCode in FilteredCodes.Take(300))
+                {
+                    <tr>
+                        <td class="mono">@procedureCode.Code</td>
+                        <td>@procedureCode.ShortDescription</td>
+                        <td>
+                            <span class="badge-ds b-neutral" style="border-left:3px solid @Ui.ColourFor(procedureCode.Category);">
+                                @Ui.Humanise(procedureCode.Category)
+                            </span>
+                        </td>
+                        <td class="num mono">@Ui.Money(procedureCode.DefaultFee)</td>
+                        <td class="num">@procedureCode.DefaultDurationMinutes</td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                @if (procedureCode.RequiresTooth)
+                                {
+                                    <span class="chip">Tooth</span>
+                                }
+                                @if (procedureCode.RequiresSurfaces)
+                                {
+                                    <span class="chip">Surfaces</span>
+                                }
+                                @if (procedureCode.RequiresQuadrant)
+                                {
+                                    <span class="chip">Quadrant</span>
+                                }
+                                @if (procedureCode.RequiresArch)
+                                {
+                                    <span class="chip">Arch</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                @if (procedureCode.IsSurgical)
+                                {
+                                    <span class="badge-ds b-danger">Surgical</span>
+                                }
+                                @if (procedureCode.RequiresConsent)
+                                {
+                                    <span class="badge-ds b-warning">Consent</span>
+                                }
+                                @if (procedureCode.RequiresLabWork)
+                                {
+                                    <span class="badge-ds b-purple">Lab</span>
+                                }
+                                @if (procedureCode.GeneratesRecall)
+                                {
+                                    <span class="badge-ds b-info">Recall @procedureCode.RecallIntervalMonths m</span>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else if (_view == "fees")
+{
+    <div class="row g-3">
+        @foreach (var schedule in _feeSchedules)
+        {
+            <div class="col-12 col-md-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <h3>@schedule.Name</h3>
+                        @if (schedule.IsDefault)
+                        {
+                            <span class="badge-ds b-primary">Default</span>
+                        }
+                        <span class="badge-ds b-neutral ms-auto">@Ui.Humanise(schedule.ScheduleType)</span>
+                    </div>
+                    <div class="card-ds-body">
+                        <div class="text-muted mb-2" style="font-size:.83rem;">@schedule.Description</div>
+                        <dl class="kv" style="font-size:.82rem;">
+                            <dt>Effective from</dt><dd>@Ui.Date(schedule.EffectiveFrom)</dd>
+                            <dt>Effective to</dt><dd>@(schedule.EffectiveTo.HasValue ? Ui.Date(schedule.EffectiveTo) : "Open ended")</dd>
+                            <dt>Explicit prices</dt><dd>@schedule.Items.Count</dd>
+                            @if (schedule.BlanketAdjustmentPercent.HasValue)
+                            {
+                                <dt>Blanket adjustment</dt>
+                                <dd>@schedule.BlanketAdjustmentPercent.Value.ToString("+0.#;-0.#")% on catalogue fees</dd>
+                            }
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr><th>Category</th><th>Key</th><th>Value</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var group in _settings.GroupBy(s => s.Category).OrderBy(g => g.Key))
+                {
+                    @foreach (var setting in group.OrderBy(s => s.Key))
+                    {
+                        <tr>
+                            <td><span class="badge-ds b-neutral">@setting.Category</span></td>
+                            <td class="mono" style="font-size:.79rem;">@setting.Key</td>
+                            <td class="mono">@setting.Value</td>
+                            <td class="text-muted" style="font-size:.8rem;">@setting.Description</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private string _view = "practice";
+    private Practice? _practice;
+    private List<Location> _locations = new();
+    private List<ProcedureCode> _codes = new();
+    private List<FeeSchedule> _feeSchedules = new();
+    private List<AppSetting> _settings = new();
+
+    private string _codeSearch = string.Empty;
+    private string _categoryFilter = string.Empty;
+    private bool _saving;
+    private string? _message;
+
+    private List<ProcedureCode> FilteredCodes
+    {
+        get
+        {
+            var query = _codes.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_codeSearch))
+            {
+                var text = _codeSearch.Trim();
+                query = query.Where(c =>
+                    c.Code.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                    c.ShortDescription.Contains(text, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrEmpty(_categoryFilter) &&
+                Enum.TryParse<ProcedureCategory>(_categoryFilter, out var category))
+                query = query.Where(c => c.Category == category);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _practice = await db.Practices.FirstOrDefaultAsync();
+
+        _locations = await db.Locations.AsNoTracking()
+            .Include(l => l.Operatories)
+            .Include(l => l.BusinessHours)
+            .OrderByDescending(l => l.IsPrimary)
+            .ToListAsync();
+
+        _codes = await db.ProcedureCodes.AsNoTracking()
+            .OrderBy(c => c.SortOrder).ThenBy(c => c.Code)
+            .ToListAsync();
+
+        _feeSchedules = await db.FeeSchedules.AsNoTracking()
+            .Include(f => f.Items)
+            .OrderByDescending(f => f.IsDefault)
+            .ToListAsync();
+
+        _settings = await db.AppSettings.AsNoTracking().ToListAsync();
+    }
+
+    private async Task SavePractice()
+    {
+        if (_practice is null) return;
+
+        _saving = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Practices.Update(_practice);
+        await db.SaveChangesAsync();
+        _saving = false;
+
+        _message = "Practice details saved.";
+    }
+}

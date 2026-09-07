@@ -1,0 +1,218 @@
+@page "/my-day"
+@attribute [Authorize]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject ICurrentUser CurrentUser
+@inject IDateTimeProvider Clock
+
+<PageTitle>My day - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="My day" Subtitle="@Clock.LocalNow.ToString("dddd d MMMM yyyy")" />
+
+@if (CurrentUser.StaffId is null)
+{
+    <div class="card-ds">
+        <EmptyState IconName="user" Title="No staff record linked"
+                    Message="This login is not linked to a staff member, so there is no personal list to show." />
+    </div>
+}
+else
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Appointments" Value="@_appointments.Count.ToString()" Accent="primary" Icon="calendar" />
+        <StatTile Label="Completed" Value="@_appointments.Count(a => a.Status is AppointmentStatus.Completed or AppointmentStatus.CheckedOut).ToString()"
+                  Accent="success" Icon="check-circle" />
+        <StatTile Label="Chair time booked" Value="@($"{_appointments.Where(a => a.IsActiveBooking).Sum(a => a.DurationMinutes) / 60.0:0.#} h")"
+                  Accent="accent" Icon="clock" />
+        <StatTile Label="Production today" Value="@Ui.Money(_productionToday)" Accent="success" Icon="trending-up" />
+        <StatTile Label="My open tasks" Value="@_tasks.Count.ToString()"
+                  Accent="@(_tasks.Any(t => t.IsOverdue) ? "danger" : "neutral")" Icon="list-checks" />
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-lg-7">
+            <div class="card-ds h-100">
+                <div class="card-ds-header">
+                    <h3>My list today</h3>
+                    <a href="/schedule" class="ms-auto" style="font-size:.8rem;">Full book &rarr;</a>
+                </div>
+                @if (_appointments.Count == 0)
+                {
+                    <EmptyState IconName="calendar" Title="Nothing booked"
+                                Message="You have no appointments today." />
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr><th style="width:60px;">Time</th><th>Patient</th><th>Reason</th><th>Surgery</th><th style="width:120px;">Status</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var appointment in _appointments)
+                                {
+                                    <tr>
+                                        <td class="mono nowrap">@appointment.StartUtc.ToString("HH:mm")</td>
+                                        <td>
+                                            <a href="/patients/@appointment.PatientId" style="font-weight:600;">
+                                                @(appointment.Patient?.Name.Display ?? "Unknown")
+                                            </a>
+                                            @{
+                                                var alerts = appointment.Patient?.Alerts
+                                                    .Where(a => a.IsActive && a.Severity >= AlertSeverity.High).ToList()
+                                                    ?? new List<PatientAlert>();
+                                            }
+                                            @if (alerts.Count > 0)
+                                            {
+                                                <div class="d-flex gap-1 mt-1 flex-wrap">
+                                                    @foreach (var alert in alerts.Take(2))
+                                                    {
+                                                        <span class="badge-ds b-danger" title="@alert.Detail">
+                                                            <Icon Name="alert-triangle" Size="10" /> @Ui.Truncate(alert.Title, 26)
+                                                        </span>
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                        <td style="font-size:.82rem;">
+                                            @Ui.Truncate(appointment.Reason ?? Ui.Humanise(appointment.AppointmentType), 38)
+                                        </td>
+                                        <td class="nowrap" style="font-size:.8rem;">@(appointment.Operatory?.Name ?? "-")</td>
+                                        <td>
+                                            <span class="badge-ds @Ui.BadgeFor(appointment.Status)">
+                                                @Ui.Humanise(appointment.Status)
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-5">
+            <div class="card-ds mb-3">
+                <div class="card-ds-header">
+                    <h3>My tasks</h3>
+                    <a href="/tasks" class="ms-auto" style="font-size:.8rem;">All tasks &rarr;</a>
+                </div>
+                @if (_tasks.Count == 0)
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.85rem;">Nothing assigned to you.</div>
+                }
+                else
+                {
+                    <div class="card-ds-body d-flex flex-column gap-2">
+                        @foreach (var task in _tasks)
+                        {
+                            <div class="d-flex align-items-start gap-2">
+                                <span class="badge-ds @Ui.BadgeFor(task.Priority)" style="margin-top:2px;">
+                                    @Ui.Humanise(task.Priority)
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div style="font-size:.85rem;">@task.Title</div>
+                                    <div class="text-faint" style="font-size:.74rem;">
+                                        @task.Category
+                                        @if (task.DueDate.HasValue)
+                                        {
+                                            <span> &middot; due @Ui.Relative(task.DueDate, Clock.Today)</span>
+                                        }
+                                    </div>
+                                </div>
+                                @if (task.IsOverdue)
+                                {
+                                    <span class="badge-ds b-danger">Overdue</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="card-ds">
+                <div class="card-ds-header"><h3>Follow-ups I owe</h3></div>
+                @if (_followUps.Count == 0)
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.85rem;">
+                        No post-operative reviews or suture removals are outstanding.
+                    </div>
+                }
+                else
+                {
+                    <div class="card-ds-body d-flex flex-column gap-2">
+                        @foreach (var followUp in _followUps)
+                        {
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <a href="/patients/@followUp.Procedure?.PatientId/treatment" style="font-weight:600; font-size:.85rem;">
+                                        @(followUp.Procedure?.Patient?.Name.Display ?? "Patient")
+                                    </a>
+                                    <div class="text-faint" style="font-size:.74rem;">
+                                        @Ui.Humanise(followUp.SurgeryType)
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="@(followUp.FollowUpDue < Clock.Today ? "text-danger fw-semibold" : "")"
+                                         style="font-size:.8rem;">
+                                        @Ui.DateShort(followUp.FollowUpDue)
+                                    </div>
+                                    @if (followUp.SutureRemovalDue.HasValue)
+                                    {
+                                        <div class="text-faint" style="font-size:.72rem;">
+                                            sutures @Ui.DateShort(followUp.SutureRemovalDue)
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Appointment> _appointments = new();
+    private List<WorkTask> _tasks = new();
+    private List<SurgicalRecord> _followUps = new();
+    private decimal _productionToday;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CurrentUser.StaffId is not { } staffId) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var dayStart = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        var dayEnd = dayStart.AddDays(1);
+
+        _appointments = await db.Appointments.AsNoTracking()
+            .Include(a => a.Patient).ThenInclude(p => p!.Alerts)
+            .Include(a => a.Operatory)
+            .Where(a => a.ProviderId == staffId && a.StartUtc >= dayStart && a.StartUtc < dayEnd)
+            .OrderBy(a => a.StartUtc)
+            .ToListAsync();
+
+        _tasks = await db.WorkTasks.AsNoTracking()
+            .Where(t => t.AssignedToStaffId == staffId && !t.IsCompleted)
+            .OrderBy(t => t.Priority).ThenBy(t => t.DueDate)
+            .Take(10)
+            .ToListAsync();
+
+        _productionToday = await db.Procedures.AsNoTracking()
+            .Where(p => p.ProviderId == staffId && p.DateOfService >= dayStart && p.DateOfService < dayEnd &&
+                        p.Status == ProcedureStatus.Completed)
+            .SumAsync(p => (decimal?)((p.Fee * p.Quantity) - p.DiscountAmount)) ?? 0m;
+
+        var horizon = Clock.Today.AddDays(14);
+        _followUps = await db.SurgicalRecords.AsNoTracking()
+            .Include(s => s.Procedure).ThenInclude(p => p!.Patient)
+            .Where(s => s.Procedure != null && s.Procedure.ProviderId == staffId &&
+                        s.FollowUpDue != null && s.FollowUpDue <= horizon)
+            .OrderBy(s => s.FollowUpDue)
+            .Take(12)
+            .ToListAsync();
+    }
+}

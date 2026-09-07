@@ -1,0 +1,149 @@
+@page "/staff"
+@attribute [Authorize(Policy = Policies.CanManageStaff)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Team - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="The team" Subtitle="Clinicians and support staff, with registration and compliance dates." />
+
+@if (_expiringRegistrations.Count > 0)
+{
+    <div class="alert-ds a-warning mb-3">
+        <Icon Name="alert-circle" Size="16" />
+        <div>
+            <strong>@_expiringRegistrations.Count registration(s) expire within 60 days:</strong>
+            @string.Join(", ", _expiringRegistrations.Select(s => $"{s.DisplayName} ({s.RegistrationExpiry:d MMM yyyy})"))
+        </div>
+    </div>
+}
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Team members" Value="@_staff.Count(s => s.IsActive).ToString()" Accent="primary" Icon="users" />
+    <StatTile Label="Providers" Value="@_staff.Count(s => s.IsActive && s.IsProvider).ToString()" Accent="accent" Icon="stethoscope" />
+    <StatTile Label="Can prescribe" Value="@_staff.Count(s => s.IsActive && s.CanPrescribe).ToString()" Accent="purple" Icon="pill" />
+    <StatTile Label="Surgical" Value="@_staff.Count(s => s.IsActive && s.CanPerformSurgery).ToString()" Accent="danger" Icon="scissors" />
+    <StatTile Label="Registrations expiring" Value="@_expiringRegistrations.Count.ToString()"
+              Accent="@(_expiringRegistrations.Count > 0 ? "warning" : "success")" />
+</div>
+
+<div class="row g-3">
+    @foreach (var member in _staff.Where(s => s.IsActive).OrderByDescending(s => s.IsProvider).ThenBy(s => s.Name.LastName))
+    {
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="card-ds h-100">
+                <div class="card-ds-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="avatar" style="background:@(member.ColourHex ?? "#6c757d");">
+                            @Ui.Initials(member.Name.FirstName, member.Name.LastName)
+                        </span>
+                        <div class="flex-grow-1" style="min-width:0;">
+                            <div style="font-weight:600;">@member.DisplayName</div>
+                            <div class="text-muted" style="font-size:.79rem;">@Ui.Humanise(member.Role)</div>
+                        </div>
+                        @if (member.IsProvider)
+                        {
+                            <span class="badge-ds b-primary">Provider</span>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(member.Specialty))
+                    {
+                        <div class="text-muted mb-2" style="font-size:.82rem;">@member.Specialty</div>
+                    }
+
+                    <dl class="kv" style="font-size:.81rem;">
+                        <dt>Staff number</dt><dd class="mono">@member.StaffNumber</dd>
+                        @if (!string.IsNullOrWhiteSpace(member.Qualifications))
+                        {
+                            <dt>Qualifications</dt><dd>@member.Qualifications</dd>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(member.RegistrationNumber))
+                        {
+                            <dt>Registration</dt>
+                            <dd class="@(member.RegistrationExpiringSoon ? "text-warning fw-semibold" : "")">
+                                @member.RegistrationNumber
+                                @if (member.RegistrationExpiry.HasValue)
+                                {
+                                    <span> (to @Ui.Date(member.RegistrationExpiry))</span>
+                                }
+                            </dd>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(member.IndemnityProvider))
+                        {
+                            <dt>Indemnity</dt>
+                            <dd>@member.IndemnityProvider to @Ui.Date(member.IndemnityExpiry)</dd>
+                        }
+                        <dt>Employment</dt><dd>@Ui.Humanise(member.EmploymentType), since @Ui.Date(member.HireDate)</dd>
+                        <dt>Email</dt><dd>@Ui.Truncate(member.Contact.Email, 30)</dd>
+                        @if (member.DailyProductionTarget.HasValue)
+                        {
+                            <dt>Daily target</dt><dd>@Ui.Money(member.DailyProductionTarget.Value)</dd>
+                        }
+                    </dl>
+
+                    <div class="d-flex gap-1 flex-wrap mt-2">
+                        @if (member.CanPrescribe)
+                        {
+                            <span class="badge-ds b-purple">Prescribes</span>
+                        }
+                        @if (member.CanPerformSurgery)
+                        {
+                            <span class="badge-ds b-danger">Surgery</span>
+                        }
+                        @if (member.CanAdministerSedation)
+                        {
+                            <span class="badge-ds b-warning">Sedation</span>
+                        }
+                        @if (member.CanTakeRadiographs)
+                        {
+                            <span class="badge-ds b-info">Radiography</span>
+                        }
+                        @if (!string.IsNullOrEmpty(member.ApplicationUserId))
+                        {
+                            <span class="badge-ds b-success">Has a login</span>
+                        }
+                    </div>
+
+                    @{
+                        var rota = _rota.Where(r => r.StaffId == member.Id).OrderBy(r => r.DayOfWeek).ToList();
+                    }
+                    @if (rota.Count > 0)
+                    {
+                        <div class="divider"></div>
+                        <div class="form-label">Working pattern</div>
+                        <div class="d-flex flex-column gap-1">
+                            @foreach (var slot in rota)
+                            {
+                                <div class="d-flex justify-content-between" style="font-size:.78rem;">
+                                    <span>@slot.DayOfWeek</span>
+                                    <span class="mono">
+                                        @slot.StartTime.ToString(@"hh\:mm") - @slot.EndTime.ToString(@"hh\:mm")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Staff> _staff = new();
+    private List<StaffScheduleSlot> _rota = new();
+    private List<Staff> _expiringRegistrations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _staff = await db.Staff.AsNoTracking().OrderBy(s => s.Name.LastName).ToListAsync();
+        _rota = await db.StaffScheduleSlots.AsNoTracking().Where(r => r.IsActive).ToListAsync();
+
+        _expiringRegistrations = _staff
+            .Where(s => s.IsActive && s.RegistrationExpiringSoon)
+            .ToList();
+    }
+}

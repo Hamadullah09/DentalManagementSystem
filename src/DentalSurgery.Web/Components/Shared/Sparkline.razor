@@ -1,0 +1,83 @@
+@* A compact trend line. Pure SVG so it prints and needs no chart library. *@
+
+@if (_points.Count < 2)
+{
+    <span class="text-faint" style="font-size:.75rem;">Not enough data</span>
+}
+else
+{
+    <svg class="spark" width="@Width" height="@Height" viewBox="0 0 @Width @Height"
+         preserveAspectRatio="none" role="img" aria-label="@AriaLabel">
+        @if (ShowArea)
+        {
+            <polygon points="@AreaPoints" fill="@Colour" opacity="0.12" />
+        }
+        <polyline points="@LinePoints" fill="none" stroke="@Colour"
+                  stroke-width="@StrokeWidth" stroke-linejoin="round" stroke-linecap="round" />
+        @if (ShowLastPoint)
+        {
+            <circle cx="@LastX.ToString("0.##", Culture)" cy="@LastY.ToString("0.##", Culture)"
+                    r="@(StrokeWidth + 1)" fill="@Colour" />
+        }
+    </svg>
+}
+
+@code {
+    private static readonly CultureInfo Culture = CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public IEnumerable<decimal> Values { get; set; } = Array.Empty<decimal>();
+    [Parameter] public int Width { get; set; } = 160;
+    [Parameter] public int Height { get; set; } = 38;
+    [Parameter] public string Colour { get; set; } = "var(--ds-primary)";
+    [Parameter] public double StrokeWidth { get; set; } = 1.6;
+    [Parameter] public bool ShowArea { get; set; } = true;
+    [Parameter] public bool ShowLastPoint { get; set; } = true;
+    [Parameter] public string AriaLabel { get; set; } = "Trend";
+
+    private List<decimal> _points = new();
+    private double LastX;
+    private double LastY;
+
+    protected override void OnParametersSet() => _points = Values.ToList();
+
+    private string LinePoints => BuildPoints();
+
+    private string AreaPoints
+    {
+        get
+        {
+            var line = BuildPoints();
+            return string.IsNullOrEmpty(line)
+                ? string.Empty
+                : $"0,{Height} {line} {Width},{Height}";
+        }
+    }
+
+    private string BuildPoints()
+    {
+        if (_points.Count < 2) return string.Empty;
+
+        var min = _points.Min();
+        var max = _points.Max();
+        var range = max - min;
+        // A flat series would divide by zero; draw it through the middle instead.
+        if (range == 0) range = 1;
+
+        var padding = StrokeWidth + 1;
+        var usableHeight = Height - (padding * 2);
+        var step = (double)Width / (_points.Count - 1);
+
+        var parts = new List<string>(_points.Count);
+        for (var i = 0; i < _points.Count; i++)
+        {
+            var x = i * step;
+            var normalised = (double)((_points[i] - min) / range);
+            var y = padding + (usableHeight * (1 - normalised));
+            parts.Add($"{x.ToString("0.##", Culture)},{y.ToString("0.##", Culture)}");
+            LastX = x;
+            LastY = y;
+        }
+
+        return string.Join(" ", parts);
+    }
+}

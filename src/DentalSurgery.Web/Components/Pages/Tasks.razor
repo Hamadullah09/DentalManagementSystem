@@ -1,0 +1,302 @@
+@page "/tasks"
+@attribute [Authorize]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject ICurrentUser CurrentUser
+@inject IDateTimeProvider Clock
+
+<PageTitle>Tasks - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Tasks" Subtitle="Practice worklist. Anything that needs doing but is not a clinical appointment.">
+    <Actions>
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="() => _adding = !_adding">
+            <Icon Name="plus" Size="13" /> New task
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Open" Value="@_tasks.Count(t => !t.IsCompleted).ToString()" Accent="primary" Icon="list-checks" />
+    <StatTile Label="Overdue" Value="@_tasks.Count(t => t.IsOverdue).ToString()"
+              Accent="@(_tasks.Any(t => t.IsOverdue) ? "danger" : "success")" />
+    <StatTile Label="Due today" Value="@_tasks.Count(t => !t.IsCompleted && t.DueDate == Clock.Today).ToString()"
+              Accent="warning" Icon="clock" />
+    <StatTile Label="Urgent" Value="@_tasks.Count(t => !t.IsCompleted && t.Priority <= TreatmentPriority.Urgent).ToString()"
+              Accent="danger" />
+    <StatTile Label="Completed this week" Value="@CompletedThisWeek.ToString()" Accent="success" Icon="check-circle" />
+</div>
+
+@if (_adding)
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header"><h3>New task</h3></div>
+        <div class="card-ds-body">
+            <div class="row g-2">
+                <div class="col-12 col-md-5">
+                    <label class="form-label">Title</label>
+                    <input class="form-control form-control-sm" @bind="_newTitle" placeholder="What needs doing" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Category</label>
+                    <input class="form-control form-control-sm" @bind="_newCategory" list="task-categories" />
+                    <datalist id="task-categories">
+                        @foreach (var category in new[] { "Clinical", "Billing", "Inventory", "Compliance", "Recall", "Scheduling", "Admin" })
+                        {
+                            <option value="@category" />
+                        }
+                    </datalist>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Priority</label>
+                    <select class="form-select form-select-sm" @bind="_newPriority">
+                        @foreach (var priority in Enum.GetValues<TreatmentPriority>())
+                        {
+                            <option value="@priority">@Ui.Humanise(priority)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Due</label>
+                    <input type="date" class="form-control form-control-sm"
+                           value="@_newDueDate.ToString("yyyy-MM-dd")"
+                           @onchange="e => _newDueDate = DateOnly.TryParse(e.Value?.ToString(), out var d) ? d : _newDueDate" />
+                </div>
+                <div class="col-6 col-md-1 d-flex align-items-end">
+                    <button class="btn btn-sm btn-primary w-100" @onclick="AddTask">Add</button>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Assign to</label>
+                    <select class="form-select form-select-sm" @bind="_newAssigneeId">
+                        <option value="">Unassigned</option>
+                        @foreach (var member in _staff)
+                        {
+                            <option value="@member.Id">@member.DisplayName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Detail</label>
+                    <input class="form-control form-control-sm" @bind="_newDescription" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Category</label>
+        <select class="form-select form-select-sm" @bind="_categoryFilter">
+            <option value="">All categories</option>
+            @foreach (var category in _tasks.Select(t => t.Category).Distinct().OrderBy(c => c))
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label class="form-label">Assignee</label>
+        <select class="form-select form-select-sm" @bind="_assigneeFilter">
+            <option value="">Everyone</option>
+            <option value="mine">Assigned to me</option>
+            @foreach (var member in _staff)
+            {
+                <option value="@member.Id">@member.DisplayName</option>
+            }
+        </select>
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <button class="btn btn-sm @(_showCompleted ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _showCompleted = !_showCompleted">
+            Include completed
+        </button>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="check-circle" Title="Nothing to do"
+                    Message="Every task matching these filters is complete." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th style="width:40px;"></th>
+                    <th>Task</th>
+                    <th>Category</th>
+                    <th>Patient</th>
+                    <th>Assigned to</th>
+                    <th style="width:100px;">Priority</th>
+                    <th class="nowrap">Due</th>
+                    <th style="width:110px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var task in Filtered)
+                {
+                    <tr style="@(task.IsCompleted ? "opacity:.6;" : "")">
+                        <td>
+                            <input type="checkbox" class="form-check-input"
+                                   checked="@task.IsCompleted"
+                                   @onchange="e => ToggleComplete(task.Id, (bool)(e.Value ?? false))" />
+                        </td>
+                        <td>
+                            <div style="font-weight:500; @(task.IsCompleted ? "text-decoration:line-through;" : "")">
+                                @task.Title
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(task.Description))
+                            {
+                                <div class="text-muted" style="font-size:.78rem;">@task.Description</div>
+                            }
+                        </td>
+                        <td><span class="badge-ds b-neutral">@task.Category</span></td>
+                        <td>
+                            @if (task.PatientId.HasValue)
+                            {
+                                <a href="/patients/@task.PatientId">@(task.Patient?.Name.Display ?? "Patient")</a>
+                            }
+                            else
+                            {
+                                <span class="text-faint">-</span>
+                            }
+                        </td>
+                        <td class="nowrap">@(task.AssignedToStaff?.DisplayName ?? "Unassigned")</td>
+                        <td><span class="badge-ds @Ui.BadgeFor(task.Priority)">@Ui.Humanise(task.Priority)</span></td>
+                        <td class="nowrap @(task.IsOverdue ? "text-danger fw-semibold" : "")">
+                            @Ui.DateShort(task.DueDate)
+                            @if (task.DueDate.HasValue && !task.IsCompleted)
+                            {
+                                <div class="text-faint" style="font-size:.7rem;">@Ui.Relative(task.DueDate, Clock.Today)</div>
+                            }
+                        </td>
+                        <td>
+                            @if (task.IsCompleted)
+                            {
+                                <span class="badge-ds b-success">Done</span>
+                            }
+                            else if (task.IsOverdue)
+                            {
+                                <span class="badge-ds b-danger">Overdue</span>
+                            }
+                            else
+                            {
+                                <span class="badge-ds b-info">Open</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<WorkTask> _tasks = new();
+    private List<Staff> _staff = new();
+
+    private bool _adding;
+    private string _newTitle = string.Empty;
+    private string _newDescription = string.Empty;
+    private string _newCategory = "Admin";
+    private TreatmentPriority _newPriority = TreatmentPriority.Routine;
+    private DateOnly _newDueDate;
+    private string _newAssigneeId = string.Empty;
+
+    private string _categoryFilter = string.Empty;
+    private string _assigneeFilter = string.Empty;
+    private bool _showCompleted;
+
+    private int CompletedThisWeek => _tasks.Count(t =>
+        t.IsCompleted && t.CompletedAtUtc >= Clock.UtcNow.AddDays(-7));
+
+    private List<WorkTask> Filtered
+    {
+        get
+        {
+            var query = _tasks.AsEnumerable();
+
+            if (!_showCompleted) query = query.Where(t => !t.IsCompleted);
+
+            if (!string.IsNullOrEmpty(_categoryFilter))
+                query = query.Where(t => t.Category == _categoryFilter);
+
+            if (_assigneeFilter == "mine")
+                query = query.Where(t => t.AssignedToStaffId == CurrentUser.StaffId);
+            else if (Guid.TryParse(_assigneeFilter, out var staffId))
+                query = query.Where(t => t.AssignedToStaffId == staffId);
+
+            return query
+                .OrderBy(t => t.IsCompleted)
+                .ThenBy(t => t.Priority)
+                .ThenBy(t => t.DueDate ?? DateOnly.MaxValue)
+                .ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newDueDate = Clock.Today.AddDays(3);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _tasks = await db.WorkTasks.AsNoTracking()
+            .Include(t => t.Patient)
+            .Include(t => t.AssignedToStaff)
+            .OrderBy(t => t.DueDate)
+            .ToListAsync();
+
+        if (_staff.Count == 0)
+        {
+            _staff = await db.Staff.AsNoTracking()
+                .Where(s => s.IsActive)
+                .OrderBy(s => s.Name.LastName)
+                .ToListAsync();
+        }
+    }
+
+    private async Task AddTask()
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.WorkTasks.Add(new WorkTask
+        {
+            Title = _newTitle,
+            Description = string.IsNullOrWhiteSpace(_newDescription) ? null : _newDescription,
+            Category = string.IsNullOrWhiteSpace(_newCategory) ? "Admin" : _newCategory,
+            Priority = _newPriority,
+            DueDate = _newDueDate,
+            AssignedToStaffId = Guid.TryParse(_newAssigneeId, out var staffId) ? staffId : null
+        });
+
+        await db.SaveChangesAsync();
+
+        _adding = false;
+        _newTitle = string.Empty;
+        _newDescription = string.Empty;
+        await LoadAsync();
+    }
+
+    private async Task ToggleComplete(Guid taskId, bool completed)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var task = await db.WorkTasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        if (task is null) return;
+
+        task.IsCompleted = completed;
+        task.CompletedAtUtc = completed ? Clock.UtcNow : null;
+        task.CompletedBy = completed ? CurrentUser.DisplayName : null;
+
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,128 @@
+@page "/exports"
+@attribute [Authorize(Policy = Policies.CanViewReports)]
+@inject ExportService ExportCentre
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Exports - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Exports"
+            Subtitle="Any report, as a spreadsheet, a PDF for printing, CSV for another system, or JSON for an integration." />
+
+<div class="card-ds mb-3">
+    <div class="card-ds-header"><h3>Period</h3></div>
+    <div class="card-ds-body">
+        <DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+        <div class="text-faint" style="font-size:.78rem;">
+            Reports marked &ldquo;as at today&rdquo; ignore the period and always show the current position.
+        </div>
+    </div>
+</div>
+
+@foreach (var group in ExportCentre.AvailableReports.GroupBy(r => r.Category))
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header">
+            <h3>@group.Key</h3>
+            <span class="badge-ds b-neutral">@group.Count() @(group.Count() == 1 ? "report" : "reports")</span>
+        </div>
+
+        <div class="table-wrap" style="border:0; border-radius:0;">
+            <table class="table-ds">
+                <thead>
+                    <tr>
+                        <th style="width:30%;">Report</th>
+                        <th>What it contains</th>
+                        <th style="width:110px;">Period</th>
+                        <th style="width:300px;">Download</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var report in group)
+                    {
+                        <tr>
+                            <td style="font-weight:600;">@report.Name</td>
+                            <td class="text-muted" style="font-size:.83rem;">@report.Description</td>
+                            <td>
+                                @if (report.NeedsDateRange)
+                                {
+                                    <span class="badge-ds b-info">Date range</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-ds b-neutral">As at today</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1 flex-wrap">
+                                    @foreach (var format in Formats)
+                                    {
+                                        <a class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                           href="@Link(report, format.Value)" target="_blank" rel="noopener">
+                                            <Icon Name="@format.Icon" Size="12" /> @format.Label
+                                        </a>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="card-ds">
+    <div class="card-ds-header"><h3>Documents</h3></div>
+    <div class="card-ds-body">
+        <p class="text-muted" style="font-size:.85rem;">
+            Invoices, treatment plans, prescriptions, claim forms and clinical summaries are generated
+            from the record they belong to. Open the patient, invoice or claim and use the
+            <strong>PDF</strong> button there.
+        </p>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/billing/invoices" class="btn btn-sm btn-outline-secondary">Invoices</a>
+            <a href="/treatment-plans" class="btn btn-sm btn-outline-secondary">Treatment plans</a>
+            <a href="/prescriptions" class="btn btn-sm btn-outline-secondary">Prescriptions</a>
+            <a href="/billing/claims" class="btn btn-sm btn-outline-secondary">Insurance claims</a>
+            <a href="/patients" class="btn btn-sm btn-outline-secondary">Patient records</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+
+    private record FormatOption(ExportFormat Value, string Label, string Icon);
+
+    private static readonly FormatOption[] Formats =
+    {
+        new(ExportFormat.Excel, "Excel", "package"),
+        new(ExportFormat.Pdf, "PDF", "printer"),
+        new(ExportFormat.Csv, "CSV", "download"),
+        new(ExportFormat.Json, "JSON", "file-text")
+    };
+
+    protected override void OnInitialized()
+    {
+        _to = Clock.Today;
+        _from = new DateOnly(_to.Year, _to.Month, 1);
+    }
+
+    private void OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+    }
+
+    private string Link(ReportDefinition report, ExportFormat format)
+    {
+        var url = $"/api/exports/{report.Key}?format={format}";
+
+        if (report.NeedsDateRange)
+            url += $"&from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}";
+
+        return url;
+    }
+}

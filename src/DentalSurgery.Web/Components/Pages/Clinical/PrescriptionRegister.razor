@@ -1,0 +1,200 @@
+@page "/prescriptions"
+@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Prescriptions - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Prescriptions"
+            Subtitle="Everything issued from the practice, including the controlled drugs register." />
+
+<DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Issued" Value="@_prescriptions.Count.ToString()" Accent="primary" Icon="pill" />
+    <StatTile Label="Antibiotics" Value="@AntibioticCount.ToString()" Accent="warning"
+              Caption="@($"{AntibioticRate:0.#}% of prescriptions")" />
+    <StatTile Label="Controlled drugs" Value="@ControlledCount.ToString()"
+              Accent="@(ControlledCount > 0 ? "danger" : "neutral")" Icon="shield" />
+    <StatTile Label="With warnings" Value="@_prescriptions.Count(p => !string.IsNullOrWhiteSpace(p.InteractionWarnings)).ToString()"
+              Accent="warning" Icon="alert-triangle" />
+</div>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Prescriber</label>
+        <select class="form-select form-select-sm" @bind="_prescriberFilter">
+            <option value="">All prescribers</option>
+            @foreach (var prescriber in _prescriptions.Where(p => p.PrescriberStaff is not null)
+                                                      .Select(p => p.PrescriberStaff!).DistinctBy(s => s.Id))
+            {
+                <option value="@prescriber.Id">@prescriber.DisplayName</option>
+            }
+        </select>
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <button class="btn btn-sm @(_controlledOnly ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _controlledOnly = !_controlledOnly">
+            Controlled drugs only
+        </button>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="pill" Title="No prescriptions"
+                    Message="Nothing was issued in this period." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th class="nowrap">Issued</th>
+                    <th>Patient</th>
+                    <th>Prescriber</th>
+                    <th>Medication</th>
+                    <th>Indication</th>
+                    <th style="width:100px;">Status</th>
+                    <th style="width:34px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var prescription in Filtered)
+                {
+                    <tr>
+                        <td class="mono">@prescription.PrescriptionNumber</td>
+                        <td class="nowrap">@Ui.DateShort(prescription.IssueDate)</td>
+                        <td>
+                            <a href="/patients/@prescription.PatientId/prescriptions" style="font-weight:600;">
+                                @(prescription.Patient?.Name.Display ?? "Unknown")
+                            </a>
+                        </td>
+                        <td class="nowrap">@(prescription.PrescriberStaff?.DisplayName ?? "-")</td>
+                        <td>
+                            @foreach (var item in prescription.Items)
+                            {
+                                <div style="font-size:.82rem;">
+                                    @item.DisplayName
+                                    @if (item.Medication?.IsControlledDrug == true)
+                                    {
+                                        <span class="badge-ds b-danger ms-1">@item.Medication.ControlledSchedule</span>
+                                    }
+                                </div>
+                            }
+                        </td>
+                        <td style="font-size:.8rem;">@Ui.Truncate(prescription.Indication, 34)</td>
+                        <td><span class="badge-ds @Ui.BadgeFor(prescription.Status)">@Ui.Humanise(prescription.Status)</span></td>
+                        <td>
+                            <button class="btn-ghost" @onclick="() => Toggle(prescription.Id)">
+                                <Icon Name="@(_expanded.Contains(prescription.Id) ? "chevron-down" : "chevron-right")" Size="14" />
+                            </button>
+                        </td>
+                    </tr>
+
+                    @if (_expanded.Contains(prescription.Id))
+                    {
+                        <tr>
+                            <td colspan="8" style="background:var(--ds-surface-2);">
+                                <div class="p-2">
+                                    <table class="table-ds" style="background:transparent;">
+                                        <thead>
+                                            <tr><th>Medication</th><th>Directions</th><th>Route</th><th class="num">Quantity</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var item in prescription.Items.OrderBy(i => i.Sequence))
+                                            {
+                                                <tr>
+                                                    <td>@item.DisplayName</td>
+                                                    <td>@item.Sig</td>
+                                                    <td>@Ui.Humanise(item.Route)</td>
+                                                    <td class="num mono">@item.Quantity @item.Unit</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                    @if (!string.IsNullOrWhiteSpace(prescription.InteractionWarnings))
+                                    {
+                                        <div class="alert-ds a-warning mt-2">
+                                            <Icon Name="alert-triangle" Size="15" />
+                                            <div style="white-space:pre-line; font-size:.8rem;">
+                                                @prescription.InteractionWarnings
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private List<Prescription> _prescriptions = new();
+    private HashSet<Guid> _expanded = new();
+    private string _prescriberFilter = string.Empty;
+    private bool _controlledOnly;
+
+    private int AntibioticCount => _prescriptions.Count(p => p.Items.Any(i => i.Medication?.IsAntibiotic == true));
+    private int ControlledCount => _prescriptions.Count(p => p.Items.Any(i => i.Medication?.IsControlledDrug == true));
+
+    private decimal AntibioticRate =>
+        _prescriptions.Count == 0 ? 0 : Math.Round(100m * AntibioticCount / _prescriptions.Count, 1);
+
+    private List<Prescription> Filtered
+    {
+        get
+        {
+            var query = _prescriptions.AsEnumerable();
+
+            if (Guid.TryParse(_prescriberFilter, out var prescriberId))
+                query = query.Where(p => p.PrescriberStaffId == prescriberId);
+
+            if (_controlledOnly)
+                query = query.Where(p => p.Items.Any(i => i.Medication?.IsControlledDrug == true));
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.Today;
+        _from = _to.AddMonths(-12);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _prescriptions = await db.Prescriptions.AsNoTracking()
+            .Include(p => p.Patient)
+            .Include(p => p.PrescriberStaff)
+            .Include(p => p.Items).ThenInclude(i => i.Medication)
+            .Where(p => p.IssueDate >= _from && p.IssueDate <= _to && p.Status != PrescriptionStatus.Draft)
+            .OrderByDescending(p => p.IssueDate)
+            .ToListAsync();
+    }
+
+    private async Task OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+    }
+
+    private void Toggle(Guid id)
+    {
+        if (!_expanded.Add(id)) _expanded.Remove(id);
+    }
+}

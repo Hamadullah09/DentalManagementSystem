@@ -1,0 +1,489 @@
+@page "/"
+@attribute [Authorize]
+@inject ReportingService Reporting
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Practice dashboard"
+            Subtitle="@($"{Clock.LocalNow:dddd d MMMM yyyy}")">
+    <Actions>
+        <a href="/schedule" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+            <Icon Name="calendar" Size="14" /> Appointment book
+        </a>
+        <a href="/patients/new" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
+            <Icon Name="user-plus" Size="14" /> Register patient
+        </a>
+    </Actions>
+</PageHeader>
+
+@if (_dashboard is null)
+{
+    <div class="loading-bar mb-3"></div>
+    <div class="stat-grid">
+        @for (var i = 0; i < 8; i++)
+        {
+            <div class="skeleton" style="height:88px;"></div>
+        }
+    </div>
+}
+else
+{
+    @* -------------------------------------------------- alerts *@
+    @if (_dashboard.Alerts.Count > 0)
+    {
+        <div class="d-flex flex-column gap-2 mb-3">
+            @foreach (var alert in _dashboard.Alerts.Take(_showAllAlerts ? 99 : 3))
+            {
+                <div class="alert-ds a-@alert.Severity">
+                    <Icon Name="@(alert.Severity == "danger" ? "alert-triangle" : alert.Severity == "warning" ? "alert-circle" : "info")" Size="16" />
+                    <div class="flex-grow-1">
+                        <strong>@alert.Title.</strong> @alert.Detail
+                    </div>
+                    @if (!string.IsNullOrEmpty(alert.Link))
+                    {
+                        <a href="@alert.Link" style="color:inherit; font-weight:600; white-space:nowrap;">
+                            View <Icon Name="chevron-right" Size="12" />
+                        </a>
+                    }
+                </div>
+            }
+            @if (_dashboard.Alerts.Count > 3)
+            {
+                <button class="btn-ghost align-self-start" @onclick="() => _showAllAlerts = !_showAllAlerts">
+                    @(_showAllAlerts ? "Show fewer" : $"Show {_dashboard.Alerts.Count - 3} more")
+                </button>
+            }
+        </div>
+    }
+
+    @*
+        Headline figures.
+
+        These lead with what someone can act on before the end of the day.
+        Money is shown month to date rather than today, because a day's figure
+        reads zero every morning and swings on a single large invoice; the
+        month is the number a practice manager decides against. Today's figure
+        stays as the caption. Counts lead with the overdue or unanswered half
+        of the pair for the same reason: "eleven recalls due" is a statistic,
+        "two of them overdue" is a task.
+    *@
+    <div class="stat-grid mb-3">
+        <StatTile Label="Appointments today" Value="@_dashboard.AppointmentsToday.ToString()"
+                  Icon="calendar" Accent="primary"
+                  Caption="@($"{_dashboard.PatientsSeenToday} seen · {_dashboard.WaitingNow} waiting · {_dashboard.InTreatmentNow} in treatment")" />
+
+        <StatTile Label="Unconfirmed tomorrow" Value="@_dashboard.UnconfirmedTomorrow.ToString()"
+                  Icon="phone" Accent="@(_dashboard.UnconfirmedTomorrow > 0 ? "warning" : "success")"
+                  Caption="@(_dashboard.UnconfirmedTomorrow > 0 ? "Call before the end of today" : "Tomorrow is fully confirmed")" />
+
+        <StatTile Label="Production this month" Value="@Ui.Money(_dashboard.ProductionMonthToDate)"
+                  Icon="trending-up" Accent="success"
+                  Caption="@($"{Ui.Money(_dashboard.ProductionToday)} today")" />
+
+        <StatTile Label="Collections this month" Value="@Ui.Money(_dashboard.CollectionsMonthToDate)"
+                  Icon="credit-card" Accent="accent"
+                  Caption="@CollectionRateCaption()" />
+
+        <StatTile Label="Outstanding" Value="@Ui.Money(_dashboard.OutstandingReceivables)"
+                  Icon="receipt" Accent="warning"
+                  Caption="@($"{Ui.Money(_dashboard.InsurancePending)} pending with insurers")" />
+
+        <StatTile Label="Chair utilisation" Value="@($"{_dashboard.ChairUtilisationPercent:0.#}%")"
+                  Icon="clock" Accent="purple"
+                  Caption="Average across rostered providers" />
+
+        <StatTile Label="Recalls overdue" Value="@_dashboard.RecallsOverdue.ToString()"
+                  Icon="bell" Accent="@(_dashboard.RecallsOverdue > 0 ? "danger" : "success")"
+                  Caption="@($"{_dashboard.RecallsDue} due in total")" />
+
+        <StatTile Label="Plans awaiting decision" Value="@_dashboard.TreatmentPlansAwaitingDecision.ToString()"
+                  Icon="clipboard" Accent="@(_dashboard.TreatmentPlansAwaitingDecision > 0 ? "warning" : "success")"
+                  Caption="@($"{_dashboard.TreatmentAcceptanceRate:0.#}% accepted overall")" />
+    </div>
+
+    @*
+        Standing operational position.
+
+        Each of these was already computed and thrown away, or shown only as a
+        dismissible alert that disappears once someone scrolls past it. A failed
+        steriliser cycle or an overdue lab case is not a notification — it stays
+        true until it is dealt with — so it belongs somewhere permanent. Only
+        non-zero items render, so the row is empty on a clean day rather than a
+        wall of green zeroes.
+    *@
+    @if (_attention.Count > 0)
+    {
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <span class="text-muted" style="font-size:.78rem; font-weight:600; letter-spacing:.02em;">
+                NEEDS ATTENTION
+            </span>
+            @foreach (var item in _attention)
+            {
+                <a href="@item.Link" class="badge-ds b-@item.Severity text-decoration-none d-inline-flex align-items-center gap-1"
+                   title="@item.Description">
+                    <Icon Name="@item.Icon" Size="12" />
+                    <strong>@item.Count</strong> @item.Label
+                </a>
+            }
+        </div>
+    }
+
+    <div class="row g-3">
+
+        @* -------------------------------------------------- today's list *@
+        <div class="col-12 col-xl-7">
+            <div class="card-ds h-100">
+                <div class="card-ds-header">
+                    <h3>Today&rsquo;s surgery list</h3>
+                    <span class="badge-ds b-neutral">@_todaysAppointments.Count booked</span>
+                    <a href="/schedule" class="ms-auto" style="font-size:.8rem;">Open the book &rarr;</a>
+                </div>
+
+                @if (_todaysAppointments.Count == 0)
+                {
+                    <EmptyState IconName="calendar" Title="Nothing booked today"
+                                Message="The appointment book is clear for today." />
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr>
+                                    <th style="width:64px;">Time</th>
+                                    <th>Patient</th>
+                                    <th>Provider</th>
+                                    <th>Reason</th>
+                                    <th style="width:120px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var appointment in _todaysAppointments)
+                                {
+                                    <tr class="row-clickable" @onclick="() => OpenPatient(appointment.PatientId)">
+                                        <td class="nowrap mono">@appointment.StartUtc.ToString("HH:mm")</td>
+                                        <td>
+                                            <div style="font-weight:600;">@(appointment.Patient?.Name.Display ?? "Unknown")</div>
+                                            <div class="text-faint" style="font-size:.72rem;">
+                                                @appointment.Patient?.PatientNumber
+                                            </div>
+                                        </td>
+                                        <td class="nowrap">
+                                            <span class="dot me-1" style="background:@(appointment.Provider?.ColourHex ?? "#6c757d")"></span>
+                                            @(appointment.Provider?.Name.Display ?? "-")
+                                        </td>
+                                        <td>@Ui.Truncate(appointment.Reason ?? Ui.Humanise(appointment.AppointmentType), 40)</td>
+                                        <td>
+                                            <span class="badge-ds @Ui.BadgeFor(appointment.Status)">
+                                                @Ui.Humanise(appointment.Status)
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* -------------------------------------------------- production chart *@
+        <div class="col-12 col-xl-5">
+            <div class="card-ds mb-3">
+                <div class="card-ds-header">
+                    <h3>Production, last 30 days</h3>
+                    <span class="ms-auto text-muted" style="font-size:.8rem;">
+                        @Ui.Money(_dashboard.ProductionTrend.Sum(p => p.Value)) total
+                    </span>
+                </div>
+                <div class="card-ds-body">
+                    <Sparkline Values="@_dashboard.ProductionTrend.Select(p => p.Value)"
+                               Width="420" Height="84" Colour="var(--ds-primary)"
+                               AriaLabel="Daily production over the last 30 days" />
+                    <div class="d-flex justify-content-between text-faint mt-1" style="font-size:.72rem;">
+                        <span>@_dashboard.ProductionTrend.FirstOrDefault()?.Date.ToString("d MMM")</span>
+                        <span>@_dashboard.ProductionTrend.LastOrDefault()?.Date.ToString("d MMM")</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-ds">
+                <div class="card-ds-header"><h3>Production by provider, today</h3></div>
+                @if (_dashboard.ProviderProduction.Count == 0)
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.85rem;">
+                        No production recorded yet today.
+                    </div>
+                }
+                else
+                {
+                    <div class="card-ds-body d-flex flex-column gap-2">
+                        @{
+                            var maxProduction = _dashboard.ProviderProduction.Max(p => p.Production);
+                        }
+                        @foreach (var row in _dashboard.ProviderProduction.Take(8))
+                        {
+                            <div>
+                                <div class="d-flex justify-content-between" style="font-size:.82rem;">
+                                    <span>@row.ProviderName</span>
+                                    <span class="mono">@Ui.Money(row.Production)</span>
+                                </div>
+                                <div class="bar-track mt-1">
+                                    <div class="bar-fill"
+                                         style="width:@(maxProduction == 0 ? 0 : (int)(row.Production / maxProduction * 100))%"></div>
+                                </div>
+                                <div class="text-faint" style="font-size:.72rem;">
+                                    @row.Appointments appointments &middot; @row.Procedures procedures
+                                    &middot; @row.UtilisationPercent.ToString("0.#")% utilised
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-0">
+
+        @* -------------------------------------------------- tasks *@
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header">
+                    <h3>Open tasks</h3>
+                    <a href="/tasks" class="ms-auto" style="font-size:.8rem;">All tasks &rarr;</a>
+                </div>
+                @if (_tasks.Count == 0)
+                {
+                    <EmptyState IconName="check-circle" Title="Nothing outstanding"
+                                Message="Every task has been completed." />
+                }
+                else
+                {
+                    <div class="card-ds-body d-flex flex-column gap-2">
+                        @foreach (var task in _tasks)
+                        {
+                            <div class="d-flex align-items-start gap-2">
+                                <span class="badge-ds @Ui.BadgeFor(task.Priority)" style="margin-top:2px;">
+                                    @Ui.Humanise(task.Priority)
+                                </span>
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    <div style="font-size:.85rem; font-weight:500;">@task.Title</div>
+                                    <div class="text-faint" style="font-size:.74rem;">
+                                        @task.Category
+                                        @if (task.DueDate.HasValue)
+                                        {
+                                            <span> &middot; due @Ui.Relative(task.DueDate, Clock.Today)</span>
+                                        }
+                                        @if (task.AssignedToStaff is not null)
+                                        {
+                                            <span> &middot; @task.AssignedToStaff.Name.Display</span>
+                                        }
+                                    </div>
+                                </div>
+                                @if (task.IsOverdue)
+                                {
+                                    <span class="badge-ds b-danger">Overdue</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* -------------------------------------------------- recalls *@
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header">
+                    <h3>Recalls needing a call</h3>
+                    <a href="/recalls" class="ms-auto" style="font-size:.8rem;">Recall list &rarr;</a>
+                </div>
+                @if (_recalls.Count == 0)
+                {
+                    <EmptyState IconName="check-circle" Title="Recalls up to date"
+                                Message="Nobody is overdue for review." />
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr>
+                                    <th>Patient</th>
+                                    <th>Type</th>
+                                    <th class="nowrap">Due</th>
+                                    <th>Contact</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var recall in _recalls)
+                                {
+                                    <tr class="row-clickable" @onclick="() => OpenPatient(recall.PatientId)">
+                                        <td>
+                                            <div style="font-weight:600;">@recall.PatientName</div>
+                                            <div class="text-faint" style="font-size:.72rem;">@recall.PatientNumber</div>
+                                        </td>
+                                        <td>@Ui.Humanise(recall.RecallType)</td>
+                                        <td class="nowrap @recall.UrgencyClass">
+                                            @Ui.DateShort(recall.DueDate)
+                                            @if (recall.DaysOverdue > 0)
+                                            {
+                                                <div style="font-size:.7rem;">@recall.DaysOverdue days over</div>
+                                            }
+                                        </td>
+                                        <td class="text-muted" style="font-size:.78rem;">@(recall.Phone ?? recall.Email ?? "-")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PracticeDashboard? _dashboard;
+    private List<Appointment> _todaysAppointments = new();
+    private List<WorkTask> _tasks = new();
+    private List<RecallDueRow> _recalls = new();
+    private bool _showAllAlerts;
+
+    private List<AttentionItem> _attention = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dashboard = await Reporting.GetDashboardAsync();
+        _attention = BuildAttentionItems();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var dayStart = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        var dayEnd = dayStart.AddDays(1);
+
+        _todaysAppointments = await db.Appointments.AsNoTracking()
+            .Include(a => a.Patient)
+            .Include(a => a.Provider)
+            .Where(a => a.StartUtc >= dayStart && a.StartUtc < dayEnd)
+            .OrderBy(a => a.StartUtc)
+            .ToListAsync();
+
+        _tasks = await db.WorkTasks.AsNoTracking()
+            .Include(t => t.AssignedToStaff)
+            .Where(t => !t.IsCompleted)
+            .OrderBy(t => t.Priority).ThenBy(t => t.DueDate)
+            .Take(7)
+            .ToListAsync();
+
+        _recalls = (await Reporting.GetRecallsDueAsync(Clock.Today))
+            .OrderByDescending(r => r.DaysOverdue)
+            .Take(8)
+            .ToList();
+    }
+
+    private void OpenPatient(Guid patientId) => Navigation.NavigateTo($"/patients/{patientId}");
+
+    /// <summary>
+    /// Collections measured against production billed in the same month.
+    /// <para>
+    /// Worded as a comparison rather than a proportion because it legitimately
+    /// exceeds 100%: money collected this month includes payments against work
+    /// billed in earlier months. "107% of production collected" reads as a bug;
+    /// "107% vs production billed this month" reads as what it is.
+    /// </para>
+    /// </summary>
+    private string CollectionRateCaption()
+    {
+        if (_dashboard is null) return string.Empty;
+
+        if (_dashboard.ProductionMonthToDate <= 0)
+            return "Nothing billed this month yet";
+
+        var rate = _dashboard.CollectionsMonthToDate / _dashboard.ProductionMonthToDate * 100m;
+        return $"{rate:0.#}% vs production billed this month";
+    }
+
+    /// <summary>
+    /// One outstanding operational item. <paramref name="Singular"/> and
+    /// <paramref name="Plural"/> are both carried because these counts are
+    /// frequently one, and "1 lab cases overdue" undermines confidence in every
+    /// other number on the page.
+    /// </summary>
+    private record AttentionItem(
+        int Count, string Singular, string Plural, string Severity,
+        string Icon, string Link, string Description)
+    {
+        public string Label => Count == 1 ? Singular : Plural;
+    }
+
+    /// <summary>
+    /// The standing operational exceptions, worst first. Anything at zero is
+    /// omitted: the row exists to name what is outstanding, not to report that
+    /// nothing is.
+    /// </summary>
+    private List<AttentionItem> BuildAttentionItems()
+    {
+        var items = new List<AttentionItem>();
+        if (_dashboard is null) return items;
+
+        // A failed cycle quarantines every set in the load and may implicate
+        // patients already treated, so it outranks everything else here.
+        if (_dashboard.SterilisationFailures > 0)
+        {
+            items.Add(new(_dashboard.SterilisationFailures,
+                "failed steriliser cycle", "failed steriliser cycles", "danger",
+                "alert-triangle", "/sterilisation",
+                "Every set in a failed load must be reprocessed, and instruments already used must be traced."));
+        }
+
+        if (_dashboard.LabCasesOverdue > 0)
+        {
+            items.Add(new(_dashboard.LabCasesOverdue,
+                "lab case overdue", "lab cases overdue", "danger",
+                "package", "/lab-cases",
+                "Past the due date. The appointment they were ordered for may need moving."));
+        }
+
+        if (_dashboard.LabCasesDue > 0)
+        {
+            items.Add(new(_dashboard.LabCasesDue,
+                "lab case due", "lab cases due", "warning",
+                "package", "/lab-cases", "Due back shortly."));
+        }
+
+        if (_dashboard.LowStockItems > 0)
+        {
+            items.Add(new(_dashboard.LowStockItems,
+                "item below reorder level", "items below reorder level", "warning",
+                "truck", "/inventory", "At or under the reorder level."));
+        }
+
+        if (_dashboard.ExpiringStockItems > 0)
+        {
+            items.Add(new(_dashboard.ExpiringStockItems,
+                "lot expiring", "lots expiring", "warning",
+                "clock", "/inventory", "Expiring within 90 days."));
+        }
+
+        if (_dashboard.NoShowsThisMonth > 0)
+        {
+            items.Add(new(_dashboard.NoShowsThisMonth,
+                "no-show this month", "no-shows this month", "neutral",
+                "user", "/schedule", "Failed appointments so far this month."));
+        }
+
+        if (_dashboard.OpenTasks > 0)
+        {
+            items.Add(new(_dashboard.OpenTasks,
+                "open task", "open tasks", "neutral",
+                "list-checks", "/tasks", "Assigned and not yet completed."));
+        }
+
+        return items;
+    }
+}

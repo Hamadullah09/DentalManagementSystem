@@ -1,0 +1,209 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+
+@if (_policies.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="shield" Title="No insurance recorded"
+                    Message="This patient is treated as self-paying. Add a policy to produce insurance estimates." />
+    </div>
+}
+else
+{
+    <div class="row g-3 mb-3">
+        @foreach (var policy in _policies)
+        {
+            var plan = policy.InsurancePlan;
+            <div class="col-12 col-lg-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <h3>@(plan?.InsuranceCarrier?.Name ?? "Unknown carrier")</h3>
+                        <span class="badge-ds b-primary">@Ui.Humanise(policy.Priority)</span>
+                        <span class="badge-ds @(policy.IsCurrentlyValid ? "b-success" : "b-neutral") ms-auto">
+                            @(policy.IsCurrentlyValid ? "Active" : "Inactive")
+                        </span>
+                    </div>
+                    <div class="card-ds-body">
+                        <dl class="kv">
+                            <dt>Plan</dt><dd>@(plan?.PlanName ?? "-")</dd>
+                            <dt>Type</dt><dd>@(plan is null ? "-" : Ui.Humanise(plan.PlanType))</dd>
+                            <dt>Member ID</dt><dd class="mono">@(policy.MemberId ?? "-")</dd>
+                            <dt>Policy number</dt><dd class="mono">@(policy.PolicyNumber ?? "-")</dd>
+                            <dt>Effective from</dt><dd>@Ui.Date(policy.EffectiveFrom)</dd>
+                            <dt>Verified</dt>
+                            <dd>
+                                @if (policy.BenefitsVerifiedOn.HasValue)
+                                {
+                                    <span>@Ui.Date(policy.BenefitsVerifiedOn) by @(policy.VerifiedBy ?? "unknown")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-warning">Not verified</span>
+                                }
+                            </dd>
+                        </dl>
+
+                        @if (plan is not null)
+                        {
+                            <div class="divider"></div>
+
+                            @if (plan.AnnualMaximum.HasValue)
+                            {
+                                var used = policy.BenefitsUsedThisYear;
+                                var max = plan.AnnualMaximum.Value;
+                                var percent = max == 0 ? 0 : (int)Math.Min(100, used / max * 100);
+
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between" style="font-size:.82rem;">
+                                        <span>Annual benefit used</span>
+                                        <span class="mono">@Ui.Money(used) of @Ui.Money(max)</span>
+                                    </div>
+                                    <div class="bar-track mt-1">
+                                        <div class="bar-fill @(percent > 80 ? "danger" : percent > 50 ? "warning" : "success")"
+                                             style="width:@percent%"></div>
+                                    </div>
+                                    <div class="text-faint" style="font-size:.73rem;">
+                                        @Ui.Money(Math.Max(0, max - used)) remaining this benefit year
+                                    </div>
+                                </div>
+                            }
+
+                            @if (plan.IndividualDeductible.HasValue)
+                            {
+                                <div class="mb-2" style="font-size:.82rem;">
+                                    Deductible @Ui.Money(plan.IndividualDeductible.Value),
+                                    of which @Ui.Money(policy.DeductibleMetThisYear) has been met.
+                                </div>
+                            }
+
+                            <div class="form-label">Coverage by category</div>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <span class="chip">Preventive @plan.PreventiveCoveragePercent%</span>
+                                <span class="chip">Diagnostic @plan.DiagnosticCoveragePercent%</span>
+                                <span class="chip">Basic @plan.BasicCoveragePercent%</span>
+                                <span class="chip">Major @plan.MajorCoveragePercent%</span>
+                                <span class="chip">Endodontic @plan.EndodonticCoveragePercent%</span>
+                                <span class="chip">Periodontal @plan.PeriodonticCoveragePercent%</span>
+                                <span class="chip">Surgery @plan.SurgeryCoveragePercent%</span>
+                                <span class="chip">Implants @plan.ImplantCoveragePercent%</span>
+                                <span class="chip">Orthodontics @plan.OrthodonticCoveragePercent%</span>
+                            </div>
+
+                            @if (plan.RequiresPreAuthorisation)
+                            {
+                                <div class="alert-ds a-info mt-2 py-1">
+                                    <Icon Name="info" Size="14" />
+                                    <div style="font-size:.79rem;">
+                                        Pre-authorisation required
+                                        @if (plan.PreAuthorisationThreshold.HasValue)
+                                        {
+                                            <span>above @Ui.Money(plan.PreAuthorisationThreshold.Value)</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(plan.Exclusions))
+                            {
+                                <div class="text-muted mt-2" style="font-size:.78rem;">
+                                    <strong>Exclusions:</strong> @plan.Exclusions
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="card-ds">
+    <div class="card-ds-header">
+        <h3>Claims</h3>
+        <span class="badge-ds b-neutral">@_claims.Count</span>
+        <span class="ms-auto text-muted" style="font-size:.79rem;">
+            @Ui.Money(_claims.Sum(c => c.TotalPaid)) received &middot;
+            @Ui.Money(_claims.Where(c => c.Status is not (ClaimStatus.Paid or ClaimStatus.Closed or ClaimStatus.Denied))
+                             .Sum(c => c.TotalCharged - c.TotalPaid)) outstanding
+        </span>
+    </div>
+
+    @if (_claims.Count == 0)
+    {
+        <div class="card-ds-body text-muted" style="font-size:.86rem;">No claims have been submitted.</div>
+    }
+    else
+    {
+        <div class="table-wrap" style="border:0; border-radius:0;">
+            <table class="table-ds">
+                <thead>
+                    <tr>
+                        <th>Claim</th>
+                        <th class="nowrap">Service date</th>
+                        <th class="nowrap">Submitted</th>
+                        <th class="num">Charged</th>
+                        <th class="num">Allowed</th>
+                        <th class="num">Paid</th>
+                        <th class="num">Patient</th>
+                        <th style="width:120px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var claim in _claims)
+                    {
+                        <tr>
+                            <td class="mono">
+                                @claim.ClaimNumber
+                                @if (claim.IsPreAuthorisation)
+                                {
+                                    <div><span class="badge-ds b-info">Pre-auth</span></div>
+                                }
+                            </td>
+                            <td class="nowrap">@Ui.DateShort(claim.ServiceDate)</td>
+                            <td class="nowrap">
+                                @Ui.DateShort(claim.SubmittedOn)
+                                @if (claim.DaysOutstanding is > 30)
+                                {
+                                    <div class="text-danger" style="font-size:.7rem;">@claim.DaysOutstanding days</div>
+                                }
+                            </td>
+                            <td class="num mono">@Ui.Money(claim.TotalCharged)</td>
+                            <td class="num mono text-muted">@Ui.Money(claim.TotalAllowed)</td>
+                            <td class="num mono text-success">@Ui.Money(claim.TotalPaid)</td>
+                            <td class="num mono">@Ui.Money(claim.PatientResponsibility)</td>
+                            <td>
+                                <span class="badge-ds @Ui.BadgeFor(claim.Status)">@Ui.Humanise(claim.Status)</span>
+                                @if (!string.IsNullOrWhiteSpace(claim.DenialReason))
+                                {
+                                    <div class="text-danger" style="font-size:.7rem;">@Ui.Truncate(claim.DenialReason, 30)</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<PatientInsurance> _policies = new();
+    private List<InsuranceClaim> _claims = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _policies = await db.PatientInsurances.AsNoTracking()
+            .Include(p => p.InsurancePlan).ThenInclude(pl => pl!.InsuranceCarrier)
+            .Where(p => p.PatientId == PatientId)
+            .OrderBy(p => p.Priority)
+            .ToListAsync();
+
+        _claims = await db.InsuranceClaims.AsNoTracking()
+            .Where(c => c.PatientId == PatientId)
+            .OrderByDescending(c => c.ServiceDate)
+            .ToListAsync();
+    }
+}

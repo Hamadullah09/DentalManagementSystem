@@ -1,0 +1,159 @@
+@inject ProcedureService Procedures
+@inject IDbContextFactory<DentalDbContext> DbFactory
+
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <select class="form-select form-select-sm" style="width:auto;" @bind="_categoryFilter">
+        <option value="">All categories</option>
+        @foreach (var category in _procedures.Where(p => p.ProcedureCode is not null)
+                                             .Select(p => p.ProcedureCode!.Category).Distinct())
+        {
+            <option value="@category">@Ui.Humanise(category)</option>
+        }
+    </select>
+
+    <select class="form-select form-select-sm" style="width:auto;" @bind="_yearFilter">
+        <option value="">All years</option>
+        @foreach (var year in _procedures.Select(p => p.DateOfService.Year).Distinct().OrderByDescending(y => y))
+        {
+            <option value="@year">@year</option>
+        }
+    </select>
+
+    <span class="ms-auto text-muted" style="font-size:.82rem;">
+        @Filtered.Count() procedures &middot; @Ui.Money(Filtered.Sum(p => p.NetFee)) total
+    </span>
+</div>
+
+@if (_procedures.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="activity" Title="No treatment recorded"
+                    Message="Completed procedures appear here once they are charted." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">Date</th>
+                    <th style="width:80px;">Code</th>
+                    <th>Procedure</th>
+                    <th style="width:60px;">Tooth</th>
+                    <th style="width:70px;">Surfaces</th>
+                    <th>Provider</th>
+                    <th>Material</th>
+                    <th class="num" style="width:90px;">Fee</th>
+                    <th style="width:100px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var procedure in Filtered)
+                {
+                    <tr>
+                        <td class="nowrap">@procedure.DateOfService.ToString("dd/MM/yy")</td>
+                        <td class="mono">@procedure.ProcedureCode?.Code</td>
+                        <td>
+                            <div>@(procedure.ProcedureCode?.ShortDescription ?? "-")</div>
+                            @if (procedure.SurgicalRecord is not null)
+                            {
+                                <span class="badge-ds b-purple" style="font-size:.66rem;">
+                                    @Ui.Humanise(procedure.SurgicalRecord.SurgeryType)
+                                </span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(procedure.Notes))
+                            {
+                                <div class="text-muted" style="font-size:.74rem;">@Ui.Truncate(procedure.Notes, 80)</div>
+                            }
+                        </td>
+                        <td class="mono">@(procedure.Tooth?.FdiNumber.ToString() ?? "-")</td>
+                        <td class="mono">@(procedure.Surfaces == ToothSurface.None ? "-" : SurfaceNotation.ToCode(procedure.Surfaces))</td>
+                        <td class="nowrap">@(procedure.Provider?.Name.Display ?? "-")</td>
+                        <td>@(procedure.Material == RestorationMaterial.None ? "-" : Ui.Humanise(procedure.Material))</td>
+                        <td class="num mono">@Ui.Money(procedure.NetFee)</td>
+                        <td><span class="badge-ds @Ui.BadgeFor(procedure.Status)">@Ui.Humanise(procedure.Status)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_implants.Count > 0)
+    {
+        <div class="card-ds mt-3">
+            <div class="card-ds-header">
+                <h3>Implant registry</h3>
+                <span class="badge-ds b-neutral">@_implants.Count</span>
+            </div>
+            <div class="table-wrap" style="border:0; border-radius:0;">
+                <table class="table-ds">
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">Tooth</th>
+                            <th>System</th>
+                            <th>Dimensions</th>
+                            <th>Lot</th>
+                            <th class="nowrap">Placed</th>
+                            <th>Surgeon</th>
+                            <th class="nowrap">Torque / ISQ</th>
+                            <th class="nowrap">Restored</th>
+                            <th style="width:110px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var implant in _implants)
+                        {
+                            <tr>
+                                <td class="mono">@implant.Tooth?.FdiNumber</td>
+                                <td>@implant.Manufacturer @implant.SystemName</td>
+                                <td class="mono">@implant.DiameterMm x @implant.LengthMm mm</td>
+                                <td class="mono" style="font-size:.76rem;">@implant.LotNumber</td>
+                                <td class="nowrap">@Ui.DateShort(implant.PlacementDate)</td>
+                                <td class="nowrap">@(implant.SurgeonStaff?.Name.Display ?? "-")</td>
+                                <td class="mono">
+                                    @(implant.InsertionTorqueNcm.HasValue ? $"{implant.InsertionTorqueNcm} Ncm" : "-")
+                                    / @(implant.StabilityQuotientIsq?.ToString() ?? "-")
+                                </td>
+                                <td class="nowrap">@Ui.DateShort(implant.RestorationDate)</td>
+                                <td><span class="badge-ds @Ui.BadgeFor(implant.Status)">@Ui.Humanise(implant.Status)</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<Procedure> _procedures = new();
+    private List<DentalImplant> _implants = new();
+    private string _categoryFilter = string.Empty;
+    private string _yearFilter = string.Empty;
+
+    private IEnumerable<Procedure> Filtered
+    {
+        get
+        {
+            var query = _procedures.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_categoryFilter) &&
+                Enum.TryParse<ProcedureCategory>(_categoryFilter, out var category))
+                query = query.Where(p => p.ProcedureCode?.Category == category);
+
+            if (!string.IsNullOrEmpty(_yearFilter) && int.TryParse(_yearFilter, out var year))
+                query = query.Where(p => p.DateOfService.Year == year);
+
+            return query;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _procedures = await Procedures.GetForPatientAsync(PatientId);
+        _implants = await Procedures.GetImplantsAsync(PatientId);
+    }
+}

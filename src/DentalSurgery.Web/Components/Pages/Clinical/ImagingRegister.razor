@@ -1,0 +1,168 @@
+@page "/radiographs"
+@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Imaging - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Imaging register"
+            Subtitle="Radiographic exposures with justification, dose and quality grading." />
+
+<DateRangePicker From="_from" To="_to" OnChanged="OnRangeChanged" />
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Exposures" Value="@_records.Count.ToString()" Accent="primary" Icon="x-ray" />
+    <StatTile Label="Total dose" Value="@($"{_records.Sum(r => r.DoseMicroSieverts ?? 0):0.#} µSv")" Accent="accent" />
+    <StatTile Label="Repeats" Value="@RepeatCount.ToString()"
+              Accent="@(RepeatRate > 5 ? "danger" : RepeatRate > 2 ? "warning" : "success")"
+              Caption="@($"{RepeatRate:0.#}% repeat rate")" />
+    <StatTile Label="Grade 1 quality" Value="@($"{Grade1Rate:0.#}%")"
+              Accent="@(Grade1Rate >= 70 ? "success" : "warning")"
+              Caption="target is 70% or better" />
+    <StatTile Label="Reported" Value="@_records.Count(r => r.IsReported).ToString()" Accent="info"
+              Caption="@($"{_records.Count(r => !r.IsReported)} awaiting a report")" />
+</div>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Type</label>
+        <select class="form-select form-select-sm" @bind="_typeFilter">
+            <option value="">All types</option>
+            @foreach (var type in Enum.GetValues<RadiographType>())
+            {
+                <option value="@type">@Ui.Humanise(type)</option>
+            }
+        </select>
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <button class="btn btn-sm @(_repeatsOnly ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _repeatsOnly = !_repeatsOnly">
+            Repeats only
+        </button>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="x-ray" Title="No imaging in this period"
+                    Message="Widen the date range to see earlier exposures." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">Date</th>
+                    <th>Patient</th>
+                    <th>Type</th>
+                    <th>Teeth</th>
+                    <th>Taken by</th>
+                    <th class="nowrap">Exposure</th>
+                    <th class="num nowrap">Dose</th>
+                    <th>Quality</th>
+                    <th>Justification</th>
+                    <th>Findings</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var record in Filtered)
+                {
+                    <tr>
+                        <td class="nowrap">@record.TakenAtUtc.ToString("dd/MM/yy")</td>
+                        <td>
+                            <a href="/patients/@record.PatientId/documents" style="font-weight:600;">
+                                @(record.Patient?.Name.Display ?? "Unknown")
+                            </a>
+                        </td>
+                        <td>
+                            @Ui.Humanise(record.RadiographType)
+                            @if (record.IsRepeat)
+                            {
+                                <span class="badge-ds b-warning ms-1">Repeat</span>
+                            }
+                        </td>
+                        <td class="mono" style="font-size:.74rem;">@Ui.Truncate(record.ToothNumbers, 22)</td>
+                        <td class="nowrap">@(record.TakenByStaff?.Name.Display ?? "-")</td>
+                        <td class="mono nowrap" style="font-size:.74rem;">
+                            @(record.KiloVoltagePeak.HasValue ? $"{record.KiloVoltagePeak}kVp {record.ExposureSeconds}s" : "-")
+                        </td>
+                        <td class="num mono">@(record.DoseMicroSieverts?.ToString("0.#") ?? "-")</td>
+                        <td style="font-size:.78rem;">@(record.QualityRating ?? "-")</td>
+                        <td style="font-size:.78rem;">@Ui.Truncate(record.JustificationReason, 28)</td>
+                        <td style="font-size:.78rem;">@Ui.Truncate(record.Findings, 44)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private List<RadiographRecord> _records = new();
+    private string _typeFilter = string.Empty;
+    private bool _repeatsOnly;
+
+    private int RepeatCount => _records.Count(r => r.IsRepeat);
+    private decimal RepeatRate => _records.Count == 0 ? 0 : Math.Round(100m * RepeatCount / _records.Count, 1);
+
+    private decimal Grade1Rate
+    {
+        get
+        {
+            var graded = _records.Where(r => !string.IsNullOrEmpty(r.QualityRating)).ToList();
+            if (graded.Count == 0) return 0;
+            var grade1 = graded.Count(r => r.QualityRating!.StartsWith("Grade 1", StringComparison.OrdinalIgnoreCase));
+            return Math.Round(100m * grade1 / graded.Count, 1);
+        }
+    }
+
+    private List<RadiographRecord> Filtered
+    {
+        get
+        {
+            var query = _records.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_typeFilter) && Enum.TryParse<RadiographType>(_typeFilter, out var type))
+                query = query.Where(r => r.RadiographType == type);
+
+            if (_repeatsOnly) query = query.Where(r => r.IsRepeat);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.Today;
+        _from = _to.AddMonths(-12);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var start = _from.ToDateTime(TimeOnly.MinValue);
+        var end = _to.AddDays(1).ToDateTime(TimeOnly.MinValue);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _records = await db.RadiographRecords.AsNoTracking()
+            .Include(r => r.Patient)
+            .Include(r => r.TakenByStaff)
+            .Where(r => r.TakenAtUtc >= start && r.TakenAtUtc < end)
+            .OrderByDescending(r => r.TakenAtUtc)
+            .Take(500)
+            .ToListAsync();
+    }
+
+    private async Task OnRangeChanged((DateOnly From, DateOnly To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+    }
+}

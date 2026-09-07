@@ -1,0 +1,210 @@
+@page "/recalls"
+@attribute [Authorize]
+@inject ReportingService Reporting
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Recalls - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Recall worklist"
+            Subtitle="Patients due or overdue for review, oldest first.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="ExportCsv">
+            <Icon Name="download" Size="13" /> Export call list
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Due by</label>
+        <input type="date" class="form-control form-control-sm"
+               value="@_dueBy.ToString("yyyy-MM-dd")" @onchange="OnDueByChanged" />
+    </div>
+    <div class="field">
+        <label class="form-label">Type</label>
+        <select class="form-select form-select-sm" @bind="_typeFilter" @bind:after="Filter">
+            <option value="">All types</option>
+            @foreach (var type in Enum.GetValues<RecallType>())
+            {
+                <option value="@type">@Ui.Humanise(type)</option>
+            }
+        </select>
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <div class="btn-group btn-group-sm">
+            <button class="btn @(_overdueOnly ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => ToggleOverdue(true)">Overdue only</button>
+            <button class="btn @(!_overdueOnly ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => ToggleOverdue(false)">All due</button>
+        </div>
+    </div>
+</div>
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Due" Value="@_all.Count.ToString()" Accent="primary" Icon="bell" />
+    <StatTile Label="Overdue" Value="@_all.Count(r => r.DaysOverdue > 0).ToString()"
+              Accent="@(_all.Any(r => r.DaysOverdue > 0) ? "danger" : "success")" />
+    <StatTile Label="Over 6 months late" Value="@_all.Count(r => r.DaysOverdue > 180).ToString()" Accent="danger" />
+    <StatTile Label="Never contacted" Value="@_all.Count(r => r.ContactAttempts == 0 && r.DaysOverdue > 0).ToString()"
+              Accent="warning" />
+</div>
+
+@if (_filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="check-circle" Title="Recall list clear"
+                    Message="Nobody matches the current filters." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Patient</th>
+                    <th>Number</th>
+                    <th>Type</th>
+                    <th class="nowrap">Due</th>
+                    <th class="nowrap">Overdue</th>
+                    <th>Contact</th>
+                    <th>Provider</th>
+                    <th class="num">Attempts</th>
+                    <th style="width:150px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var recall in _filtered)
+                {
+                    <tr>
+                        <td>
+                            <a href="/patients/@recall.PatientId" style="font-weight:600;">@recall.PatientName</a>
+                        </td>
+                        <td class="mono">@recall.PatientNumber</td>
+                        <td>@Ui.Humanise(recall.RecallType)</td>
+                        <td class="nowrap">@Ui.DateShort(recall.DueDate)</td>
+                        <td class="nowrap @recall.UrgencyClass">
+                            @(recall.DaysOverdue == 0 ? "-" : $"{recall.DaysOverdue} days")
+                        </td>
+                        <td style="font-size:.8rem;">
+                            @if (!string.IsNullOrEmpty(recall.Phone))
+                            {
+                                <div>@recall.Phone</div>
+                            }
+                            @if (!string.IsNullOrEmpty(recall.Email))
+                            {
+                                <div class="text-faint">@Ui.Truncate(recall.Email, 24)</div>
+                            }
+                        </td>
+                        <td class="nowrap">@(recall.ProviderName ?? "-")</td>
+                        <td class="num">@recall.ContactAttempts</td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => LogContact(recall.RecallId)">
+                                    Called
+                                </button>
+                                <a href="/schedule?patient=@recall.PatientId" class="btn btn-sm btn-primary">Book</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private DateOnly _dueBy;
+    private List<RecallDueRow> _all = new();
+    private List<RecallDueRow> _filtered = new();
+    private string _typeFilter = string.Empty;
+    private bool _overdueOnly;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dueBy = Clock.Today.AddDays(30);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _all = (await Reporting.GetRecallsDueAsync(_dueBy))
+            .OrderByDescending(r => r.DaysOverdue)
+            .ThenBy(r => r.DueDate)
+            .ToList();
+        Filter();
+    }
+
+    private void Filter()
+    {
+        var query = _all.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(_typeFilter) && Enum.TryParse<RecallType>(_typeFilter, out var type))
+            query = query.Where(r => r.RecallType == type);
+
+        if (_overdueOnly) query = query.Where(r => r.DaysOverdue > 0);
+
+        _filtered = query.ToList();
+    }
+
+    private async Task OnDueByChanged(ChangeEventArgs args)
+    {
+        if (DateOnly.TryParse(args.Value?.ToString(), out var date))
+        {
+            _dueBy = date;
+            await LoadAsync();
+        }
+    }
+
+    private void ToggleOverdue(bool overdueOnly)
+    {
+        _overdueOnly = overdueOnly;
+        Filter();
+    }
+
+    /// <summary>Records a contact attempt so the list can be worked through methodically.</summary>
+    private async Task LogContact(Guid recallId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var recall = await db.RecallSchedules.FirstOrDefaultAsync(r => r.Id == recallId);
+        if (recall is null) return;
+
+        recall.ContactAttempts++;
+        recall.LastContactedOn = Clock.Today;
+
+        db.CommunicationLogs.Add(new CommunicationLog
+        {
+            PatientId = recall.PatientId,
+            OccurredAtUtc = Clock.UtcNow,
+            Channel = CommunicationChannel.Phone,
+            Direction = CommunicationDirection.Outbound,
+            Status = CommunicationStatus.Sent,
+            Subject = "Recall reminder",
+            Body = $"Called about the {Ui.Humanise(recall.RecallType)} recall due {recall.DueDate:d MMM yyyy}.",
+            RecallScheduleId = recall.Id
+        });
+
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        var csv = CsvExport.Build(_filtered,
+            ("Patient number", r => r.PatientNumber),
+            ("Name", r => r.PatientName),
+            ("Recall type", r => r.RecallType.ToString()),
+            ("Due date", r => CsvExport.Date(r.DueDate)),
+            ("Days overdue", r => r.DaysOverdue.ToString()),
+            ("Phone", r => r.Phone ?? ""),
+            ("Email", r => r.Email ?? ""),
+            ("Provider", r => r.ProviderName ?? ""),
+            ("Contact attempts", r => r.ContactAttempts.ToString()));
+
+        await CsvExport.DownloadAsync(JS, "recall-list.csv", csv);
+    }
+}

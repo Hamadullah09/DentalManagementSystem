@@ -1,0 +1,251 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<div class="row g-3">
+
+    <div class="col-12 col-lg-4">
+        <div class="card-ds mb-3">
+            <div class="card-ds-header"><h3>Personal details</h3></div>
+            <div class="card-ds-body">
+                <dl class="kv">
+                    <dt>Full name</dt><dd>@Summary.Patient.Name.Full</dd>
+                    <dt>Date of birth</dt><dd>@Ui.Date(Summary.Patient.DateOfBirth)</dd>
+                    <dt>Gender</dt><dd>@Ui.Humanise(Summary.Patient.Gender)</dd>
+                    <dt>Marital status</dt><dd>@Ui.Humanise(Summary.Patient.MaritalStatus)</dd>
+                    <dt>Occupation</dt><dd>@(Summary.Patient.Occupation ?? "-")</dd>
+                    <dt>NHS number</dt><dd class="mono">@(Summary.Patient.NhsNumber ?? "-")</dd>
+                    <dt>Language</dt><dd>@(Summary.Patient.PreferredLanguage ?? "-")</dd>
+                    <dt>Registered</dt><dd>@Ui.Date(Summary.Patient.RegistrationDate)</dd>
+                    <dt>Referred by</dt><dd>@(Summary.Patient.ReferralSource ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card-ds mb-3">
+            <div class="card-ds-header"><h3>Contact</h3></div>
+            <div class="card-ds-body">
+                <dl class="kv">
+                    <dt>Mobile</dt><dd>@(Summary.Patient.Contact.MobilePhone ?? "-")</dd>
+                    <dt>Home</dt><dd>@(Summary.Patient.Contact.HomePhone ?? "-")</dd>
+                    <dt>Email</dt><dd>@(Summary.Patient.Contact.Email ?? "-")</dd>
+                    <dt>Address</dt>
+                    <dd>
+                        @foreach (var line in Summary.Patient.Address.ToLines())
+                        {
+                            <div>@line</div>
+                        }
+                    </dd>
+                </dl>
+
+                <div class="divider"></div>
+
+                <div class="d-flex gap-1 flex-wrap">
+                    <span class="badge-ds @(Summary.Patient.AllowEmail ? "b-success" : "b-neutral")">Email @(Summary.Patient.AllowEmail ? "yes" : "no")</span>
+                    <span class="badge-ds @(Summary.Patient.AllowSms ? "b-success" : "b-neutral")">SMS @(Summary.Patient.AllowSms ? "yes" : "no")</span>
+                    <span class="badge-ds @(Summary.Patient.AllowPhoneCall ? "b-success" : "b-neutral")">Phone @(Summary.Patient.AllowPhoneCall ? "yes" : "no")</span>
+                    <span class="badge-ds @(Summary.Patient.AllowMarketing ? "b-success" : "b-neutral")">Marketing @(Summary.Patient.AllowMarketing ? "yes" : "no")</span>
+                </div>
+            </div>
+        </div>
+
+        @if (_contacts.Count > 0)
+        {
+            <div class="card-ds">
+                <div class="card-ds-header"><h3>Emergency and related contacts</h3></div>
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var contact in _contacts)
+                    {
+                        <div>
+                            <div style="font-weight:600; font-size:.86rem;">
+                                @contact.Name.Display
+                                <span class="badge-ds b-neutral ms-1">@Ui.Humanise(contact.Relationship)</span>
+                                @if (contact.HasLegalAuthority)
+                                {
+                                    <span class="badge-ds b-purple ms-1">Legal authority</span>
+                                }
+                            </div>
+                            <div class="text-muted" style="font-size:.8rem;">
+                                @Ui.Humanise(contact.Role) &middot; @(contact.Contact.BestPhone ?? contact.Contact.Email ?? "no contact recorded")
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-12 col-lg-8">
+
+        <div class="stat-grid mb-3">
+            <StatTile Label="Balance" Value="@Ui.Money(Summary.OutstandingBalance)"
+                      Accent="@(Summary.OutstandingBalance > 0 ? "danger" : "success")" Icon="credit-card"
+                      Caption="@(Summary.InsurancePending > 0 ? $"{Ui.Money(Summary.InsurancePending)} with insurers" : "Nothing pending")" />
+            <StatTile Label="Procedures completed" Value="@Summary.ProcedureCount.ToString()"
+                      Accent="primary" Icon="activity" />
+            <StatTile Label="Open plan items" Value="@Summary.OpenTreatmentItems.ToString()"
+                      Accent="@(Summary.OpenTreatmentItems > 0 ? "warning" : "neutral")" Icon="clipboard" />
+            <StatTile Label="Radiographs" Value="@Summary.RadiographCount.ToString()"
+                      Accent="accent" Icon="x-ray" />
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header"><h3>Next appointment</h3></div>
+                    <div class="card-ds-body">
+                        @if (Summary.NextAppointment is { } next)
+                        {
+                            <div style="font-size:1.05rem; font-weight:600;">
+                                @next.StartUtc.ToString("dddd d MMMM")
+                            </div>
+                            <div class="mono text-muted">@next.StartUtc.ToString("HH:mm") - @next.EndUtc.ToString("HH:mm")</div>
+                            <div class="mt-2" style="font-size:.85rem;">
+                                <div>@Ui.Humanise(next.AppointmentType)</div>
+                                <div class="text-muted">
+                                    @(next.Provider?.DisplayName ?? "No provider") &middot; @(next.Operatory?.Name ?? "No surgery")
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(next.Reason))
+                                {
+                                    <div class="text-muted mt-1">@next.Reason</div>
+                                }
+                            </div>
+                            <span class="badge-ds @Ui.BadgeFor(next.Status) mt-2">@Ui.Humanise(next.Status)</span>
+                        }
+                        else
+                        {
+                            <div class="text-muted" style="font-size:.87rem;">
+                                No future appointment is booked.
+                            </div>
+                            <a href="/schedule?patient=@Summary.Patient.Id" class="btn btn-sm btn-primary mt-2">Book an appointment</a>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-md-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header"><h3>Recall</h3></div>
+                    <div class="card-ds-body">
+                        @if (_recalls.Count == 0)
+                        {
+                            <div class="text-muted" style="font-size:.87rem;">No recall is scheduled.</div>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column gap-2">
+                                @foreach (var recall in _recalls)
+                                {
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div style="font-size:.86rem; font-weight:500;">@recall.DisplayName</div>
+                                            <div class="text-faint" style="font-size:.74rem;">
+                                                Every @recall.IntervalMonths months
+                                                @if (recall.LastCompletedDate.HasValue)
+                                                {
+                                                    <span>&middot; last @Ui.DateShort(recall.LastCompletedDate)</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="text-end">
+                                            <div class="@(recall.DaysOverdue > 0 ? "text-danger fw-semibold" : "")" style="font-size:.84rem;">
+                                                @Ui.DateShort(recall.DueDate)
+                                            </div>
+                                            <span class="badge-ds @Ui.BadgeFor(recall.Status)">@Ui.Humanise(recall.Status)</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-ds mt-3">
+            <div class="card-ds-header">
+                <h3>Recent activity</h3>
+                <a href="/patients/@Summary.Patient.Id/treatment" class="ms-auto" style="font-size:.8rem;">All procedures &rarr;</a>
+            </div>
+            <div class="card-ds-body">
+                @if (_timeline.Count == 0)
+                {
+                    <div class="text-muted" style="font-size:.87rem;">No treatment has been recorded yet.</div>
+                }
+                else
+                {
+                    <div class="timeline">
+                        @foreach (var entry in _timeline)
+                        {
+                            <div class="timeline-item @entry.Class">
+                                <div class="d-flex justify-content-between gap-2">
+                                    <div>
+                                        <div style="font-size:.87rem; font-weight:500;">@entry.Title</div>
+                                        <div class="text-muted" style="font-size:.78rem;">@entry.Detail</div>
+                                    </div>
+                                    <div class="text-faint nowrap" style="font-size:.76rem;">@Ui.DateShort(entry.Date)</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PatientSummary Summary { get; set; } = default!;
+
+    private List<PatientContact> _contacts = new();
+    private List<RecallSchedule> _recalls = new();
+    private List<TimelineEntry> _timeline = new();
+
+    private record TimelineEntry(DateOnly Date, string Title, string Detail, string Class);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var id = Summary.Patient.Id;
+
+        _contacts = await db.PatientContacts.AsNoTracking()
+            .Where(c => c.PatientId == id)
+            .OrderByDescending(c => c.IsPrimary)
+            .ToListAsync();
+
+        _recalls = await db.RecallSchedules.AsNoTracking()
+            .Where(r => r.PatientId == id && r.IsActive)
+            .OrderBy(r => r.DueDate)
+            .ToListAsync();
+
+        var procedures = await db.Procedures.AsNoTracking()
+            .Include(p => p.ProcedureCode)
+            .Include(p => p.Tooth)
+            .Include(p => p.Provider)
+            .Where(p => p.PatientId == id && p.Status == ProcedureStatus.Completed)
+            .OrderByDescending(p => p.DateOfService)
+            .Take(8)
+            .ToListAsync();
+
+        var notes = await db.ClinicalNotes.AsNoTracking()
+            .Include(n => n.Provider)
+            .Where(n => n.PatientId == id)
+            .OrderByDescending(n => n.NoteDateUtc)
+            .Take(5)
+            .ToListAsync();
+
+        _timeline = procedures
+            .Select(p => new TimelineEntry(
+                DateOnly.FromDateTime(p.DateOfService),
+                p.Description,
+                $"{p.ProcedureCode?.Code} · {p.Provider?.DisplayName ?? "Unknown provider"} · {Ui.Money(p.NetFee)}",
+                "done"))
+            .Concat(notes.Select(n => new TimelineEntry(
+                DateOnly.FromDateTime(n.NoteDateUtc),
+                n.Title ?? Ui.Humanise(n.NoteType) + " note",
+                Ui.Truncate(n.Summary, 90),
+                n.IsSigned ? "" : "warn")))
+            .OrderByDescending(e => e.Date)
+            .Take(12)
+            .ToList();
+    }
+}

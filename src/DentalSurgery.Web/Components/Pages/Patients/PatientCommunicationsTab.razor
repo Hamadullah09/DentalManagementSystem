@@ -1,0 +1,237 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject INotificationSender Notifier
+@inject ICurrentUser CurrentUser
+@inject IDateTimeProvider Clock
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="() => _composing = !_composing">
+        <Icon Name="mail" Size="13" /> Log a communication
+    </button>
+    <span class="ms-auto text-muted" style="font-size:.82rem;">@_log.Count entries</span>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds a-success mb-3">
+        <Icon Name="check-circle" Size="15" /><div>@_message</div>
+    </div>
+}
+
+@if (_composing)
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header"><h3>New communication</h3></div>
+        <div class="card-ds-body">
+            <div class="row g-2">
+                <div class="col-6 col-md-3">
+                    <label class="form-label">Channel</label>
+                    <select class="form-select form-select-sm" @bind="_channel">
+                        @foreach (var channel in Enum.GetValues<CommunicationChannel>())
+                        {
+                            <option value="@channel">@Ui.Humanise(channel)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label">Direction</label>
+                    <select class="form-select form-select-sm" @bind="_direction">
+                        @foreach (var direction in Enum.GetValues<CommunicationDirection>())
+                        {
+                            <option value="@direction">@Ui.Humanise(direction)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Template</label>
+                    <select class="form-select form-select-sm" @bind="_templateId" @bind:after="ApplyTemplate">
+                        <option value="">No template</option>
+                        @foreach (var template in _templates)
+                        {
+                            <option value="@template.Id">@template.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Subject</label>
+                    <input class="form-control form-control-sm" @bind="_subject" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Message</label>
+                    <textarea class="form-control form-control-sm" rows="5" @bind="_body"></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="card-ds-footer d-flex gap-2">
+            <button class="btn btn-sm btn-primary" @onclick="Send" disabled="@_working">Record and send</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _composing = false">Cancel</button>
+            <span class="ms-auto text-faint align-self-center" style="font-size:.75rem;">
+                No messaging gateway is configured, so the message is recorded rather than transmitted.
+            </span>
+        </div>
+    </div>
+}
+
+@if (_log.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="mail" Title="No communications"
+                    Message="Calls, letters, emails and text messages logged against this patient appear here." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th class="nowrap">When</th>
+                    <th style="width:90px;">Channel</th>
+                    <th style="width:90px;">Direction</th>
+                    <th>Subject</th>
+                    <th>Detail</th>
+                    <th>Staff</th>
+                    <th style="width:100px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _log)
+                {
+                    <tr>
+                        <td class="nowrap">@entry.OccurredAtUtc.ToString("dd/MM/yy HH:mm")</td>
+                        <td><span class="badge-ds b-neutral">@Ui.Humanise(entry.Channel)</span></td>
+                        <td>
+                            <span class="d-inline-flex align-items-center gap-1" style="font-size:.79rem;">
+                                <Icon Name="@(entry.Direction == CommunicationDirection.Outbound ? "arrow-right" : "arrow-left")" Size="12" />
+                                @Ui.Humanise(entry.Direction)
+                            </span>
+                        </td>
+                        <td>@(entry.Subject ?? "-")</td>
+                        <td style="font-size:.8rem;">@Ui.Truncate(entry.Body, 80)</td>
+                        <td class="nowrap" style="font-size:.79rem;">@(entry.Staff?.Name.Display ?? "-")</td>
+                        <td>
+                            <span class="badge-ds @(entry.Status switch
+                            {
+                                CommunicationStatus.Delivered or CommunicationStatus.Read or CommunicationStatus.Responded => "b-success",
+                                CommunicationStatus.Failed or CommunicationStatus.Bounced => "b-danger",
+                                CommunicationStatus.Queued => "b-warning",
+                                _ => "b-info"
+                            })">@Ui.Humanise(entry.Status)</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<CommunicationLog> _log = new();
+    private List<MessageTemplate> _templates = new();
+    private Patient? _patient;
+
+    private bool _composing;
+    private bool _working;
+    private string? _message;
+
+    private CommunicationChannel _channel = CommunicationChannel.Phone;
+    private CommunicationDirection _direction = CommunicationDirection.Outbound;
+    private string _templateId = string.Empty;
+    private string _subject = string.Empty;
+    private string _body = string.Empty;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _log = await db.CommunicationLogs.AsNoTracking()
+            .Include(c => c.Staff)
+            .Where(c => c.PatientId == PatientId)
+            .OrderByDescending(c => c.OccurredAtUtc)
+            .Take(200)
+            .ToListAsync();
+
+        _patient = await db.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.Id == PatientId);
+
+        if (_templates.Count == 0)
+        {
+            _templates = await db.MessageTemplates.AsNoTracking()
+                .Where(t => t.IsActive).OrderBy(t => t.Category).ThenBy(t => t.Name).ToListAsync();
+        }
+    }
+
+    private void ApplyTemplate()
+    {
+        if (!Guid.TryParse(_templateId, out var id)) return;
+        var template = _templates.FirstOrDefault(t => t.Id == id);
+        if (template is null) return;
+
+        _channel = template.Channel;
+        _subject = Merge(template.Subject ?? string.Empty);
+        _body = Merge(template.Body);
+    }
+
+    /// <summary>Substitutes the merge tokens a template can carry.</summary>
+    private string Merge(string text) => text
+        .Replace("{PatientFirstName}", _patient?.Name.PreferredName ?? _patient?.Name.FirstName ?? "there")
+        .Replace("{PatientName}", _patient?.Name.Display ?? "")
+        .Replace("{PracticeName}", "Meridian Dental Surgery")
+        .Replace("{PracticePhone}", "020 7946 0812")
+        .Replace("{PracticeAddress}", "42 Harley Mews, London W1G 8QT");
+
+    private async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(_body)) return;
+
+        _working = true;
+
+        var recipient = _channel switch
+        {
+            CommunicationChannel.Email => _patient?.Contact.Email,
+            CommunicationChannel.Sms or CommunicationChannel.Phone => _patient?.Contact.BestPhone,
+            _ => _patient?.Address.ToSingleLine()
+        } ?? "unknown";
+
+        // Inbound contacts are logged only; outbound goes through the gateway.
+        var result = _direction == CommunicationDirection.Outbound
+            ? await Notifier.SendAsync(_channel, recipient, _subject, _body)
+            : NotificationResult.Recorded();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.CommunicationLogs.Add(new CommunicationLog
+        {
+            PatientId = PatientId,
+            OccurredAtUtc = Clock.UtcNow,
+            Channel = _channel,
+            Direction = _direction,
+            Status = result.Delivered ? CommunicationStatus.Sent
+                : result.WasRecordedOnly ? CommunicationStatus.Queued
+                : CommunicationStatus.Failed,
+            FailureReason = result.Error,
+            Subject = string.IsNullOrWhiteSpace(_subject) ? null : _subject,
+            Body = _body,
+            Recipient = recipient,
+            Sender = CurrentUser.DisplayName,
+            StaffId = CurrentUser.StaffId,
+            MessageTemplateId = Guid.TryParse(_templateId, out var templateId) ? templateId : null
+        });
+
+        await db.SaveChangesAsync();
+        _working = false;
+
+        _composing = false;
+        _subject = string.Empty;
+        _body = string.Empty;
+        _templateId = string.Empty;
+        _message = result.Delivered
+            ? $"Sent via {result.Provider} and recorded against the patient record."
+            : result.WasRecordedOnly
+                ? "Recorded against the patient record. No gateway is configured for this channel, so nothing was transmitted."
+                : $"Recorded, but sending failed: {result.Error}";
+
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,596 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject ClinicalService Clinical
+@inject IDateTimeProvider Clock
+
+<div class="row g-3">
+
+    @* ------------------------------------------------ allergies *@
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Allergies</h3>
+                <span class="badge-ds b-neutral">@_allergies.Count</span>
+                <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _addingAllergy = !_addingAllergy">
+                    <Icon Name="plus" Size="13" /> Add
+                </button>
+            </div>
+
+            @if (_addingAllergy)
+            {
+                <div class="card-ds-body" style="background:var(--ds-surface-2); border-bottom:1px solid var(--ds-border);">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Allergen</label>
+                            <select class="form-select form-select-sm" @bind="_newAllergenId">
+                                <option value="">Select an allergen</option>
+                                @foreach (var group in _allergenCatalogue.GroupBy(a => a.AllergyType))
+                                {
+                                    <optgroup label="@Ui.Humanise(group.Key)">
+                                        @foreach (var allergen in group)
+                                        {
+                                            <option value="@allergen.Id">@allergen.Name</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Severity</label>
+                            <select class="form-select form-select-sm" @bind="_newAllergySeverity">
+                                @foreach (var severity in Enum.GetValues<AllergySeverity>())
+                                {
+                                    <option value="@severity">@Ui.Humanise(severity)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3 d-flex align-items-end gap-1">
+                            <button class="btn btn-sm btn-primary flex-grow-1" @onclick="AddAllergy">Save</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _addingAllergy = false">Cancel</button>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Reaction</label>
+                            <input class="form-control form-control-sm" @bind="_newAllergyReaction"
+                                   placeholder="Describe the reaction observed" />
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_allergies.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">
+                    No allergies recorded. Confirm with the patient at every visit.
+                </div>
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var allergy in _allergies)
+                    {
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <div style="font-weight:600; font-size:.88rem;">@allergy.DisplayName</div>
+                                <div class="text-muted" style="font-size:.79rem;">
+                                    @Ui.Humanise(allergy.AllergyType)
+                                    @if (!string.IsNullOrWhiteSpace(allergy.Reaction))
+                                    {
+                                        <span> &middot; @allergy.Reaction</span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(allergy.Allergen?.CrossReactants))
+                                {
+                                    <div class="text-faint" style="font-size:.74rem;">
+                                        Cross-reacts with: @allergy.Allergen.CrossReactants
+                                    </div>
+                                }
+                            </div>
+                            <span class="badge-ds @Ui.BadgeFor(allergy.Severity)">@Ui.Humanise(allergy.Severity)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ------------------------------------------------ conditions *@
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Medical conditions</h3>
+                <span class="badge-ds b-neutral">@_conditions.Count</span>
+                <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _addingCondition = !_addingCondition">
+                    <Icon Name="plus" Size="13" /> Add
+                </button>
+            </div>
+
+            @if (_addingCondition)
+            {
+                <div class="card-ds-body" style="background:var(--ds-surface-2); border-bottom:1px solid var(--ds-border);">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-7">
+                            <label class="form-label">Condition</label>
+                            <select class="form-select form-select-sm" @bind="_newConditionId">
+                                <option value="">Select a condition</option>
+                                @foreach (var group in _conditionCatalogue.GroupBy(c => c.Category))
+                                {
+                                    <optgroup label="@group.Key">
+                                        @foreach (var condition in group)
+                                        {
+                                            <option value="@condition.Id">@condition.Name</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select form-select-sm" @bind="_newConditionStatus">
+                                @foreach (var status in Enum.GetValues<ConditionStatus>())
+                                {
+                                    <option value="@status">@Ui.Humanise(status)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2 d-flex align-items-end gap-1">
+                            <button class="btn btn-sm btn-primary flex-grow-1" @onclick="AddCondition">Save</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_conditions.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">No medical conditions recorded.</div>
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var condition in _conditions)
+                    {
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div style="font-weight:600; font-size:.88rem;">@condition.DisplayName</div>
+                                <div class="d-flex gap-1">
+                                    <span class="badge-ds b-neutral">@Ui.Humanise(condition.Status)</span>
+                                    <span class="badge-ds @Ui.BadgeFor(condition.Severity)">@Ui.Humanise(condition.Severity)</span>
+                                </div>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(condition.MedicalCondition?.ClinicalGuidance))
+                            {
+                                <div class="text-muted" style="font-size:.78rem;">
+                                    @condition.MedicalCondition.ClinicalGuidance
+                                </div>
+                            }
+                            <div class="d-flex gap-1 mt-1 flex-wrap">
+                                @if (condition.MedicalCondition?.RequiresAntibioticProphylaxis == true)
+                                {
+                                    <span class="badge-ds b-danger">Prophylaxis</span>
+                                }
+                                @if (condition.MedicalCondition?.IncreasesBleedingRisk == true)
+                                {
+                                    <span class="badge-ds b-danger">Bleeding risk</span>
+                                }
+                                @if (condition.MedicalCondition?.ContraindicatesAdrenaline == true)
+                                {
+                                    <span class="badge-ds b-warning">Limit adrenaline</span>
+                                }
+                                @if (condition.MedicalCondition?.AffectsHealing == true)
+                                {
+                                    <span class="badge-ds b-warning">Delayed healing</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ------------------------------------------------ medication *@
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Current medication</h3>
+                <span class="badge-ds b-neutral">@_medications.Count</span>
+            </div>
+            @if (_medications.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">No current medication recorded.</div>
+            }
+            else
+            {
+                <div class="table-wrap" style="border:0; border-radius:0;">
+                    <table class="table-ds">
+                        <thead>
+                            <tr><th>Medication</th><th>Dose</th><th>Frequency</th><th class="nowrap">Started</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var medication in _medications)
+                            {
+                                <tr>
+                                    <td>
+                                        <div style="font-weight:500;">@medication.DisplayName</div>
+                                        @if (!string.IsNullOrWhiteSpace(medication.Medication?.DrugClass))
+                                        {
+                                            <div class="text-faint" style="font-size:.72rem;">@medication.Medication.DrugClass</div>
+                                        }
+                                    </td>
+                                    <td>@(medication.Dosage ?? "-")</td>
+                                    <td>@(medication.Frequency ?? "-")</td>
+                                    <td class="nowrap">@Ui.DateShort(medication.StartDate)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ------------------------------------------------ history review *@
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Medical history review</h3>
+                <button class="btn btn-sm btn-primary ms-auto" @onclick="() => _reviewing = !_reviewing">
+                    <Icon Name="clipboard" Size="13" /> Record a review
+                </button>
+            </div>
+
+            @if (_reviewing)
+            {
+                <div class="card-ds-body" style="background:var(--ds-surface-2); border-bottom:1px solid var(--ds-border);">
+                    <div class="row g-2 mb-2">
+                        <div class="col-12">
+                            <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                                <input type="checkbox" class="form-check-input mt-0" @bind="_review.NoChangesReported" />
+                                No changes reported since the last review
+                            </label>
+                        </div>
+
+                        @foreach (var flag in ReviewFlags)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="d-flex align-items-center gap-2" style="font-size:.83rem;">
+                                    <input type="checkbox" class="form-check-input mt-0"
+                                           checked="@flag.Get(_review)"
+                                           @onchange="e => flag.Set(_review, (bool)(e.Value ?? false))" />
+                                    @flag.Label
+                                </label>
+                            </div>
+                        }
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">ASA classification</label>
+                            <select class="form-select form-select-sm" @bind="_review.AsaClassification">
+                                @foreach (var asa in Enum.GetValues<AsaClassification>())
+                                {
+                                    <option value="@asa">@AsaLabel(asa)</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Changes reported</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="_review.ChangesSummary"
+                                      placeholder="Note anything the patient has reported since the last review"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-primary" @onclick="SaveReview">Save review</button>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => _reviewing = false">Cancel</button>
+                    </div>
+                </div>
+            }
+
+            @if (_reviews.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">
+                    No review has been recorded. A medical history must be taken before treatment.
+                </div>
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2" style="max-height:340px; overflow-y:auto;">
+                    @foreach (var review in _reviews)
+                    {
+                        <div style="border-bottom:1px solid var(--ds-border); padding-bottom:.5rem;">
+                            <div class="d-flex justify-content-between">
+                                <span style="font-weight:600; font-size:.86rem;">@Ui.Date(review.ReviewDate)</span>
+                                <span class="badge-ds b-neutral">ASA @AsaLabel(review.AsaClassification).Split(' ')[0]</span>
+                            </div>
+                            <div class="text-muted" style="font-size:.79rem;">
+                                @(review.ReviewedByStaff?.DisplayName ?? "Unknown clinician")
+                                @if (review.NoChangesReported)
+                                {
+                                    <span> &middot; no changes reported</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(review.ChangesSummary))
+                            {
+                                <div style="font-size:.81rem;">@review.ChangesSummary</div>
+                            }
+                            <div class="d-flex gap-1 flex-wrap mt-1">
+                                @if (review.IsPregnant)
+                                {
+                                    <span class="badge-ds b-purple">Pregnant@(review.WeeksPregnant.HasValue ? $" ({review.WeeksPregnant}w)" : "")</span>
+                                }
+                                @if (review.RequiresAntibioticProphylaxis)
+                                {
+                                    <span class="badge-ds b-danger">Prophylaxis</span>
+                                }
+                                @if (review.TakingAnticoagulants)
+                                {
+                                    <span class="badge-ds b-danger">Anticoagulated</span>
+                                }
+                                @if (review.TakingBisphosphonates)
+                                {
+                                    <span class="badge-ds b-danger">Antiresorptive</span>
+                                }
+                                @if (review.HasPacemaker)
+                                {
+                                    <span class="badge-ds b-warning">Cardiac device</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ------------------------------------------------ social history & vitals *@
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header"><h3>Social and lifestyle history</h3></div>
+            @if (_social is null)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">No social history recorded.</div>
+            }
+            else
+            {
+                <div class="card-ds-body">
+                    <dl class="kv">
+                        <dt>Smoking</dt>
+                        <dd>
+                            @Ui.Humanise(_social.SmokingStatus)
+                            @if (_social.CigarettesPerDay.HasValue)
+                            {
+                                <span class="text-muted"> (@_social.CigarettesPerDay/day)</span>
+                            }
+                        </dd>
+                        <dt>Alcohol</dt><dd>@Ui.Humanise(_social.Alcohol)</dd>
+                        <dt>Brushing</dt><dd>@(_social.BrushingPerDay?.ToString() ?? "-") times a day</dd>
+                        <dt>Interdental</dt>
+                        <dd>@(_social.Flosses || _social.UsesInterdentalBrushes ? "Yes" : "No")</dd>
+                        <dt>Sugar intake</dt><dd>@(_social.SugarIntakeEpisodesPerDay?.ToString() ?? "-") episodes a day</dd>
+                        <dt>Oral hygiene</dt><dd>@Ui.Humanise(_social.OralHygiene)</dd>
+                        <dt>Bruxism</dt><dd>@(_social.Bruxism ? "Yes" : "No")</dd>
+                        <dt>Dental anxiety</dt>
+                        <dd>
+                            @(_social.DentalAnxiety ? "Yes" : "No")
+                            @if (_social.AnxietyScore.HasValue)
+                            {
+                                <span class="text-muted"> (MDAS @_social.AnxietyScore)</span>
+                            }
+                        </dd>
+                    </dl>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header"><h3>Observations</h3></div>
+            @if (_vitals.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">No observations recorded.</div>
+            }
+            else
+            {
+                <div class="table-wrap" style="border:0; border-radius:0;">
+                    <table class="table-ds">
+                        <thead>
+                            <tr><th>Date</th><th>BP</th><th>Pulse</th><th>SpO2</th><th>BMI</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var vital in _vitals)
+                            {
+                                <tr>
+                                    <td class="nowrap">@vital.RecordedAtUtc.ToString("dd/MM/yy")</td>
+                                    <td class="mono @(vital.IsHypertensiveCrisis ? "text-danger fw-bold" : "")">
+                                        @(vital.BloodPressure ?? "-")
+                                    </td>
+                                    <td class="mono">@(vital.PulseBpm?.ToString() ?? "-")</td>
+                                    <td class="mono">@(vital.OxygenSaturation.HasValue ? $"{vital.OxygenSaturation}%" : "-")</td>
+                                    <td class="mono">@(vital.Bmi?.ToString("0.#") ?? "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<PatientAllergy> _allergies = new();
+    private List<PatientMedicalCondition> _conditions = new();
+    private List<PatientMedication> _medications = new();
+    private List<MedicalHistoryReview> _reviews = new();
+    private List<VitalSignRecord> _vitals = new();
+    private SocialHistory? _social;
+
+    private List<Allergen> _allergenCatalogue = new();
+    private List<MedicalCondition> _conditionCatalogue = new();
+
+    private bool _addingAllergy;
+    private bool _addingCondition;
+    private bool _reviewing;
+
+    private string _newAllergenId = string.Empty;
+    private AllergySeverity _newAllergySeverity = AllergySeverity.Moderate;
+    private string _newAllergyReaction = string.Empty;
+
+    private string _newConditionId = string.Empty;
+    private ConditionStatus _newConditionStatus = ConditionStatus.Active;
+
+    private MedicalHistoryReview _review = new();
+
+    private record FlagDefinition(string Label, Func<MedicalHistoryReview, bool> Get, Action<MedicalHistoryReview, bool> Set);
+
+    private static readonly FlagDefinition[] ReviewFlags =
+    {
+        new("Pregnant", r => r.IsPregnant, (r, v) => r.IsPregnant = v),
+        new("Breastfeeding", r => r.IsBreastfeeding, (r, v) => r.IsBreastfeeding = v),
+        new("Taking anticoagulants", r => r.TakingAnticoagulants, (r, v) => r.TakingAnticoagulants = v),
+        new("Taking antiresorptives", r => r.TakingBisphosphonates, (r, v) => r.TakingBisphosphonates = v),
+        new("Taking immunosuppressants", r => r.TakingImmunosuppressants, (r, v) => r.TakingImmunosuppressants = v),
+        new("Pacemaker or ICD", r => r.HasPacemaker, (r, v) => r.HasPacemaker = v),
+        new("Prosthetic joint", r => r.HasProstheticJoint, (r, v) => r.HasProstheticJoint = v),
+        new("Prosthetic heart valve", r => r.HasProstheticHeartValve, (r, v) => r.HasProstheticHeartValve = v),
+        new("Previous endocarditis", r => r.HistoryOfEndocarditis, (r, v) => r.HistoryOfEndocarditis = v),
+        new("Head or neck radiotherapy", r => r.HistoryOfRadiotherapyToHeadOrNeck, (r, v) => r.HistoryOfRadiotherapyToHeadOrNeck = v),
+        new("Chemotherapy", r => r.HistoryOfChemotherapy, (r, v) => r.HistoryOfChemotherapy = v),
+        new("Antibiotic prophylaxis required", r => r.RequiresAntibioticProphylaxis, (r, v) => r.RequiresAntibioticProphylaxis = v)
+    };
+
+    private static string AsaLabel(AsaClassification asa) => asa switch
+    {
+        AsaClassification.AsaI => "I - Healthy",
+        AsaClassification.AsaII => "II - Mild systemic disease",
+        AsaClassification.AsaIII => "III - Severe systemic disease",
+        AsaClassification.AsaIV => "IV - Severe disease, constant threat to life",
+        AsaClassification.AsaV => "V - Moribund",
+        _ => "VI - Brain dead, organ donor"
+    };
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _allergies = await db.PatientAllergies.AsNoTracking().Include(a => a.Allergen)
+            .Where(a => a.PatientId == PatientId && a.IsActive)
+            .OrderByDescending(a => a.Severity).ToListAsync();
+
+        _conditions = await db.PatientMedicalConditions.AsNoTracking().Include(c => c.MedicalCondition)
+            .Where(c => c.PatientId == PatientId)
+            .OrderByDescending(c => c.Severity).ToListAsync();
+
+        _medications = await db.PatientMedications.AsNoTracking().Include(m => m.Medication)
+            .Where(m => m.PatientId == PatientId && m.IsCurrent)
+            .OrderBy(m => m.MedicationId).ToListAsync();
+
+        _reviews = await db.MedicalHistoryReviews.AsNoTracking().Include(r => r.ReviewedByStaff)
+            .Where(r => r.PatientId == PatientId)
+            .OrderByDescending(r => r.ReviewDate).Take(10).ToListAsync();
+
+        _vitals = await db.VitalSignRecords.AsNoTracking()
+            .Where(v => v.PatientId == PatientId)
+            .OrderByDescending(v => v.RecordedAtUtc).Take(8).ToListAsync();
+
+        _social = await db.SocialHistories.AsNoTracking()
+            .Where(s => s.PatientId == PatientId)
+            .OrderByDescending(s => s.RecordedOn).FirstOrDefaultAsync();
+
+        if (_allergenCatalogue.Count == 0)
+        {
+            _allergenCatalogue = await db.Allergens.AsNoTracking()
+                .Where(a => a.IsActive).OrderBy(a => a.AllergyType).ThenBy(a => a.Name).ToListAsync();
+
+            _conditionCatalogue = await db.MedicalConditions.AsNoTracking()
+                .Where(c => c.IsActive).OrderBy(c => c.Category).ThenBy(c => c.Name).ToListAsync();
+        }
+    }
+
+    private async Task AddAllergy()
+    {
+        if (!Guid.TryParse(_newAllergenId, out var allergenId)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var allergen = await db.Allergens.FirstOrDefaultAsync(a => a.Id == allergenId);
+        if (allergen is null) return;
+
+        db.PatientAllergies.Add(new PatientAllergy
+        {
+            PatientId = PatientId,
+            AllergenId = allergenId,
+            AllergyType = allergen.AllergyType,
+            Severity = _newAllergySeverity,
+            Reaction = string.IsNullOrWhiteSpace(_newAllergyReaction) ? null : _newAllergyReaction,
+            IsActive = true
+        });
+
+        // A severe allergy also raises a banner on the record.
+        if (_newAllergySeverity >= AllergySeverity.Severe)
+        {
+            db.PatientAlerts.Add(new PatientAlert
+            {
+                PatientId = PatientId,
+                Category = AlertCategory.Allergy,
+                Severity = _newAllergySeverity == AllergySeverity.Anaphylaxis ? AlertSeverity.Critical : AlertSeverity.High,
+                Title = $"{_newAllergySeverity} allergy: {allergen.Name}",
+                Detail = _newAllergyReaction
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        _addingAllergy = false;
+        _newAllergenId = string.Empty;
+        _newAllergyReaction = string.Empty;
+        _newAllergySeverity = AllergySeverity.Moderate;
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task AddCondition()
+    {
+        if (!Guid.TryParse(_newConditionId, out var conditionId)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var catalogue = await db.MedicalConditions.FirstOrDefaultAsync(c => c.Id == conditionId);
+        if (catalogue is null) return;
+
+        db.PatientMedicalConditions.Add(new PatientMedicalCondition
+        {
+            PatientId = PatientId,
+            MedicalConditionId = conditionId,
+            Status = _newConditionStatus,
+            Severity = catalogue.DefaultSeverity,
+            DiagnosedOn = Clock.Today
+        });
+
+        await db.SaveChangesAsync();
+
+        _addingCondition = false;
+        _newConditionId = string.Empty;
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SaveReview()
+    {
+        _review.PatientId = PatientId;
+        _review.ReviewDate = Clock.Today;
+
+        var result = await Clinical.RecordMedicalReviewAsync(_review);
+        if (result.Failed) return;
+
+        _reviewing = false;
+        _review = new MedicalHistoryReview();
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+}

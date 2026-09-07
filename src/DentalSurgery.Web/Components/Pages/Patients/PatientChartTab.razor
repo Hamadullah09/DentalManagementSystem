@@ -1,0 +1,385 @@
+@inject ClinicalService Clinical
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <div class="btn-group btn-group-sm">
+        @foreach (var dentition in new[] { Dentition.Permanent, Dentition.Primary, Dentition.Mixed })
+        {
+            <button class="btn @(_dentition == dentition ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => ChangeDentition(dentition)">
+                @Ui.Humanise(dentition)
+            </button>
+        }
+    </div>
+
+    <div class="d-flex align-items-center gap-1 ms-2">
+        <label class="form-label mb-0">Chart as at</label>
+        <input type="date" class="form-control form-control-sm" style="width:auto;"
+               value="@_asOf.ToString("yyyy-MM-dd")" @onchange="OnAsOfChanged" />
+        @if (_asOf != Clock.Today)
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="ResetAsOf">Today</button>
+        }
+    </div>
+
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        @if (_chart is not null)
+        {
+            <span class="chip">DMFT @_chart.Dmft</span>
+            <span class="chip">@_chart.PresentCount present</span>
+            <span class="chip">@_chart.CariousCount carious</span>
+            <span class="chip">@_chart.PlannedWorkCount planned</span>
+        }
+    </div>
+</div>
+
+<Odontogram Chart="_chart"
+            SelectedToothId="_selected?.Tooth.Id"
+            OnToothSelected="SelectTooth"
+            OnSurfaceSelected="SelectSurface" />
+
+<div class="row g-3 mt-0">
+
+    @* ------------------------------------------------ finding entry *@
+    <div class="col-12 col-lg-5">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>@(_selected is null ? "Record a finding" : $"Tooth {_selected.Tooth.FdiNumber} - {_selected.Tooth.Name}")</h3>
+                @if (_selected is not null)
+                {
+                    <span class="badge-ds b-neutral ms-auto">@_selected.StatusSummary</span>
+                }
+            </div>
+
+            @if (_selected is null)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.87rem;">
+                    Select a tooth on the chart above to record a finding. Clicking an individual
+                    surface pre-selects it.
+                </div>
+            }
+            else
+            {
+                <div class="card-ds-body">
+                    @if (!string.IsNullOrEmpty(_error))
+                    {
+                        <div class="alert-ds a-danger mb-2">
+                            <Icon Name="alert-circle" Size="15" /><div>@_error</div>
+                        </div>
+                    }
+
+                    <div class="mb-2">
+                        <label class="form-label">Finding</label>
+                        <select class="form-select form-select-sm" @bind="_conditionType">
+                            @foreach (var group in ConditionGroups)
+                            {
+                                <optgroup label="@group.Key">
+                                    @foreach (var condition in group.Value)
+                                    {
+                                        <option value="@condition">@Ui.Humanise(condition)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Surfaces</label>
+                        <div class="d-flex gap-1 flex-wrap">
+                            @foreach (var surface in AvailableSurfaces(_selected.Tooth))
+                            {
+                                <button type="button"
+                                        class="btn btn-sm @(_surfaces.HasFlag(surface) ? "btn-primary" : "btn-outline-secondary")"
+                                        @onclick="() => ToggleSurface(surface)">
+                                    @SurfaceNotation.ToCode(surface)
+                                </button>
+                            }
+                            <button type="button"
+                                    class="btn btn-sm @(_surfaces == ToothSurface.Whole ? "btn-primary" : "btn-outline-secondary")"
+                                    @onclick="() => _surfaces = ToothSurface.Whole">
+                                Whole
+                            </button>
+                        </div>
+                        @if (_surfaces != ToothSurface.None)
+                        {
+                            <div class="text-muted mt-1" style="font-size:.78rem;">
+                                Selected: <span class="mono">@SurfaceNotation.ToCode(_surfaces)</span>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label">Status</label>
+                            <select class="form-select form-select-sm" @bind="_status">
+                                @foreach (var status in new[] { ChartEntryStatus.Existing, ChartEntryStatus.Planned, ChartEntryStatus.Watch, ChartEntryStatus.Completed })
+                                {
+                                    <option value="@status">@Ui.Humanise(status)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Material</label>
+                            <select class="form-select form-select-sm" @bind="_material">
+                                @foreach (var material in Enum.GetValues<RestorationMaterial>())
+                                {
+                                    <option value="@material">@Ui.Humanise(material)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="_notes"
+                                  placeholder="Clinical detail, extent, or the reason for watching"></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-primary" @onclick="SaveFinding" disabled="@_saving">
+                            @if (_saving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Record finding
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => _selected = null">Cancel</button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ------------------------------------------------ tooth history *@
+    <div class="col-12 col-lg-7">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>@(_selected is null ? "Charting history" : $"History for tooth {_selected.Tooth.FdiNumber}")</h3>
+                <span class="badge-ds b-neutral ms-auto">@_history.Count entries</span>
+            </div>
+
+            @if (_history.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.87rem;">
+                    @(_selected is null
+                        ? "Select a tooth to see everything recorded against it."
+                        : "Nothing has been charted on this tooth yet.")
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+                    <table class="table-ds">
+                        <thead>
+                            <tr>
+                                <th class="nowrap">Date</th>
+                                <th>Finding</th>
+                                <th>Surfaces</th>
+                                <th>Status</th>
+                                <th>Recorded by</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in _history)
+                            {
+                                <tr style="@(entry.IsActive ? "" : "opacity:.55;")">
+                                    <td class="nowrap">@Ui.DateShort(entry.RecordedOn)</td>
+                                    <td>
+                                        <div style="font-weight:500;">@Ui.Humanise(entry.ConditionType)</div>
+                                        @if (entry.Material != RestorationMaterial.None)
+                                        {
+                                            <div class="text-faint" style="font-size:.72rem;">@Ui.Humanise(entry.Material)</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(entry.Notes))
+                                        {
+                                            <div class="text-muted" style="font-size:.74rem;">@Ui.Truncate(entry.Notes, 70)</div>
+                                        }
+                                    </td>
+                                    <td class="mono">@(string.IsNullOrEmpty(entry.SurfaceCode) ? "-" : entry.SurfaceCode)</td>
+                                    <td>
+                                        <span class="badge-ds @(entry.Status switch
+                                        {
+                                            ChartEntryStatus.Completed => "b-success",
+                                            ChartEntryStatus.Planned => "b-info",
+                                            ChartEntryStatus.Watch => "b-warning",
+                                            ChartEntryStatus.Voided => "b-danger",
+                                            _ => "b-neutral"
+                                        })">@Ui.Humanise(entry.Status)</span>
+                                        @if (!entry.IsActive && entry.Status != ChartEntryStatus.Voided)
+                                        {
+                                            <div class="text-faint" style="font-size:.68rem;">superseded</div>
+                                        }
+                                    </td>
+                                    <td style="font-size:.79rem;">@(entry.RecordedByStaff?.DisplayName ?? "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private DentalChart? _chart;
+    private ToothState? _selected;
+    private List<ToothConditionRecord> _history = new();
+
+    private Dentition _dentition = Dentition.Permanent;
+    private DateOnly _asOf;
+    private bool _saving;
+    private string? _error;
+
+    private ToothConditionType _conditionType = ToothConditionType.Caries;
+    private ToothSurface _surfaces = ToothSurface.None;
+    private ChartEntryStatus _status = ChartEntryStatus.Existing;
+    private RestorationMaterial _material = RestorationMaterial.None;
+    private string _notes = string.Empty;
+
+    private static readonly Dictionary<string, ToothConditionType[]> ConditionGroups = new()
+    {
+        ["Disease"] = new[]
+        {
+            ToothConditionType.Caries, ToothConditionType.Fracture, ToothConditionType.Abscess,
+            ToothConditionType.PeriapicalLesion, ToothConditionType.Attrition, ToothConditionType.Abrasion,
+            ToothConditionType.Erosion, ToothConditionType.Abfraction, ToothConditionType.Recession,
+            ToothConditionType.Mobility, ToothConditionType.Calculus, ToothConditionType.Hypoplasia
+        },
+        ["Restorations"] = new[]
+        {
+            ToothConditionType.Restoration, ToothConditionType.TemporaryRestoration, ToothConditionType.Sealant,
+            ToothConditionType.Inlay, ToothConditionType.Onlay, ToothConditionType.Crown,
+            ToothConditionType.Veneer, ToothConditionType.PostAndCore
+        },
+        ["Endodontics"] = new[] { ToothConditionType.RootCanalTreated },
+        ["Prosthetics"] = new[]
+        {
+            ToothConditionType.Implant, ToothConditionType.ImplantCrown, ToothConditionType.BridgeAbutment,
+            ToothConditionType.BridgePontic, ToothConditionType.Denture, ToothConditionType.PartialDenture,
+            ToothConditionType.SpaceMaintainer
+        },
+        ["Presence"] = new[]
+        {
+            ToothConditionType.Missing, ToothConditionType.Extracted, ToothConditionType.Unerupted,
+            ToothConditionType.Impacted, ToothConditionType.PartiallyErupted, ToothConditionType.RetainedRoot,
+            ToothConditionType.Supernumerary
+        },
+        ["Other"] = new[]
+        {
+            ToothConditionType.Watch, ToothConditionType.Discolouration, ToothConditionType.Diastema,
+            ToothConditionType.OrthodonticBracket, ToothConditionType.Sound, ToothConditionType.Other
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asOf = Clock.Today;
+        await LoadChartAsync();
+    }
+
+    private async Task LoadChartAsync()
+    {
+        _chart = await Clinical.GetChartAsync(PatientId, _dentition, _asOf);
+
+        // Keep the current selection pointing at the refreshed state object.
+        if (_selected is not null)
+            _selected = _chart.AllTeeth.FirstOrDefault(t => t.Tooth.Id == _selected.Tooth.Id);
+    }
+
+    private async Task ChangeDentition(Dentition dentition)
+    {
+        _dentition = dentition;
+        _selected = null;
+        _history = new List<ToothConditionRecord>();
+        await LoadChartAsync();
+    }
+
+    private async Task OnAsOfChanged(ChangeEventArgs args)
+    {
+        if (DateOnly.TryParse(args.Value?.ToString(), out var date))
+        {
+            _asOf = date;
+            await LoadChartAsync();
+        }
+    }
+
+    private async Task ResetAsOf()
+    {
+        _asOf = Clock.Today;
+        await LoadChartAsync();
+    }
+
+    private async Task SelectTooth(ToothState state)
+    {
+        _selected = state;
+        _error = null;
+        _surfaces = ToothSurface.None;
+        _history = await Clinical.GetToothHistoryAsync(PatientId, state.Tooth.Id);
+    }
+
+    private void SelectSurface((ToothState Tooth, ToothSurface Surface) selection)
+    {
+        _surfaces |= selection.Surface;
+    }
+
+    private void ToggleSurface(ToothSurface surface)
+    {
+        if (_surfaces == ToothSurface.Whole) _surfaces = ToothSurface.None;
+        if (_surfaces.HasFlag(surface)) _surfaces &= ~surface;
+        else _surfaces |= surface;
+    }
+
+    private static IEnumerable<ToothSurface> AvailableSurfaces(Tooth tooth)
+    {
+        var candidates = new[]
+        {
+            ToothSurface.Mesial, ToothSurface.Distal, ToothSurface.Buccal,
+            tooth.Arch == DentalArch.Upper ? ToothSurface.Palatal : ToothSurface.Lingual,
+            tooth.HasOcclusalSurface ? ToothSurface.Occlusal : ToothSurface.Incisal,
+            ToothSurface.Cervical
+        };
+
+        return candidates.Where(s => tooth.ValidSurfaces.HasFlag(s));
+    }
+
+    private async Task SaveFinding()
+    {
+        if (_selected is null) return;
+
+        _saving = true;
+        _error = null;
+
+        var record = new ToothConditionRecord
+        {
+            PatientId = PatientId,
+            ToothId = _selected.Tooth.Id,
+            Surfaces = _surfaces,
+            ConditionType = _conditionType,
+            Status = _status,
+            Material = _material,
+            RecordedOn = Clock.Today,
+            Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes
+        };
+
+        var result = await Clinical.RecordToothConditionAsync(record);
+        _saving = false;
+
+        if (result.Failed)
+        {
+            _error = result.ErrorMessage;
+            return;
+        }
+
+        _notes = string.Empty;
+        _surfaces = ToothSurface.None;
+        _material = RestorationMaterial.None;
+
+        await LoadChartAsync();
+        if (_selected is not null)
+            _history = await Clinical.GetToothHistoryAsync(PatientId, _selected.Tooth.Id);
+    }
+}

@@ -1,0 +1,37 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EFCoreVersion>8.0.10</EFCoreVersion>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    Transitive security pins.
+
+    These arrive indirectly - Azure.Identity and its Identity/crypto dependencies
+    come in through Microsoft.Data.SqlClient, and SQLitePCLRaw through the SQLite
+    provider - at versions carrying published advisories, two of them High. A
+    transitive package cannot be upgraded in place, so each is pinned here as a
+    direct reference at a patched version, which wins over the version the
+    dependency graph asked for.
+
+    The CI 'security' job fails the build on any vulnerable package, so this list
+    is enforced rather than merely intended. Re-check it whenever the EF Core or
+    SqlClient versions move; entries that the graph has caught up with can be
+    removed.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.12.1" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.65.0" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.4" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="2.1.13" />
+    <PackageReference Include="SQLitePCLRaw.provider.e_sqlite3" Version="2.1.13" />
+  </ItemGroup>
+</Project>

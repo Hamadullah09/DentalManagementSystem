@@ -1,0 +1,128 @@
+@* Identity strip plus the clinical safety flags shown on every patient screen. *@
+
+<div class="patient-banner">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+
+        <div class="patient-identity">
+            <span class="avatar">@Ui.Initials(Patient.Name.FirstName, Patient.Name.LastName)</span>
+            <div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h2 class="mb-0">@Patient.Name.Display</h2>
+                    <span class="badge-ds @Ui.BadgeFor(Patient.Status)">@Ui.Humanise(Patient.Status)</span>
+                    @if (Patient.IsMinor)
+                    {
+                        <span class="badge-ds b-purple">Under 18</span>
+                    }
+                    @if (Patient.RequiresInterpreter)
+                    {
+                        <span class="badge-ds b-info">Interpreter: @Patient.PreferredLanguage</span>
+                    }
+                </div>
+                <div class="text-muted" style="font-size:.8rem;">
+                    @Patient.PatientNumber
+                    @if (Patient.AgeYears.HasValue)
+                    {
+                        <span> &middot; @Patient.AgeYears years (@Ui.Date(Patient.DateOfBirth))</span>
+                    }
+                    @if (Patient.Gender != Gender.Unknown)
+                    {
+                        <span> &middot; @Ui.Humanise(Patient.Gender)</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="patient-meta">
+            <div>
+                <span class="k">Phone</span>
+                <span class="v">@(Patient.Contact.BestPhone ?? "-")</span>
+            </div>
+            <div>
+                <span class="k">Email</span>
+                <span class="v">@Ui.Truncate(Patient.Contact.Email ?? "-", 28)</span>
+            </div>
+            <div>
+                <span class="k">Provider</span>
+                <span class="v">@(Patient.PrimaryProvider?.DisplayName ?? "Unassigned")</span>
+            </div>
+            <div>
+                <span class="k">Recall due</span>
+                <span class="v @(RecallOverdue ? "text-danger" : "")">@Ui.Date(Patient.NextRecallDue)</span>
+            </div>
+            <div>
+                <span class="k">Balance</span>
+                <span class="v @(Patient.AccountBalance > 0 ? "text-danger" : Patient.AccountBalance < 0 ? "text-success" : "")">
+                    @Ui.Money(Patient.AccountBalance)
+                </span>
+            </div>
+        </div>
+
+        @if (Actions is not null)
+        {
+            <div class="d-flex gap-1 flex-wrap no-print">@Actions</div>
+        }
+    </div>
+
+    @if (Risk is not null && Risk.HasAnyFlags)
+    {
+        <div class="mt-2 pt-2" style="border-top:1px solid var(--ds-border);">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="text-muted d-inline-flex align-items-center gap-1" style="font-size:.75rem; font-weight:600;">
+                    <Icon Name="alert-triangle" Size="13" /> Clinical flags
+                </span>
+
+                @foreach (var flag in Risk.Flags.Take(_expanded ? 99 : 6))
+                {
+                    <span class="badge-ds @flag.BadgeClass" title="@flag.Detail">@flag.Title</span>
+                }
+
+                @if (Risk.Flags.Count > 6)
+                {
+                    <button class="btn-ghost" style="font-size:.75rem;" @onclick="() => _expanded = !_expanded">
+                        @(_expanded ? "Show fewer" : $"+{Risk.Flags.Count - 6} more")
+                    </button>
+                }
+
+                <span class="ms-auto badge-ds b-neutral">ASA @Ui.Humanise(Risk.EstimatedAsa).Replace("Asa ", "")</span>
+            </div>
+
+            @if (_expanded)
+            {
+                <div class="mt-2 d-flex flex-column gap-1">
+                    @foreach (var flag in Risk.Flags)
+                    {
+                        <div style="font-size:.8rem;">
+                            <strong>@flag.Title.</strong>
+                            <span class="text-muted">@flag.Detail</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (Alerts is not null && Alerts.Count > 0)
+    {
+        <div class="mt-2 d-flex flex-column gap-1">
+            @foreach (var alert in Alerts.Where(a => a.Severity >= AlertSeverity.High))
+            {
+                <div class="alert-ds a-danger py-1">
+                    <Icon Name="alert-triangle" Size="14" />
+                    <div><strong>@alert.Title.</strong> @alert.Detail</div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Patient Patient { get; set; } = default!;
+    [Parameter] public MedicalRiskProfile? Risk { get; set; }
+    [Parameter] public IReadOnlyList<PatientAlert>? Alerts { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    private bool _expanded;
+
+    private bool RecallOverdue =>
+        Patient.NextRecallDue.HasValue && Patient.NextRecallDue < DateOnly.FromDateTime(DateTime.Today);
+}

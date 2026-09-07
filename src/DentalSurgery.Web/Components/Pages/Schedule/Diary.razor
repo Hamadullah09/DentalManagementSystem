@@ -1,0 +1,551 @@
+@page "/schedule"
+@attribute [Authorize(Policy = Policies.CanManageSchedule)]
+@inject AppointmentService Appointments
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Appointment book - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Appointment book" Subtitle="@_date.ToString("dddd d MMMM yyyy")">
+    <Actions>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" @onclick="() => Shift(-7)" title="Previous week">&laquo;</button>
+            <button class="btn btn-outline-secondary" @onclick="() => Shift(-1)"><Icon Name="chevron-left" Size="13" /></button>
+            <button class="btn btn-outline-secondary" @onclick="Today">Today</button>
+            <button class="btn btn-outline-secondary" @onclick="() => Shift(1)"><Icon Name="chevron-right" Size="13" /></button>
+            <button class="btn btn-outline-secondary" @onclick="() => Shift(7)" title="Next week">&raquo;</button>
+        </div>
+        <input type="date" class="form-control form-control-sm" style="width:auto;"
+               value="@_date.ToString("yyyy-MM-dd")" @onchange="OnDateChanged" />
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="() => StartBooking(null, null)">
+            <Icon Name="plus" Size="13" /> New appointment
+        </button>
+    </Actions>
+</PageHeader>
+
+@if (_sheet is null)
+{
+    <div class="loading-bar mb-3"></div>
+    <div class="skeleton" style="height:480px;"></div>
+}
+else
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Booked" Value="@_sheet.Appointments.Count(a => a.IsActiveBooking).ToString()"
+                  Accent="primary" Icon="calendar"
+                  Caption="@($"{_sheet.TotalBookedMinutes} minutes of chair time")" />
+        <StatTile Label="Waiting" Value="@_sheet.ArrivedCount.ToString()" Accent="warning" Icon="clock" />
+        <StatTile Label="In treatment" Value="@_sheet.InTreatmentCount.ToString()" Accent="purple" />
+        <StatTile Label="Completed" Value="@_sheet.CompletedCount.ToString()" Accent="success" Icon="check-circle" />
+        <StatTile Label="Unconfirmed" Value="@_sheet.UnconfirmedCount.ToString()"
+                  Accent="@(_sheet.UnconfirmedCount > 0 ? "danger" : "neutral")" Icon="alert-circle" />
+    </div>
+
+    @if (_sheet.IsClosed)
+    {
+        <div class="alert-ds a-warning mb-3">
+            <Icon Name="alert-circle" Size="16" />
+            <div><strong>The clinic is closed on this date.</strong> @_sheet.ClosureReason</div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+            <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" />
+            <div style="white-space:pre-line;">@_message</div>
+        </div>
+    }
+
+    @* -------------------------------------------------- the grid *@
+    <div class="diary" style="grid-template-columns: 62px repeat(@_sheet.Operatories.Count, minmax(150px, 1fr));">
+
+        <div class="diary-time corner"></div>
+        @foreach (var operatory in _sheet.Operatories)
+        {
+            <div class="diary-cell-head">
+                <span class="dot me-1" style="background:@(operatory.ColourHex ?? "#6c757d")"></span>
+                @operatory.Name
+                @if (operatory.IsSurgicalSuite)
+                {
+                    <div class="text-faint" style="font-size:.68rem; font-weight:400;">Surgical suite</div>
+                }
+            </div>
+        }
+
+        @foreach (var slot in TimeSlots)
+        {
+            var isHour = slot.Minutes % 60 == 0;
+
+            <div class="diary-time @(isHour ? "hour" : "")">
+                @(isHour ? slot.Label : "")
+            </div>
+
+            foreach (var operatory in _sheet.Operatories)
+            {
+                var appointment = FindAppointment(operatory.Id, slot.Minutes);
+                var isStart = appointment is not null && StartMinutes(appointment) == slot.Minutes;
+                var occupied = appointment is not null && !isStart;
+
+                <div class="diary-slot @(isHour ? "hour" : "")"
+                     @onclick="() => OnSlotClick(operatory.Id, slot.Minutes, appointment)">
+                    @if (isStart && appointment is not null)
+                    {
+                        var span = Math.Max(1, appointment.DurationMinutes / SlotMinutes);
+                        <div class="appt @Ui.SlotClassFor(appointment.Status)"
+                             style="position:absolute; inset:1px; height:calc(@(span * 100)% + @((span - 1) * 1)px); z-index:1;">
+                            <span class="name">@(appointment.Patient?.Name.Display ?? "Unknown")</span>
+                            <span class="detail">
+                                @appointment.StartUtc.ToString("HH:mm") &middot; @Ui.Humanise(appointment.AppointmentType)
+                            </span>
+                            @if (span >= 2)
+                            {
+                                <span class="detail">@(appointment.Provider?.Name.Display ?? "-")</span>
+                            }
+                        </div>
+                    }
+                    else if (occupied)
+                    {
+                        <span></span>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    @if (_sheet.Unassigned.Any())
+    {
+        <div class="card-ds mt-3">
+            <div class="card-ds-header">
+                <h3>Not assigned to a surgery</h3>
+                <span class="badge-ds b-warning">@_sheet.Unassigned.Count()</span>
+            </div>
+            <div class="card-ds-body d-flex gap-2 flex-wrap">
+                @foreach (var appointment in _sheet.Unassigned)
+                {
+                    <div class="appt @Ui.SlotClassFor(appointment.Status)" style="min-width:180px; padding:.4rem .6rem;"
+                         @onclick="() => OpenAppointment(appointment)">
+                        <span class="name">@(appointment.Patient?.Name.Display ?? "Unknown")</span>
+                        <span class="detail">@appointment.StartUtc.ToString("HH:mm") &middot; @(appointment.Provider?.Name.Display ?? "-")</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@* -------------------------------------------------- booking dialog *@
+@if (_booking is not null)
+{
+    <div class="card-ds" style="position:fixed; right:1.5rem; bottom:1.5rem; width:min(460px, calc(100vw - 3rem)); z-index:70; box-shadow:var(--ds-shadow-lg);">
+        <div class="card-ds-header">
+            <h3>@(_bookingIsExisting ? "Appointment" : "New appointment")</h3>
+            <button class="btn-ghost ms-auto" @onclick="CloseBooking"><Icon Name="x" Size="15" /></button>
+        </div>
+
+        <div class="card-ds-body" style="max-height:56vh; overflow-y:auto;">
+            @if (_bookingIsExisting)
+            {
+                <div class="mb-2">
+                    <div style="font-weight:600; font-size:1rem;">@(_booking.Patient?.Name.Display ?? "Unknown")</div>
+                    <div class="text-muted" style="font-size:.8rem;">
+                        @_booking.Patient?.PatientNumber &middot;
+                        @_booking.StartUtc.ToString("HH:mm")-@_booking.EndUtc.ToString("HH:mm") &middot;
+                        @Ui.Humanise(_booking.AppointmentType)
+                    </div>
+                    <span class="badge-ds @Ui.BadgeFor(_booking.Status) mt-1">@Ui.Humanise(_booking.Status)</span>
+                </div>
+
+                <div class="form-label">Move through the visit</div>
+                <div class="d-flex gap-1 flex-wrap mb-3">
+                    @foreach (var status in WorkflowStatuses)
+                    {
+                        <button class="btn btn-sm @(_booking.Status == status ? "btn-primary" : "btn-outline-secondary")"
+                                @onclick="() => SetStatus(status)">
+                            @Ui.Humanise(status)
+                        </button>
+                    }
+                </div>
+
+                <div class="d-flex gap-2">
+                    <a href="/patients/@_booking.PatientId" class="btn btn-sm btn-outline-secondary">Open record</a>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => _cancelling = !_cancelling">Cancel booking</button>
+                </div>
+
+                @if (_cancelling)
+                {
+                    <div class="mt-2">
+                        <input class="form-control form-control-sm mb-1" @bind="_cancelReason" placeholder="Reason" />
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-danger" @onclick="() => Cancel(false)">Cancel appointment</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Cancel(true)">Mark as did not attend</button>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="mb-2">
+                    <label class="form-label">Patient *</label>
+                    <input class="form-control form-control-sm" placeholder="Search by name or number"
+                           value="@_patientQuery" @oninput="OnPatientSearch" />
+                    @if (_patientMatches.Count > 0)
+                    {
+                        <div class="mt-1" style="max-height:150px; overflow-y:auto; border:1px solid var(--ds-border); border-radius:6px;">
+                            @foreach (var candidate in _patientMatches)
+                            {
+                                <button type="button" class="d-block w-100 text-start border-0 bg-transparent"
+                                        style="padding:.35rem .5rem; font-size:.83rem;"
+                                        @onclick="() => ChoosePatient(candidate)">
+                                    @candidate.DisplayName
+                                    <span class="text-faint">&middot; @candidate.PatientNumber</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    @if (_chosenPatient is not null)
+                    {
+                        <div class="chip mt-1">
+                            @_chosenPatient.DisplayName &middot; @_chosenPatient.PatientNumber
+                            <button class="btn-ghost p-0 ms-1" @onclick="() => _chosenPatient = null"><Icon Name="x" Size="11" /></button>
+                        </div>
+                    }
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control form-control-sm"
+                               value="@_bookingDate.ToString("yyyy-MM-dd")"
+                               @onchange="e => _bookingDate = DateOnly.TryParse(e.Value?.ToString(), out var d) ? d : _bookingDate" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Start time</label>
+                        <input type="time" class="form-control form-control-sm"
+                               value="@_bookingTime.ToString("HH\\:mm")"
+                               @onchange="e => _bookingTime = TimeSpan.TryParse(e.Value?.ToString(), out var t) ? t : _bookingTime" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Duration (minutes)</label>
+                        <select class="form-select form-select-sm" @bind="_bookingDuration">
+                            @foreach (var minutes in new[] { 15, 20, 30, 40, 45, 60, 75, 90, 120, 150, 180 })
+                            {
+                                <option value="@minutes">@minutes</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Type</label>
+                        <select class="form-select form-select-sm" @bind="_bookingType">
+                            @foreach (var type in Enum.GetValues<AppointmentType>())
+                            {
+                                <option value="@type">@Ui.Humanise(type)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Provider</label>
+                        <select class="form-select form-select-sm" @bind="_bookingProviderId">
+                            <option value="">Select</option>
+                            @foreach (var provider in _providers)
+                            {
+                                <option value="@provider.Id">@provider.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Surgery</label>
+                        <select class="form-select form-select-sm" @bind="_bookingOperatoryId">
+                            <option value="">Select</option>
+                            @foreach (var operatory in _sheet?.Operatories ?? new List<Operatory>())
+                            {
+                                <option value="@operatory.Id">@operatory.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Reason</label>
+                        <input class="form-control form-control-sm" @bind="_bookingReason"
+                               placeholder="What the appointment is for" />
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (!_bookingIsExisting)
+        {
+            <div class="card-ds-footer d-flex gap-2">
+                <button class="btn btn-sm btn-primary" @onclick="() => Book(false)" disabled="@_working">Book</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => Book(true)" disabled="@_working">
+                    Book anyway
+                </button>
+                <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="CloseBooking">Close</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private const int SlotMinutes = 15;
+
+    [SupplyParameterFromQuery(Name = "patient")] private Guid? PatientFromQuery { get; set; }
+
+    private DateOnly _date;
+    private DaySheet? _sheet;
+    private List<Staff> _providers = new();
+
+    private Appointment? _booking;
+    private bool _bookingIsExisting;
+    private bool _working;
+    private string? _message;
+    private bool _isError;
+
+    private DateOnly _bookingDate;
+    private TimeSpan _bookingTime = new(9, 0, 0);
+    private int _bookingDuration = 30;
+    private AppointmentType _bookingType = AppointmentType.RoutineExam;
+    private string _bookingProviderId = string.Empty;
+    private string _bookingOperatoryId = string.Empty;
+    private string _bookingReason = string.Empty;
+
+    private string _patientQuery = string.Empty;
+    private List<PatientListItem> _patientMatches = new();
+    private PatientListItem? _chosenPatient;
+
+    private bool _cancelling;
+    private string _cancelReason = string.Empty;
+
+    private static readonly AppointmentStatus[] WorkflowStatuses =
+    {
+        AppointmentStatus.Confirmed, AppointmentStatus.ArrivedWaiting, AppointmentStatus.Seated,
+        AppointmentStatus.InTreatment, AppointmentStatus.Completed, AppointmentStatus.CheckedOut
+    };
+
+    private record Slot(int Minutes, string Label);
+
+    private IEnumerable<Slot> TimeSlots
+    {
+        get
+        {
+            var start = (int)(_sheet?.DayStart.TotalMinutes ?? 480);
+            var end = (int)(_sheet?.DayEnd.TotalMinutes ?? 1080);
+
+            for (var minutes = start; minutes < end; minutes += SlotMinutes)
+                yield return new Slot(minutes, TimeSpan.FromMinutes(minutes).ToString(@"hh\:mm"));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _date = Clock.Today;
+        _bookingDate = _date;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _providers = await db.Staff.AsNoTracking()
+            .Where(s => s.IsActive && s.IsProvider)
+            .OrderBy(s => s.Name.LastName).ToListAsync();
+
+        await LoadAsync();
+
+        if (PatientFromQuery is { } patientId)
+        {
+            var patient = await db.Patients.AsNoTracking()
+                .Where(p => p.Id == patientId)
+                .Select(p => new { p.Id, p.PatientNumber, Display = p.Name.FirstName + " " + p.Name.LastName })
+                .FirstOrDefaultAsync();
+
+            if (patient is not null)
+            {
+                _chosenPatient = new PatientListItem(patient.Id, patient.PatientNumber, patient.Display,
+                    patient.Display, null, null, Gender.Unknown, null, null, PatientStatus.Active,
+                    0, null, null, null, 0, 0);
+                StartBooking(null, null);
+            }
+        }
+    }
+
+    private async Task LoadAsync() => _sheet = await Appointments.GetDaySheetAsync(_date);
+
+    private async Task Shift(int days)
+    {
+        _date = _date.AddDays(days);
+        _message = null;
+        await LoadAsync();
+    }
+
+    private async Task Today()
+    {
+        _date = Clock.Today;
+        await LoadAsync();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs args)
+    {
+        if (DateOnly.TryParse(args.Value?.ToString(), out var date))
+        {
+            _date = date;
+            await LoadAsync();
+        }
+    }
+
+    private Appointment? FindAppointment(Guid operatoryId, int slotMinutes) =>
+        _sheet?.Appointments.FirstOrDefault(a =>
+            a.OperatoryId == operatoryId &&
+            a.IsActiveBooking &&
+            StartMinutes(a) <= slotMinutes &&
+            EndMinutes(a) > slotMinutes);
+
+    private static int StartMinutes(Appointment appointment) =>
+        (int)appointment.StartUtc.TimeOfDay.TotalMinutes / SlotMinutes * SlotMinutes;
+
+    private static int EndMinutes(Appointment appointment) =>
+        (int)appointment.EndUtc.TimeOfDay.TotalMinutes;
+
+    private void OnSlotClick(Guid operatoryId, int slotMinutes, Appointment? appointment)
+    {
+        if (appointment is not null) OpenAppointment(appointment);
+        else StartBooking(operatoryId, slotMinutes);
+    }
+
+    private void OpenAppointment(Appointment appointment)
+    {
+        _booking = appointment;
+        _bookingIsExisting = true;
+        _cancelling = false;
+        _message = null;
+    }
+
+    private void StartBooking(Guid? operatoryId, int? slotMinutes)
+    {
+        _booking = new Appointment();
+        _bookingIsExisting = false;
+        _bookingDate = _date;
+        _bookingTime = slotMinutes.HasValue ? TimeSpan.FromMinutes(slotMinutes.Value) : new TimeSpan(9, 0, 0);
+        _bookingOperatoryId = operatoryId?.ToString() ?? string.Empty;
+        _message = null;
+    }
+
+    private void CloseBooking()
+    {
+        _booking = null;
+        _patientMatches = new List<PatientListItem>();
+        _patientQuery = string.Empty;
+    }
+
+    private async Task OnPatientSearch(ChangeEventArgs args)
+    {
+        _patientQuery = args.Value?.ToString() ?? string.Empty;
+
+        if (_patientQuery.Trim().Length < 2)
+        {
+            _patientMatches = new List<PatientListItem>();
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var text = _patientQuery.Trim();
+
+        var matches = await db.Patients.AsNoTracking()
+            .Where(p => p.Name.FirstName.Contains(text) || p.Name.LastName.Contains(text) ||
+                        p.PatientNumber.Contains(text))
+            .OrderBy(p => p.Name.LastName)
+            .Take(6)
+            .Select(p => new { p.Id, p.PatientNumber, Display = p.Name.FirstName + " " + p.Name.LastName })
+            .ToListAsync();
+
+        _patientMatches = matches.Select(m => new PatientListItem(
+            m.Id, m.PatientNumber, m.Display, m.Display, null, null, Gender.Unknown,
+            null, null, PatientStatus.Active, 0, null, null, null, 0, 0)).ToList();
+    }
+
+    private void ChoosePatient(PatientListItem patient)
+    {
+        _chosenPatient = patient;
+        _patientMatches = new List<PatientListItem>();
+        _patientQuery = string.Empty;
+    }
+
+    private async Task Book(bool overrideConflicts)
+    {
+        if (_chosenPatient is null || _sheet is null)
+        {
+            _message = "Select a patient before booking.";
+            _isError = true;
+            return;
+        }
+
+        var start = _bookingDate.ToDateTime(TimeOnly.FromTimeSpan(_bookingTime));
+
+        var appointment = new Appointment
+        {
+            PatientId = _chosenPatient.Id,
+            LocationId = _sheet.LocationId,
+            ProviderId = Guid.TryParse(_bookingProviderId, out var providerId) ? providerId : null,
+            OperatoryId = Guid.TryParse(_bookingOperatoryId, out var operatoryId) ? operatoryId : null,
+            StartUtc = start,
+            EndUtc = start.AddMinutes(_bookingDuration),
+            AppointmentType = _bookingType,
+            Status = AppointmentStatus.Unconfirmed,
+            Reason = string.IsNullOrWhiteSpace(_bookingReason) ? null : _bookingReason
+        };
+
+        _working = true;
+        var result = await Appointments.BookAsync(appointment, overrideConflicts);
+        _working = false;
+
+        if (result.Failed)
+        {
+            _message = string.Join("\n", result.Errors);
+            _isError = true;
+            return;
+        }
+
+        _message = $"Booked {_chosenPatient.DisplayName} at {start:HH:mm} on {start:d MMM yyyy}.";
+        _isError = false;
+        _chosenPatient = null;
+        _bookingReason = string.Empty;
+        CloseBooking();
+
+        if (DateOnly.FromDateTime(start) != _date) _date = DateOnly.FromDateTime(start);
+        await LoadAsync();
+    }
+
+    private async Task SetStatus(AppointmentStatus status)
+    {
+        if (_booking is null) return;
+
+        var result = await Appointments.SetStatusAsync(_booking.Id, status);
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        await LoadAsync();
+        _booking = _sheet?.Appointments.FirstOrDefault(a => a.Id == _booking.Id);
+    }
+
+    private async Task Cancel(bool noShow)
+    {
+        if (_booking is null) return;
+
+        var reason = string.IsNullOrWhiteSpace(_cancelReason)
+            ? (noShow ? "Did not attend" : "Cancelled")
+            : _cancelReason;
+
+        var result = await Appointments.CancelAsync(_booking.Id, reason, noShow);
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        _message = noShow ? "Marked as did not attend." : "Appointment cancelled.";
+        _isError = false;
+        CloseBooking();
+        await LoadAsync();
+    }
+}

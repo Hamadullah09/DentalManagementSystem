@@ -1,0 +1,464 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject DocumentService Documents
+@inject ICurrentUser CurrentUser
+@inject IJSRuntime JS
+
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <AuthorizeView Policy="@Policies.CanEditClinical">
+        <Authorized>
+            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
+                    @onclick='() => Toggle("document")'>
+                <Icon Name="plus" Size="13" /> Attach a document
+            </button>
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                    @onclick='() => Toggle("radiograph")'>
+                <Icon Name="x-ray" Size="13" /> Add a radiograph
+            </button>
+        </Authorized>
+    </AuthorizeView>
+
+    <a class="btn btn-sm btn-outline-secondary ms-auto d-inline-flex align-items-center gap-1"
+       href="/api/exports/documents/clinical-summary/@PatientId" target="_blank" rel="noopener">
+        <Icon Name="printer" Size="13" /> Clinical summary PDF
+    </a>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+@if (_uploading is not null)
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header">
+            <h3>@(_uploading == "radiograph" ? "Add a radiograph" : "Attach a document")</h3>
+            <button class="btn-ghost ms-auto" @onclick="() => _uploading = null"><Icon Name="x" Size="15" /></button>
+        </div>
+        <div class="card-ds-body">
+            <div class="row g-2">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">File</label>
+                    <InputFile class="form-control form-control-sm" OnChange="OnFileSelected"
+                               accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tif,.tiff,.dcm,.zip" />
+                    @if (_selected is not null)
+                    {
+                        <div class="text-faint mt-1" style="font-size:.76rem;">
+                            @_selected.Name &middot; @FormatSize(_selected.Size)
+                        </div>
+                    }
+                </div>
+
+                @if (_uploading == "radiograph")
+                {
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select form-select-sm" @bind="_radiographType">
+                            @foreach (var type in Enum.GetValues<RadiographType>())
+                            {
+                                <option value="@type">@Ui.Humanise(type)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Teeth</label>
+                        <input class="form-control form-control-sm" @bind="_toothNumbers" placeholder="16,17,26" />
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <label class="form-label">kVp</label>
+                        <input type="number" step="0.1" class="form-control form-control-sm" @bind="_kvp" />
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <label class="form-label">Seconds</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" @bind="_seconds" />
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <label class="form-label">Dose µSv</label>
+                        <input type="number" step="0.1" class="form-control form-control-sm" @bind="_dose" />
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label">Quality</label>
+                        <select class="form-select form-select-sm" @bind="_quality">
+                            <option value="Grade 1 - excellent">Grade 1 - excellent</option>
+                            <option value="Grade 2 - diagnostically acceptable">Grade 2 - acceptable</option>
+                            <option value="Grade 3 - unacceptable">Grade 3 - unacceptable</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="d-flex align-items-center gap-2 mt-4" style="font-size:.85rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_isRepeat" />
+                            This is a repeat exposure
+                        </label>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Clinical justification *</label>
+                        <input class="form-control form-control-sm" @bind="_justification"
+                               placeholder="Why this exposure is warranted" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Findings</label>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="_findings"></textarea>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select form-select-sm" @bind="_documentType">
+                            @foreach (var type in Enum.GetValues<DocumentType>())
+                            {
+                                <option value="@type">@Ui.Humanise(type)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="d-flex align-items-center gap-2 mt-4" style="font-size:.85rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_clinicallySignificant" />
+                            Clinically significant
+                        </label>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Title</label>
+                        <input class="form-control form-control-sm" @bind="_title" placeholder="Defaults to the file name" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Description</label>
+                        <input class="form-control form-control-sm" @bind="_description" />
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="card-ds-footer d-flex gap-2 align-items-center">
+            <button class="btn btn-sm btn-primary" @onclick="Upload" disabled="@(_working || _selected is null)">
+                @if (_working)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Upload
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _uploading = null">Cancel</button>
+            <span class="ms-auto text-faint" style="font-size:.76rem;">
+                PDF, JPEG, PNG, GIF, BMP, TIFF, DICOM or ZIP, up to @(DocumentService.MaxUploadBytes / 1024 / 1024) MB.
+                The file type is verified from its contents.
+            </span>
+        </div>
+    </div>
+}
+
+<div class="row g-3">
+
+    <div class="col-12 col-lg-7">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Radiographs and imaging</h3>
+                <span class="badge-ds b-neutral">@_radiographs.Count</span>
+                <span class="ms-auto text-muted" style="font-size:.78rem;">
+                    Cumulative dose @_radiographs.Sum(r => r.DoseMicroSieverts ?? 0).ToString("0.#") µSv
+                </span>
+            </div>
+
+            @if (_radiographs.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">No images recorded.</div>
+            }
+            else
+            {
+                <div class="table-wrap" style="border:0; border-radius:0;">
+                    <table class="table-ds">
+                        <thead>
+                            <tr>
+                                <th class="nowrap">Date</th>
+                                <th>Type</th>
+                                <th>Teeth</th>
+                                <th>Exposure</th>
+                                <th>Quality</th>
+                                <th>Findings</th>
+                                <th style="width:60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var radiograph in _radiographs)
+                            {
+                                <tr>
+                                    <td class="nowrap">@radiograph.TakenAtUtc.ToString("dd/MM/yy")</td>
+                                    <td>
+                                        @Ui.Humanise(radiograph.RadiographType)
+                                        @if (radiograph.IsRepeat)
+                                        {
+                                            <span class="badge-ds b-warning ms-1">Repeat</span>
+                                        }
+                                    </td>
+                                    <td class="mono" style="font-size:.76rem;">@(radiograph.ToothNumbers ?? "-")</td>
+                                    <td class="mono" style="font-size:.74rem;">
+                                        @if (radiograph.KiloVoltagePeak.HasValue)
+                                        {
+                                            <span>@radiograph.KiloVoltagePeak kVp / @radiograph.ExposureSeconds s</span>
+                                            <div class="text-faint">@radiograph.DoseMicroSieverts µSv</div>
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
+                                        }
+                                    </td>
+                                    <td style="font-size:.78rem;">@(radiograph.QualityRating ?? "-")</td>
+                                    <td style="font-size:.79rem;">@Ui.Truncate(radiograph.Findings, 60)</td>
+                                    <td>
+                                        @if (radiograph.DocumentId.HasValue)
+                                        {
+                                            <a class="btn-ghost" title="View the image"
+                                               href="/api/documents/@radiograph.DocumentId" target="_blank" rel="noopener">
+                                                <Icon Name="external" Size="14" />
+                                            </a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <div class="card-ds mb-3">
+            <div class="card-ds-header">
+                <h3>Documents</h3>
+                <span class="badge-ds b-neutral">@_documents.Count</span>
+            </div>
+            @if (_documents.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">No documents attached.</div>
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var document in _documents)
+                    {
+                        <div class="d-flex align-items-center gap-2">
+                            <Icon Name="@IconFor(document.ContentType)" Size="16" CssClass="text-muted" />
+                            <div class="flex-grow-1" style="min-width:0;">
+                                <a href="/api/documents/@document.Id" target="_blank" rel="noopener"
+                                   style="font-size:.85rem; font-weight:500;">@document.Title</a>
+                                <div class="text-faint" style="font-size:.73rem;">
+                                    @Ui.Humanise(document.DocumentType) &middot;
+                                    @FormatSize(document.SizeBytes) &middot;
+                                    @document.UploadedAtUtc.ToString("dd/MM/yy")
+                                    @if (!string.IsNullOrWhiteSpace(document.UploadedBy))
+                                    {
+                                        <span> &middot; @document.UploadedBy</span>
+                                    }
+                                </div>
+                            </div>
+                            @if (document.IsClinicallySignificant)
+                            {
+                                <span class="badge-ds b-info">Clinical</span>
+                            }
+                            <a class="btn-ghost" title="Download" href="/api/documents/@document.Id?download=true">
+                                <Icon Name="download" Size="13" />
+                            </a>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="card-ds">
+            <div class="card-ds-header">
+                <h3>Consent forms</h3>
+                <span class="badge-ds b-neutral">@_consents.Count</span>
+            </div>
+            @if (_consents.Count == 0)
+            {
+                <div class="card-ds-body text-muted" style="font-size:.86rem;">
+                    No consent has been captured. Procedures requiring written consent are blocked until it is.
+                </div>
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var consent in _consents)
+                    {
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <div style="font-size:.85rem; font-weight:500;">
+                                    @(consent.ConsentFormTemplate?.Name ?? "Consent form")
+                                </div>
+                                <div class="text-faint" style="font-size:.73rem;">
+                                    v@(consent.ConsentFormTemplate?.Version ?? "?")
+                                    @if (consent.SignedAtUtc.HasValue)
+                                    {
+                                        <span> &middot; signed @consent.SignedAtUtc.Value.ToString("dd/MM/yy")</span>
+                                    }
+                                    @if (consent.ExpiresOn.HasValue)
+                                    {
+                                        <span> &middot; expires @Ui.DateShort(consent.ExpiresOn)</span>
+                                    }
+                                </div>
+                            </div>
+                            <span class="badge-ds @(consent.IsValid ? "b-success" : consent.Status == ConsentStatus.Pending ? "b-warning" : "b-neutral")">
+                                @(consent.IsValid ? "Valid" : Ui.Humanise(consent.Status))
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<RadiographRecord> _radiographs = new();
+    private List<PatientDocument> _documents = new();
+    private List<PatientConsent> _consents = new();
+
+    private string? _uploading;
+    private IBrowserFile? _selected;
+    private bool _working;
+    private string? _message;
+    private bool _isError;
+
+    private DocumentType _documentType = DocumentType.Other;
+    private string _title = string.Empty;
+    private string _description = string.Empty;
+    private bool _clinicallySignificant;
+
+    private RadiographType _radiographType = RadiographType.Bitewing;
+    private string _toothNumbers = string.Empty;
+    private decimal? _kvp = 65;
+    private decimal? _seconds = 0.16m;
+    private decimal? _dose = 5;
+    private string _quality = "Grade 1 - excellent";
+    private string _justification = string.Empty;
+    private string _findings = string.Empty;
+    private bool _isRepeat;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _radiographs = await db.RadiographRecords.AsNoTracking()
+            .Where(r => r.PatientId == PatientId)
+            .OrderByDescending(r => r.TakenAtUtc).ToListAsync();
+
+        _documents = await db.PatientDocuments.AsNoTracking()
+            .Where(d => d.PatientId == PatientId)
+            .OrderByDescending(d => d.UploadedAtUtc).ToListAsync();
+
+        _consents = await db.PatientConsents.AsNoTracking()
+            .Include(c => c.ConsentFormTemplate)
+            .Where(c => c.PatientId == PatientId)
+            .OrderByDescending(c => c.SignedAtUtc).ToListAsync();
+    }
+
+    private void Toggle(string mode)
+    {
+        _uploading = _uploading == mode ? null : mode;
+        _selected = null;
+        _message = null;
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs args)
+    {
+        _selected = args.File;
+        if (string.IsNullOrWhiteSpace(_title))
+            _title = Path.GetFileNameWithoutExtension(args.File.Name);
+    }
+
+    private async Task Upload()
+    {
+        if (_selected is null) return;
+
+        if (_uploading == "radiograph" && string.IsNullOrWhiteSpace(_justification))
+        {
+            _message = "Every exposure needs a clinical justification.";
+            _isError = true;
+            return;
+        }
+
+        _working = true;
+
+        try
+        {
+            await using var stream = _selected.OpenReadStream(DocumentService.MaxUploadBytes);
+
+            var upload = new UploadRequest(
+                PatientId, stream, _selected.Name, _selected.ContentType, _selected.Size,
+                _uploading == "radiograph" ? DocumentType.Radiograph : _documentType,
+                string.IsNullOrWhiteSpace(_title) ? null : _title,
+                string.IsNullOrWhiteSpace(_description) ? null : _description,
+                ClinicallySignificant: _uploading == "radiograph" || _clinicallySignificant);
+
+            if (_uploading == "radiograph")
+            {
+                var result = await Documents.UploadRadiographAsync(upload, new RadiographUploadRequest(
+                    _radiographType,
+                    string.IsNullOrWhiteSpace(_toothNumbers) ? null : _toothNumbers,
+                    _kvp, null, _seconds, _dose, _justification, _quality,
+                    string.IsNullOrWhiteSpace(_findings) ? null : _findings,
+                    _isRepeat, null, CurrentUser.StaffId));
+
+                Report(result.Succeeded, result.Succeeded
+                    ? "Radiograph stored and the exposure recorded."
+                    : result.ErrorMessage);
+            }
+            else
+            {
+                var result = await Documents.UploadAsync(upload);
+                Report(result.Succeeded, result.Succeeded
+                    ? $"Attached {result.Value!.FileName}."
+                    : result.ErrorMessage);
+            }
+        }
+        catch (IOException ex)
+        {
+            Report(false, $"The file could not be read: {ex.Message}");
+        }
+        finally
+        {
+            _working = false;
+        }
+
+        if (!_isError)
+        {
+            _uploading = null;
+            _selected = null;
+            _title = string.Empty;
+            _description = string.Empty;
+            _justification = string.Empty;
+            _findings = string.Empty;
+            _toothNumbers = string.Empty;
+        }
+
+        await LoadAsync();
+    }
+
+    private void Report(bool success, string message)
+    {
+        _message = message;
+        _isError = !success;
+    }
+
+    private static string IconFor(string contentType) => contentType switch
+    {
+        var t when t.StartsWith("image/") => "x-ray",
+        "application/pdf" => "file-text",
+        "application/edi-x12" => "external",
+        _ => "file-text"
+    };
+
+    private static string FormatSize(long bytes)
+    {
+        // Written as statements rather than a switch expression: Razor treats a
+        // line starting with '<' inside a code block as markup.
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024} KB";
+        return $"{bytes / 1024.0 / 1024.0:0.#} MB";
+    }
+}

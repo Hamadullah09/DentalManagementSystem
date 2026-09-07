@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/App_Data/
+**/.vs/
+**/.vscode/
+**/node_modules/
+.git/
+.github/
+*.user
+*.db
+*.db-shm
+*.db-wal

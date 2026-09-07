@@ -1,0 +1,179 @@
+@page "/waiting-room"
+@attribute [Authorize]
+@implements IDisposable
+@inject AppointmentService Appointments
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Waiting room - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Waiting room" Subtitle="Live view of who is in the building. Refreshes every 30 seconds.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="LoadAsync">
+            <Icon Name="refresh" Size="13" /> Refresh
+        </button>
+        <a href="/schedule" class="btn btn-sm btn-primary">Appointment book</a>
+    </Actions>
+</PageHeader>
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Waiting" Value="@_waiting.Count.ToString()" Accent="warning" Icon="clock" />
+    <StatTile Label="In the chair" Value="@_inChair.Count.ToString()" Accent="purple" Icon="stethoscope" />
+    <StatTile Label="Longest wait"
+              Value="@(_waiting.Count == 0 ? "-" : $"{LongestWait} min")"
+              Accent="@(LongestWait > 15 ? "danger" : "success")" />
+    <StatTile Label="Average wait today" Value="@($"{AverageWait:0} min")" Accent="accent" />
+</div>
+
+<div class="row g-3">
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Waiting</h3>
+                <span class="badge-ds b-warning">@_waiting.Count</span>
+            </div>
+            @if (_waiting.Count == 0)
+            {
+                <EmptyState IconName="check-circle" Title="Nobody waiting"
+                            Message="Every patient who has arrived is already in a surgery." />
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var appointment in _waiting)
+                    {
+                        var minutes = WaitMinutes(appointment);
+                        <div class="d-flex align-items-center gap-2 p-2"
+                             style="border:1px solid var(--ds-border); border-radius:8px;
+                                    border-left:3px solid @(minutes > 15 ? "var(--ds-danger)" : "var(--ds-warning)");">
+                            <span class="avatar sm">@(appointment.Patient?.Name.FirstName[..1] ?? "?")</span>
+                            <div class="flex-grow-1" style="min-width:0;">
+                                <div style="font-weight:600; font-size:.88rem;">
+                                    @(appointment.Patient?.Name.Display ?? "Unknown")
+                                </div>
+                                <div class="text-muted" style="font-size:.77rem;">
+                                    Booked @appointment.StartUtc.ToString("HH:mm") &middot;
+                                    @(appointment.Provider?.Name.Display ?? "no provider") &middot;
+                                    @Ui.Humanise(appointment.AppointmentType)
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <div class="mono @(minutes > 15 ? "text-danger fw-bold" : "")" style="font-size:.9rem;">
+                                    @minutes min
+                                </div>
+                                <button class="btn btn-sm btn-primary mt-1" @onclick="() => Seat(appointment.Id)">
+                                    Seat
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>In treatment</h3>
+                <span class="badge-ds b-purple">@_inChair.Count</span>
+            </div>
+            @if (_inChair.Count == 0)
+            {
+                <EmptyState IconName="stethoscope" Title="No one in a chair"
+                            Message="Surgeries are free." />
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var appointment in _inChair)
+                    {
+                        <div class="d-flex align-items-center gap-2 p-2"
+                             style="border:1px solid var(--ds-border); border-radius:8px; border-left:3px solid var(--ds-purple);">
+                            <span class="avatar sm">@(appointment.Patient?.Name.FirstName[..1] ?? "?")</span>
+                            <div class="flex-grow-1" style="min-width:0;">
+                                <div style="font-weight:600; font-size:.88rem;">
+                                    @(appointment.Patient?.Name.Display ?? "Unknown")
+                                </div>
+                                <div class="text-muted" style="font-size:.77rem;">
+                                    @(appointment.Operatory?.Name ?? "no surgery") &middot;
+                                    @(appointment.Provider?.Name.Display ?? "no provider")
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <div class="mono" style="font-size:.85rem;">
+                                    @ChairMinutes(appointment) min
+                                </div>
+                                <div class="d-flex gap-1 mt-1">
+                                    <a href="/patients/@appointment.PatientId/chart" class="btn btn-sm btn-outline-secondary">Chart</a>
+                                    <button class="btn btn-sm btn-success" @onclick="() => Complete(appointment.Id)">Done</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Appointment> _all = new();
+    private List<Appointment> _waiting = new();
+    private List<Appointment> _inChair = new();
+    private Timer? _timer;
+
+    private int LongestWait => _waiting.Count == 0 ? 0 : _waiting.Max(WaitMinutes);
+
+    private double AverageWait
+    {
+        get
+        {
+            var waits = _all.Where(a => a.WaitingMinutes.HasValue).Select(a => a.WaitingMinutes!.Value).ToList();
+            return waits.Count == 0 ? 0 : Math.Round(waits.Average(), 0);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        _timer = new Timer(async _ =>
+        {
+            await LoadAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task LoadAsync()
+    {
+        _all = await Appointments.GetWaitingRoomAsync();
+        _waiting = _all.Where(a => a.Status == AppointmentStatus.ArrivedWaiting).ToList();
+        _inChair = _all.Where(a => a.Status is AppointmentStatus.Seated or AppointmentStatus.InTreatment).ToList();
+    }
+
+    private int WaitMinutes(Appointment appointment) =>
+        appointment.ArrivedAtUtc.HasValue
+            ? Math.Max(0, (int)(Clock.UtcNow - appointment.ArrivedAtUtc.Value).TotalMinutes)
+            : 0;
+
+    private int ChairMinutes(Appointment appointment) =>
+        appointment.SeatedAtUtc.HasValue
+            ? Math.Max(0, (int)(Clock.UtcNow - appointment.SeatedAtUtc.Value).TotalMinutes)
+            : 0;
+
+    private async Task Seat(Guid appointmentId)
+    {
+        await Appointments.SetStatusAsync(appointmentId, AppointmentStatus.Seated);
+        await LoadAsync();
+    }
+
+    private async Task Complete(Guid appointmentId)
+    {
+        await Appointments.SetStatusAsync(appointmentId, AppointmentStatus.Completed);
+        await LoadAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

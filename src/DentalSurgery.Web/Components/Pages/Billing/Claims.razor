@@ -1,0 +1,366 @@
+@page "/billing/claims"
+@attribute [Authorize(Policy = Policies.CanManageBilling)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject BillingService Billing
+@inject ClaimSubmissionService Submissions
+@inject IDateTimeProvider Clock
+
+<PageTitle>Insurance claims - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Insurance claims"
+            Subtitle="Submitted claims and pre-authorisations, with what each payer has settled." />
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Claims" Value="@_claims.Count.ToString()" Accent="primary" Icon="file-text" />
+    <StatTile Label="Charged" Value="@Ui.MoneyCompact(_claims.Sum(c => c.TotalCharged))" Accent="accent" />
+    <StatTile Label="Received" Value="@Ui.MoneyCompact(_claims.Sum(c => c.TotalPaid))" Accent="success" />
+    <StatTile Label="Outstanding" Value="@Ui.MoneyCompact(OutstandingValue)" Accent="warning" />
+    <StatTile Label="Over 30 days" Value="@_claims.Count(c => c.DaysOutstanding is > 30).ToString()"
+              Accent="@(_claims.Any(c => c.DaysOutstanding is > 30) ? "danger" : "success")" Icon="clock" />
+    <StatTile Label="Denied" Value="@_claims.Count(c => c.Status == ClaimStatus.Denied).ToString()"
+              Accent="@(_claims.Any(c => c.Status == ClaimStatus.Denied) ? "danger" : "neutral")" />
+</div>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Status</label>
+        <select class="form-select form-select-sm" @bind="_statusFilter">
+            <option value="">All statuses</option>
+            @foreach (var status in Enum.GetValues<ClaimStatus>())
+            {
+                <option value="@status">@Ui.Humanise(status)</option>
+            }
+        </select>
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <button class="btn btn-sm @(_outstandingOnly ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _outstandingOnly = !_outstandingOnly">
+            Awaiting settlement
+        </button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="file-text" Title="No claims"
+                    Message="Claims are raised from a patient's account once treatment is invoiced." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Claim</th>
+                    <th>Patient</th>
+                    <th>Carrier / plan</th>
+                    <th class="nowrap">Service</th>
+                    <th class="nowrap">Submitted</th>
+                    <th class="num">Charged</th>
+                    <th class="num">Paid</th>
+                    <th class="num">Patient</th>
+                    <th class="nowrap">Age</th>
+                    <th style="width:120px;">Status</th>
+                    <th style="width:120px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var claim in Filtered)
+                {
+                    <tr>
+                        <td class="mono">
+                            @claim.ClaimNumber
+                            @if (claim.IsPreAuthorisation)
+                            {
+                                <div><span class="badge-ds b-info">Pre-auth</span></div>
+                            }
+                        </td>
+                        <td>
+                            <a href="/patients/@claim.PatientId/insurance" style="font-weight:600;">
+                                @(claim.Patient?.Name.Display ?? "Unknown")
+                            </a>
+                        </td>
+                        <td style="font-size:.8rem;">
+                            <div>@(claim.PatientInsurance?.InsurancePlan?.InsuranceCarrier?.Name ?? "-")</div>
+                            <div class="text-faint">@(claim.PatientInsurance?.InsurancePlan?.PlanName ?? "")</div>
+                        </td>
+                        <td class="nowrap">@Ui.DateShort(claim.ServiceDate)</td>
+                        <td class="nowrap">@Ui.DateShort(claim.SubmittedOn)</td>
+                        <td class="num mono">@Ui.Money(claim.TotalCharged)</td>
+                        <td class="num mono text-success">@Ui.Money(claim.TotalPaid)</td>
+                        <td class="num mono">@Ui.Money(claim.PatientResponsibility)</td>
+                        <td class="nowrap @(claim.DaysOutstanding is > 30 ? "text-danger fw-semibold" : "")">
+                            @(claim.DaysOutstanding.HasValue ? $"{claim.DaysOutstanding}d" : "-")
+                        </td>
+                        <td>
+                            <span class="badge-ds @Ui.BadgeFor(claim.Status)">@Ui.Humanise(claim.Status)</span>
+                            @if (!string.IsNullOrWhiteSpace(claim.DenialReason))
+                            {
+                                <div class="text-danger" style="font-size:.7rem;">@Ui.Truncate(claim.DenialReason, 24)</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                @if (claim.Status is ClaimStatus.Draft or ClaimStatus.ReadyToSend)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => Preview(claim.Id)">
+                                        Check
+                                    </button>
+                                    <button class="btn btn-sm btn-primary" @onclick="() => Submit(claim.Id)" disabled="@_working">
+                                        Submit
+                                    </button>
+                                }
+                                else if (claim.Status is ClaimStatus.Submitted or ClaimStatus.Received or ClaimStatus.InReview)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartSettle(claim)">
+                                        Settle
+                                    </button>
+                                }
+                                <a class="btn btn-sm btn-outline-secondary" title="Download the claim form as a PDF"
+                                   href="/api/exports/documents/claim/@claim.Id" target="_blank" rel="noopener">
+                                    <Icon Name="printer" Size="12" />
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_preview is not null)
+{
+    <div class="card-ds mt-3">
+        <div class="card-ds-header">
+            <h3>Claim @_preview.ClaimNumber</h3>
+            <span class="badge-ds @(_preview.CanSubmit ? "b-success" : "b-danger")">
+                @(_preview.CanSubmit ? "Ready to submit" : "Cannot be submitted")
+            </span>
+            <span class="text-muted" style="font-size:.79rem;">
+                Gateway: @_preview.GatewayName
+                @if (!_preview.GatewayConfigured)
+                {
+                    <span class="text-warning"> (not configured, falls back to manual)</span>
+                }
+                @if (_preview.SegmentCount > 0)
+                {
+                    <span> &middot; @_preview.SegmentCount segments</span>
+                }
+            </span>
+            <button class="btn-ghost ms-auto" @onclick="() => _preview = null"><Icon Name="x" Size="15" /></button>
+        </div>
+
+        <div class="card-ds-body">
+            @if (_preview.Issues.Count == 0)
+            {
+                <div class="alert-ds a-success mb-2">
+                    <Icon Name="check-circle" Size="15" />
+                    <div>The claim passes every validation check.</div>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-1 mb-2">
+                    @foreach (var issue in _preview.Issues)
+                    {
+                        <div class="alert-ds @(issue.IsBlocking ? "a-danger" : "a-warning") py-1">
+                            <Icon Name="@(issue.IsBlocking ? "alert-circle" : "alert-triangle")" Size="14" />
+                            <div style="font-size:.83rem;">
+                                <strong>@issue.Field.</strong> @issue.Message
+                                @if (!issue.IsBlocking)
+                                {
+                                    <span class="text-muted"> (warning only)</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_preview.Interchange))
+            {
+                <div class="form-label">837D interchange</div>
+                <pre class="mono" style="font-size:.7rem; max-height:260px; overflow:auto; background:var(--ds-surface-2); padding:.6rem; border-radius:6px; border:1px solid var(--ds-border);">@_preview.Interchange</pre>
+            }
+        </div>
+
+        <div class="card-ds-footer d-flex gap-2">
+            @if (_preview.CanSubmit)
+            {
+                <a class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                   href="/api/claims/@_previewClaimId/interchange" target="_blank" rel="noopener">
+                    <Icon Name="download" Size="13" /> Download 837D
+                </a>
+                <button class="btn btn-sm btn-primary" @onclick="() => Submit(_previewClaimId)" disabled="@_working">
+                    Submit to @_preview.GatewayName
+                </button>
+            }
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _preview = null">Close</button>
+        </div>
+    </div>
+}
+
+@if (_settling is not null)
+{
+    <div class="card-ds" style="position:fixed; right:1.5rem; bottom:1.5rem; width:min(420px, calc(100vw - 3rem)); z-index:70; box-shadow:var(--ds-shadow-lg);">
+        <div class="card-ds-header">
+            <h3>Settle claim @_settling.ClaimNumber</h3>
+            <button class="btn-ghost ms-auto" @onclick="() => _settling = null"><Icon Name="x" Size="15" /></button>
+        </div>
+        <div class="card-ds-body">
+            <div class="text-muted mb-2" style="font-size:.83rem;">
+                Charged @Ui.Money(_settling.TotalCharged) for @(_settling.Patient?.Name.Display ?? "the patient").
+            </div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <label class="form-label">Amount paid</label>
+                    <input type="number" step="0.01" class="form-control form-control-sm" @bind="_paidAmount" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Contractual write-off</label>
+                    <input type="number" step="0.01" class="form-control form-control-sm" @bind="_writeOffAmount" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Denial reason, if any</label>
+                    <input class="form-control form-control-sm" @bind="_denialReason" />
+                </div>
+            </div>
+            <div class="text-faint mt-2" style="font-size:.76rem;">
+                The payment posts to the patient ledger and the remainder becomes their responsibility.
+            </div>
+        </div>
+        <div class="card-ds-footer d-flex gap-2">
+            <button class="btn btn-sm btn-primary" @onclick="Settle" disabled="@_working">Record settlement</button>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _settling = null">Cancel</button>
+        </div>
+    </div>
+}
+
+@code {
+    private List<InsuranceClaim> _claims = new();
+    private string _statusFilter = string.Empty;
+    private bool _outstandingOnly;
+    private string? _message;
+    private bool _isError;
+    private bool _working;
+
+    private ClaimPreview? _preview;
+    private Guid _previewClaimId;
+    private InsuranceClaim? _settling;
+    private decimal _paidAmount;
+    private decimal _writeOffAmount;
+    private string _denialReason = string.Empty;
+
+    private decimal OutstandingValue => _claims
+        .Where(c => c.Status is not (ClaimStatus.Paid or ClaimStatus.Closed or ClaimStatus.Denied))
+        .Sum(c => c.TotalCharged - c.TotalPaid);
+
+    private List<InsuranceClaim> Filtered
+    {
+        get
+        {
+            var query = _claims.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_statusFilter) && Enum.TryParse<ClaimStatus>(_statusFilter, out var status))
+                query = query.Where(c => c.Status == status);
+
+            if (_outstandingOnly)
+                query = query.Where(c => c.Status is not (ClaimStatus.Paid or ClaimStatus.Closed or ClaimStatus.Denied));
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _claims = await db.InsuranceClaims.AsNoTracking()
+            .Include(c => c.Patient)
+            .Include(c => c.PatientInsurance).ThenInclude(i => i!.InsurancePlan).ThenInclude(p => p!.InsuranceCarrier)
+            .OrderByDescending(c => c.ServiceDate)
+            .Take(500)
+            .ToListAsync();
+    }
+
+    /// <summary>Validates the claim and shows exactly what would be transmitted.</summary>
+    private async Task Preview(Guid claimId)
+    {
+        var result = await Submissions.PrepareAsync(claimId);
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        _preview = result.Value;
+        _previewClaimId = claimId;
+        _message = null;
+    }
+
+    /// <summary>Generates the 837D and sends it through the configured gateway.</summary>
+    private async Task Submit(Guid claimId)
+    {
+        _working = true;
+        var result = await Submissions.SubmitAsync(claimId);
+        _working = false;
+
+        if (result.Failed)
+        {
+            _message = "The claim was not submitted.\n" + result.ErrorMessage;
+            _isError = true;
+
+            // Show the detail so the user can fix the record rather than guess.
+            await Preview(claimId);
+            return;
+        }
+
+        _message = $"Submitted via {result.Value!.Method}." +
+                   (result.Value.Reference is null ? "" : $" Reference: {result.Value.Reference}");
+        _isError = false;
+        _preview = null;
+
+        await LoadAsync();
+    }
+
+    private void StartSettle(InsuranceClaim claim)
+    {
+        _settling = claim;
+        _paidAmount = Math.Round(claim.TotalCharged * 0.8m, 2);
+        _writeOffAmount = 0;
+        _denialReason = string.Empty;
+    }
+
+    private async Task Settle()
+    {
+        if (_settling is null) return;
+
+        _working = true;
+        var result = await Billing.RecordClaimPaymentAsync(
+            _settling.Id, _paidAmount, _writeOffAmount,
+            string.IsNullOrWhiteSpace(_denialReason) ? null : _denialReason);
+        _working = false;
+
+        _message = result.Succeeded
+            ? $"Recorded {Ui.Money(_paidAmount)} against claim {_settling.ClaimNumber}."
+            : result.ErrorMessage;
+        _isError = result.Failed;
+
+        _settling = null;
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,149 @@
+@page "/waitlist"
+@attribute [Authorize(Policy = Policies.CanManageSchedule)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Waiting list - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Waiting list"
+            Subtitle="Patients who want an earlier slot if one becomes free." />
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Waiting" Value="@_entries.Count(e => e.Status == WaitlistStatus.Waiting).ToString()"
+              Accent="primary" Icon="list-checks" />
+    <StatTile Label="Urgent" Value="@_entries.Count(e => e.Priority >= WaitlistPriority.High).ToString()"
+              Accent="danger" />
+    <StatTile Label="Contacted" Value="@_entries.Count(e => e.Status == WaitlistStatus.Contacted).ToString()"
+              Accent="warning" />
+    <StatTile Label="Booked from the list" Value="@_entries.Count(e => e.Status == WaitlistStatus.Booked).ToString()"
+              Accent="success" Icon="check-circle" />
+</div>
+
+@if (_entries.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="list-checks" Title="Nobody on the waiting list"
+                    Message="Add patients here when they ask to be seen sooner." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Patient</th>
+                    <th>Wanted for</th>
+                    <th>Provider</th>
+                    <th class="nowrap">Available</th>
+                    <th>Days</th>
+                    <th>Times</th>
+                    <th style="width:90px;">Priority</th>
+                    <th class="num">Contacted</th>
+                    <th style="width:150px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _entries.OrderByDescending(e => e.Priority).ThenBy(e => e.CreatedAtUtc))
+                {
+                    <tr>
+                        <td>
+                            <a href="/patients/@entry.PatientId" style="font-weight:600;">
+                                @(entry.Patient?.Name.Display ?? "Unknown")
+                            </a>
+                            <div class="text-faint" style="font-size:.72rem;">
+                                @(entry.Patient?.Contact.BestPhone ?? "-")
+                            </div>
+                        </td>
+                        <td>
+                            @Ui.Humanise(entry.AppointmentType)
+                            <div class="text-faint" style="font-size:.73rem;">
+                                @entry.EstimatedMinutes minutes
+                            </div>
+                        </td>
+                        <td class="nowrap">@(entry.PreferredProvider?.DisplayName ?? "Any")</td>
+                        <td class="nowrap">
+                            @Ui.DateShort(entry.AvailableFrom)
+                            @if (entry.AvailableUntil.HasValue)
+                            {
+                                <span> to @Ui.DateShort(entry.AvailableUntil)</span>
+                            }
+                        </td>
+                        <td style="font-size:.76rem;">@DayList(entry)</td>
+                        <td style="font-size:.76rem;">@TimeList(entry)</td>
+                        <td><span class="badge-ds @PriorityBadge(entry.Priority)">@Ui.Humanise(entry.Priority)</span></td>
+                        <td class="num">@entry.ContactAttempts</td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarkContacted(entry.Id)">
+                                    Called
+                                </button>
+                                <a href="/schedule?patient=@entry.PatientId" class="btn btn-sm btn-primary">Book</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<WaitlistEntry> _entries = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _entries = await db.WaitlistEntries.AsNoTracking()
+            .Include(e => e.Patient)
+            .Include(e => e.PreferredProvider)
+            .Where(e => e.Status != WaitlistStatus.Cancelled && e.Status != WaitlistStatus.Expired)
+            .ToListAsync();
+    }
+
+    private async Task MarkContacted(Guid entryId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entry = await db.WaitlistEntries.FirstOrDefaultAsync(e => e.Id == entryId);
+        if (entry is null) return;
+
+        entry.ContactAttempts++;
+        entry.LastContactedUtc = Clock.UtcNow;
+        entry.Status = WaitlistStatus.Contacted;
+
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private static string DayList(WaitlistEntry entry)
+    {
+        var days = new List<string>();
+        if (entry.MondayOk) days.Add("Mon");
+        if (entry.TuesdayOk) days.Add("Tue");
+        if (entry.WednesdayOk) days.Add("Wed");
+        if (entry.ThursdayOk) days.Add("Thu");
+        if (entry.FridayOk) days.Add("Fri");
+        if (entry.SaturdayOk) days.Add("Sat");
+        if (entry.SundayOk) days.Add("Sun");
+        return days.Count == 7 ? "Any" : string.Join(", ", days);
+    }
+
+    private static string TimeList(WaitlistEntry entry)
+    {
+        var times = new List<string>();
+        if (entry.MorningOk) times.Add("AM");
+        if (entry.AfternoonOk) times.Add("PM");
+        if (entry.EveningOk) times.Add("Eve");
+        return times.Count == 0 ? "-" : string.Join(", ", times);
+    }
+
+    private static string PriorityBadge(WaitlistPriority priority) => priority switch
+    {
+        WaitlistPriority.Urgent => "b-danger",
+        WaitlistPriority.High => "b-warning",
+        WaitlistPriority.Normal => "b-info",
+        _ => "b-neutral"
+    };
+}

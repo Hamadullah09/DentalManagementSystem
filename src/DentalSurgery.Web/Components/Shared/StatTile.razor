@@ -1,0 +1,34 @@
+<div class="stat-tile accent-@Accent">
+    <span class="stat-label">
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <Icon Name="@Icon" Size="13" />
+        }
+        @Label
+    </span>
+    <span class="stat-value" style="@(string.IsNullOrEmpty(ValueColour) ? null : $"color:{ValueColour};")">@Value</span>
+    @if (!string.IsNullOrWhiteSpace(Caption) || CaptionContent is not null)
+    {
+        <span class="stat-caption">@Caption @CaptionContent</span>
+    }
+    @if (Trend.HasValue)
+    {
+        <span class="stat-caption d-flex align-items-center gap-1"
+              style="color:@(Trend.Value >= 0 ? "var(--ds-success)" : "var(--ds-danger)");">
+            <Icon Name="@(Trend.Value >= 0 ? "trending-up" : "trending-down")" Size="12" />
+            @Math.Abs(Trend.Value).ToString("0.#")% @TrendLabel
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public RenderFragment? CaptionContent { get; set; }
+    [Parameter] public string Accent { get; set; } = "primary";
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? ValueColour { get; set; }
+    [Parameter] public decimal? Trend { get; set; }
+    [Parameter] public string TrendLabel { get; set; } = "vs last period";
+}

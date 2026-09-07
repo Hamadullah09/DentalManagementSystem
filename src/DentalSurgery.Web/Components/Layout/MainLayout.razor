@@ -1,0 +1,169 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="app-shell">
+
+    <aside class="app-sidebar @(_sidebarOpen ? "open" : "")">
+        <NavMenu />
+    </aside>
+
+    <div class="app-main">
+        <header class="app-topbar">
+            <button class="btn-ghost d-lg-none" @onclick="ToggleSidebar" aria-label="Toggle navigation">
+                <Icon Name="menu" Size="18" />
+            </button>
+
+            <GlobalSearch />
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <a href="/schedule" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex align-items-center gap-1">
+                    <Icon Name="calendar" Size="14" /> Today
+                </a>
+
+                <button class="btn-ghost" title="Switch between light and dark" @onclick="CycleTheme">
+                    <Icon Name="@(_theme == "dark" ? "moon" : _theme == "light" ? "sun" : "monitor")" Size="17" />
+                </button>
+
+                <AuthorizeView>
+                    <Authorized>
+                        <div class="dropdown">
+                            <button class="btn-ghost d-flex align-items-center gap-2" @onclick="ToggleUserMenu">
+                                <span class="avatar sm">@Initials(context.User.Identity?.Name)</span>
+                                <span class="d-none d-md-inline" style="font-size:.85rem;">
+                                    @DisplayName(context)
+                                </span>
+                                <Icon Name="chevron-down" Size="13" />
+                            </button>
+
+                            @if (_userMenuOpen)
+                            {
+                                <div class="dropdown-menu dropdown-menu-end show"
+                                     style="position:absolute; right:0; top:calc(100% + 6px); min-width:240px;">
+                                    <div class="px-3 py-2">
+                                        <div style="font-weight:600;">@DisplayName(context)</div>
+                                        <div class="text-muted" style="font-size:.78rem;">@context.User.Identity?.Name</div>
+                                        <div class="mt-1">
+                                            @foreach (var role in Roles(context))
+                                            {
+                                                <span class="badge-ds b-neutral me-1">@role</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <hr class="dropdown-divider" />
+                                    <a class="dropdown-item" href="/Account/Manage">Account settings</a>
+                                    <a class="dropdown-item" href="/my-day">My day</a>
+                                    <hr class="dropdown-divider" />
+                                    @*
+                                        A link, not a form. This layout renders
+                                        interactively, and an antiforgery token
+                                        minted inside an interactive circuit is
+                                        rejected when posted to the endpoint.
+                                        /Account/SignOut renders statically, so
+                                        its token is issued for the real request.
+                                    *@
+                                    <a class="dropdown-item" href="/Account/SignOut">Sign out</a>
+                                </div>
+                            }
+                        </div>
+                    </Authorized>
+                    <NotAuthorized>
+                        <a class="btn btn-sm btn-primary" href="/Account/Login">Sign in</a>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
+        </header>
+
+        <main class="app-content">
+            <ErrorBoundary @ref="_errorBoundary">
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent Context="exception">
+                    <div class="blazor-error-boundary">
+                        <h4 class="mb-2">This screen could not be displayed</h4>
+                        <p class="mb-2" style="font-size:.87rem;">@exception.Message</p>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="RecoverFromError">Try again</button>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool _sidebarOpen;
+    private bool _userMenuOpen;
+    private string _theme = "system";
+    private string _currentUrl = "/";
+    private ErrorBoundary? _errorBoundary;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        _currentUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            _theme = await JS.InvokeAsync<string>("dentalApp.getTheme");
+            StateHasChanged();
+        }
+        catch (JSException)
+        {
+            // Storage blocked; the system theme applies.
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _currentUrl = Navigation.ToBaseRelativePath(e.Location);
+        _sidebarOpen = false;
+        _userMenuOpen = false;
+        _errorBoundary?.Recover();
+        StateHasChanged();
+    }
+
+    private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
+
+    private void ToggleUserMenu() => _userMenuOpen = !_userMenuOpen;
+
+    private void RecoverFromError() => _errorBoundary?.Recover();
+
+    private async Task CycleTheme()
+    {
+        _theme = _theme switch
+        {
+            "system" => "light",
+            "light" => "dark",
+            _ => "system"
+        };
+
+        await JS.InvokeVoidAsync("dentalApp.setTheme", _theme);
+    }
+
+    private static string DisplayName(AuthenticationState state) =>
+        state.User.FindFirst(DentalClaimTypes.DisplayName)?.Value
+        ?? state.User.Identity?.Name?.Split('@')[0]
+        ?? "User";
+
+    private static IEnumerable<string> Roles(AuthenticationState state) =>
+        state.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value);
+
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var local = name.Split('@')[0];
+        var parts = local.Split('.', '-', '_', ' ').Where(p => p.Length > 0).ToArray();
+        return parts.Length >= 2
+            ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}"
+            : char.ToUpperInvariant(local[0]).ToString();
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

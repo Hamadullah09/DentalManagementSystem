@@ -1,0 +1,172 @@
+@page "/patients/{PatientId:guid}"
+@page "/patients/{PatientId:guid}/{Tab}"
+@attribute [Authorize]
+@inject PatientService Patients
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>@(_summary?.Patient.Name.Display ?? "Patient") - Meridian Dental Surgery</PageTitle>
+
+@if (_loading)
+{
+    <div class="loading-bar mb-3"></div>
+    <div class="skeleton mb-3" style="height:120px;"></div>
+    <div class="skeleton" style="height:340px;"></div>
+}
+else if (_summary is null)
+{
+    <div class="card-ds">
+        <EmptyState IconName="alert-circle" Title="Patient not found"
+                    Message="This record may have been merged or archived.">
+            <a href="/patients" class="btn btn-sm btn-primary">Back to the patient list</a>
+        </EmptyState>
+    </div>
+}
+else
+{
+    <PatientBanner Patient="_summary.Patient" Risk="_summary.Risk" Alerts="_summary.ActiveAlerts">
+        <Actions>
+            <a href="/patients/@PatientId/edit" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                <Icon Name="edit" Size="13" /> Edit
+            </a>
+            <a href="/schedule?patient=@PatientId" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                <Icon Name="calendar" Size="13" /> Book
+            </a>
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="Print">
+                <Icon Name="printer" Size="13" /> Print
+            </button>
+        </Actions>
+    </PatientBanner>
+
+    @if (_summary.MedicalHistoryOutOfDate)
+    {
+        <div class="alert-ds a-warning mb-3">
+            <Icon Name="alert-circle" Size="16" />
+            <div class="flex-grow-1">
+                <strong>The medical history needs updating.</strong>
+                @if (_summary.LatestMedicalReview is null)
+                {
+                    <span> No review has ever been recorded for this patient.</span>
+                }
+                else
+                {
+                    <span> Last reviewed on @Ui.Date(_summary.LatestMedicalReview.ReviewDate).</span>
+                }
+            </div>
+            <button class="btn btn-sm btn-outline-secondary no-print" @onclick="@(() => Go("medical"))">Review now</button>
+        </div>
+    }
+
+    <div class="tabs-ds no-print">
+        @foreach (var tab in Tabs)
+        {
+            <button class="tab-ds @(CurrentTab == tab.Key ? "active" : "")" @onclick="() => Go(tab.Key)">
+                @tab.Label
+                @if (tab.Count(_summary) is { } count and > 0)
+                {
+                    <span class="count">@count</span>
+                }
+            </button>
+        }
+    </div>
+
+    @switch (CurrentTab)
+    {
+        case "overview":
+            <PatientOverviewTab Summary="_summary" />
+            break;
+        case "medical":
+            <PatientMedicalTab PatientId="PatientId" OnChanged="ReloadAsync" />
+            break;
+        case "chart":
+            <PatientChartTab PatientId="PatientId" />
+            break;
+        case "perio":
+            <PatientPerioTab PatientId="PatientId" />
+            break;
+        case "plans":
+            <PatientPlansTab PatientId="PatientId" OnChanged="ReloadAsync" />
+            break;
+        case "appointments":
+            <PatientAppointmentsTab PatientId="PatientId" />
+            break;
+        case "treatment":
+            <PatientTreatmentTab PatientId="PatientId" />
+            break;
+        case "notes":
+            <PatientNotesTab PatientId="PatientId" />
+            break;
+        case "prescriptions":
+            <PatientPrescriptionsTab PatientId="PatientId" />
+            break;
+        case "documents":
+            <PatientDocumentsTab PatientId="PatientId" />
+            break;
+        case "account":
+            <PatientAccountTab PatientId="PatientId" OnChanged="ReloadAsync" />
+            break;
+        case "insurance":
+            <PatientInsuranceTab PatientId="PatientId" />
+            break;
+        case "communications":
+            <PatientCommunicationsTab PatientId="PatientId" />
+            break;
+        default:
+            <PatientOverviewTab Summary="_summary" />
+            break;
+    }
+}
+
+@code {
+    [Parameter] public Guid PatientId { get; set; }
+    [Parameter] public string? Tab { get; set; }
+
+    private PatientSummary? _summary;
+    private bool _loading = true;
+    private Guid _loadedFor;
+
+    private string CurrentTab => string.IsNullOrWhiteSpace(Tab) ? "overview" : Tab.ToLowerInvariant();
+
+    private record TabDefinition(string Key, string Label, Func<PatientSummary, int?> Count);
+
+    private static readonly TabDefinition[] Tabs =
+    {
+        new("overview", "Overview", _ => null),
+        new("medical", "Medical history", _ => null),
+        new("chart", "Dental chart", _ => null),
+        new("perio", "Periodontal", _ => null),
+        new("plans", "Treatment plans", s => s.OpenTreatmentItems == 0 ? null : s.OpenTreatmentItems),
+        new("appointments", "Appointments", _ => null),
+        new("treatment", "Procedures", s => s.ProcedureCount == 0 ? null : s.ProcedureCount),
+        new("notes", "Clinical notes", _ => null),
+        new("prescriptions", "Prescriptions", _ => null),
+        new("documents", "Documents", s => s.DocumentCount + s.RadiographCount == 0 ? null : s.DocumentCount + s.RadiographCount),
+        new("account", "Account", _ => null),
+        new("insurance", "Insurance", _ => null),
+        new("communications", "Communications", _ => null)
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Switching tabs re-runs parameters; only reload when the patient changes.
+        if (_loadedFor == PatientId && _summary is not null) return;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _summary = await Patients.GetSummaryAsync(PatientId);
+        _loadedFor = PatientId;
+        _loading = false;
+    }
+
+    private void Go(string tab) =>
+        Navigation.NavigateTo($"/patients/{PatientId}/{tab}", replace: true);
+
+    private async Task Print()
+    {
+        try { await JS.InvokeVoidAsync("dentalApp.print"); }
+        catch (JSException) { /* printing unavailable in this browser context */ }
+    }
+}

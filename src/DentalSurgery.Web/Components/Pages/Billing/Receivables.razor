@@ -1,0 +1,203 @@
+@page "/billing/receivables"
+@attribute [Authorize(Policy = Policies.CanManageBilling)]
+@inject ReportingService Reporting
+@inject IJSRuntime JS
+
+<PageTitle>Outstanding balances - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Outstanding balances"
+            Subtitle="Accounts receivable, aged from each invoice due date.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="ExportCsv">
+            <Icon Name="download" Size="13" /> Export
+        </button>
+    </Actions>
+</PageHeader>
+
+@if (_aging is null)
+{
+    <div class="skeleton" style="height:200px;"></div>
+}
+else
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Total outstanding" Value="@Ui.Money(_aging.Total)" Accent="primary" Icon="credit-card" />
+        <StatTile Label="Not yet due" Value="@Ui.Money(_aging.Current)" Accent="success" />
+        <StatTile Label="1-30 days" Value="@Ui.Money(_aging.Days1To30)" Accent="warning" />
+        <StatTile Label="31-60 days" Value="@Ui.Money(_aging.Days31To60)" Accent="warning" />
+        <StatTile Label="61-90 days" Value="@Ui.Money(_aging.Days61To90)" Accent="danger" />
+        <StatTile Label="Over 90 days" Value="@Ui.Money(_aging.Over90Days)" Accent="danger"
+                  Caption="@($"{_aging.PercentOver90:0.#}% of the total")" />
+    </div>
+
+    <div class="card-ds mb-3">
+        <div class="card-ds-header"><h3>Ageing profile</h3></div>
+        <div class="card-ds-body">
+            <div class="d-flex" style="height:26px; border-radius:6px; overflow:hidden;">
+                @foreach (var (bucket, colour) in _aging.Buckets.Zip(BucketColours))
+                {
+                    var width = _aging.Total == 0 ? 0 : (double)(bucket.Amount / _aging.Total * 100);
+                    @if (width > 0)
+                    {
+                        <div style="width:@width.ToString("0.##", CultureInfo.InvariantCulture)%; background:@colour;"
+                             title="@bucket.Label: @Ui.Money(bucket.Amount)"></div>
+                    }
+                }
+            </div>
+            <div class="d-flex gap-3 flex-wrap mt-2">
+                @foreach (var (bucket, colour) in _aging.Buckets.Zip(BucketColours))
+                {
+                    <span class="legend-item" style="font-size:.78rem;">
+                        <span class="legend-swatch" style="background:@colour;"></span>
+                        @bucket.Label &mdash; @Ui.Money(bucket.Amount) (@bucket.InvoiceCount)
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<div class="filter-bar">
+    <div class="field grow">
+        <label class="form-label">Search</label>
+        <input class="form-control form-control-sm" placeholder="Patient name or number"
+               @bind="_search" @bind:event="oninput" />
+    </div>
+    <div class="field">
+        <label class="form-label">Minimum balance</label>
+        <input type="number" step="10" class="form-control form-control-sm" @bind="_minimumBalance" />
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <button class="btn btn-sm @(_over90Only ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _over90Only = !_over90Only">
+            Over 90 days only
+        </button>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="check-circle" Title="Nothing outstanding"
+                    Message="Every account within these filters is settled." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Patient</th>
+                    <th>Number</th>
+                    <th>Phone</th>
+                    <th class="num">Current</th>
+                    <th class="num">1-30</th>
+                    <th class="num">31-60</th>
+                    <th class="num">61-90</th>
+                    <th class="num">90+</th>
+                    <th class="num">Balance</th>
+                    <th class="nowrap">Oldest due</th>
+                    <th class="nowrap">Last payment</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Filtered)
+                {
+                    <tr>
+                        <td><a href="/patients/@row.PatientId/account" style="font-weight:600;">@row.PatientName</a></td>
+                        <td class="mono">@row.PatientNumber</td>
+                        <td style="font-size:.8rem;">@(row.Phone ?? "-")</td>
+                        <td class="num mono text-muted">@Blank(row.Current)</td>
+                        <td class="num mono">@Blank(row.Days1To30)</td>
+                        <td class="num mono">@Blank(row.Days31To60)</td>
+                        <td class="num mono text-warning">@Blank(row.Days61To90)</td>
+                        <td class="num mono text-danger fw-semibold">@Blank(row.Over90)</td>
+                        <td class="num mono fw-semibold">@Ui.Money(row.Balance)</td>
+                        <td class="nowrap">
+                            @Ui.DateShort(row.OldestDueDate)
+                            @if (row.DaysSinceOldestDue is > 0)
+                            {
+                                <div class="text-faint" style="font-size:.7rem;">@row.DaysSinceOldestDue days</div>
+                            }
+                        </td>
+                        <td class="nowrap">@Ui.DateShort(row.LastPaymentDate)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr style="background:var(--ds-surface-2); font-weight:600;">
+                    <td colspan="3">@Filtered.Count accounts</td>
+                    <td class="num mono">@Ui.Money(Filtered.Sum(r => r.Current))</td>
+                    <td class="num mono">@Ui.Money(Filtered.Sum(r => r.Days1To30))</td>
+                    <td class="num mono">@Ui.Money(Filtered.Sum(r => r.Days31To60))</td>
+                    <td class="num mono">@Ui.Money(Filtered.Sum(r => r.Days61To90))</td>
+                    <td class="num mono">@Ui.Money(Filtered.Sum(r => r.Over90))</td>
+                    <td class="num mono">@Ui.Money(Filtered.Sum(r => r.Balance))</td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+}
+
+@code {
+    private AgingReport? _aging;
+    private List<ReceivableRow> _rows = new();
+    private string _search = string.Empty;
+    private decimal _minimumBalance;
+    private bool _over90Only;
+
+    private static readonly string[] BucketColours =
+    {
+        "var(--ds-success)", "var(--ds-info)", "var(--ds-warning)", "#e8722d", "var(--ds-danger)"
+    };
+
+    private List<ReceivableRow> Filtered
+    {
+        get
+        {
+            var query = _rows.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_search))
+            {
+                var text = _search.Trim();
+                query = query.Where(r =>
+                    r.PatientName.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                    r.PatientNumber.Contains(text, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (_minimumBalance > 0) query = query.Where(r => r.Balance >= _minimumBalance);
+            if (_over90Only) query = query.Where(r => r.Over90 > 0);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _aging = await Reporting.GetAgingAsync();
+        _rows = await Reporting.GetReceivablesAsync();
+    }
+
+    private static string Blank(decimal value) => value == 0 ? "" : Ui.Money(value);
+
+    private async Task ExportCsv()
+    {
+        var csv = CsvExport.Build(Filtered,
+            ("Patient number", r => r.PatientNumber),
+            ("Patient", r => r.PatientName),
+            ("Phone", r => r.Phone ?? ""),
+            ("Current", r => CsvExport.Money(r.Current)),
+            ("1-30", r => CsvExport.Money(r.Days1To30)),
+            ("31-60", r => CsvExport.Money(r.Days31To60)),
+            ("61-90", r => CsvExport.Money(r.Days61To90)),
+            ("Over 90", r => CsvExport.Money(r.Over90)),
+            ("Balance", r => CsvExport.Money(r.Balance)),
+            ("Oldest due", r => CsvExport.Date(r.OldestDueDate)),
+            ("Last payment", r => CsvExport.Date(r.LastPaymentDate)));
+
+        await CsvExport.DownloadAsync(JS, "outstanding-balances.csv", csv);
+    }
+}

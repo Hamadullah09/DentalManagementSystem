@@ -1,0 +1,421 @@
+@inject TreatmentPlanService Plans
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <select class="form-select form-select-sm" style="width:auto; min-width:280px;"
+            value="@(_selectedId?.ToString() ?? "")" @onchange="OnPlanChanged">
+        <option value="">Select a plan</option>
+        @foreach (var plan in _plans)
+        {
+            <option value="@plan.Id">
+                @plan.PlanNumber - @plan.Name (@Ui.Humanise(plan.Status), @Ui.Money(plan.TotalFee))
+            </option>
+        }
+    </select>
+
+    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="CreatePlan" disabled="@_working">
+        <Icon Name="plus" Size="13" /> New plan
+    </button>
+
+    @if (_plan is not null && _plan.Status is TreatmentPlanStatus.Draft)
+    {
+        <button class="btn btn-sm btn-outline-secondary" @onclick="PresentPlan" disabled="@_working">Mark as presented</button>
+    }
+
+    @if (_plan is not null && _plan.Status is TreatmentPlanStatus.Presented or TreatmentPlanStatus.PartiallyAccepted)
+    {
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => _recordingDecision = !_recordingDecision">
+            Record the patient&rsquo;s decision
+        </button>
+    }
+
+    @if (_plan is not null && _plan.Status is not (TreatmentPlanStatus.Draft or TreatmentPlanStatus.Superseded))
+    {
+        <button class="btn btn-sm btn-outline-secondary" @onclick="CreateRevision" disabled="@_working">Revise</button>
+    }
+
+    @if (_plan is not null)
+    {
+        <a class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 ms-auto"
+           href="/api/exports/documents/treatment-plan/@_plan.Id" target="_blank" rel="noopener">
+            <Icon Name="printer" Size="13" /> Plan as PDF
+        </a>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+@if (_plan is null)
+{
+    <div class="card-ds">
+        <EmptyState IconName="clipboard" Title="No treatment plan selected"
+                    Message="Choose an existing plan above, or create a new one to start planning treatment." />
+    </div>
+}
+else
+{
+    <div class="stat-grid mb-3">
+        <StatTile Label="Plan total" Value="@Ui.Money(_plan.TotalFee)" Accent="primary" Icon="receipt" />
+        <StatTile Label="Accepted" Value="@Ui.Money(_plan.AcceptedValue)" Accent="success" Icon="check-circle"
+                  Caption="@($"{_plan.AcceptanceRatePercent:0.#}% of the plan")" />
+        <StatTile Label="Estimated insurance" Value="@Ui.Money(_plan.EstimatedInsurancePortion)" Accent="accent" />
+        <StatTile Label="Patient portion" Value="@Ui.Money(_plan.EstimatedPatientPortion)" Accent="warning" />
+        <StatTile Label="Progress" Value="@($"{_plan.CompletedItemCount}/{_plan.TotalItemCount}")"
+                  Accent="purple" Icon="activity" Caption="items completed" />
+    </div>
+
+    <div class="card-ds mb-3">
+        <div class="card-ds-header">
+            <h3>@_plan.Name</h3>
+            <span class="badge-ds @Ui.BadgeFor(_plan.Status)">@Ui.Humanise(_plan.Status)</span>
+            <span class="text-muted ms-auto" style="font-size:.79rem;">
+                @_plan.PlanNumber &middot; version @_plan.VersionNumber &middot;
+                created @Ui.Date(_plan.CreatedOn) by @(_plan.Provider?.DisplayName ?? "unknown")
+                @if (_plan.ValidUntil.HasValue)
+                {
+                    <span> &middot; valid until @Ui.Date(_plan.ValidUntil)</span>
+                }
+            </span>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_plan.RisksDiscussed) || !string.IsNullOrWhiteSpace(_plan.AlternativesDiscussed))
+        {
+            <div class="card-ds-body" style="border-bottom:1px solid var(--ds-border); font-size:.83rem;">
+                @if (!string.IsNullOrWhiteSpace(_plan.RisksDiscussed))
+                {
+                    <div><strong>Risks discussed:</strong> <span class="text-muted">@_plan.RisksDiscussed</span></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_plan.AlternativesDiscussed))
+                {
+                    <div><strong>Alternatives:</strong> <span class="text-muted">@_plan.AlternativesDiscussed</span></div>
+                }
+            </div>
+        }
+
+        @foreach (var phase in _plan.Phases.OrderBy(p => p.PhaseNumber))
+        {
+            <div style="border-bottom:1px solid var(--ds-border);">
+                <div class="d-flex align-items-center gap-2 px-3 py-2" style="background:var(--ds-surface-2);">
+                    <strong style="font-size:.87rem;">@phase.Name</strong>
+                    <span class="badge-ds @Ui.BadgeFor(phase.Priority)">@Ui.Humanise(phase.Priority)</span>
+                    <span class="text-muted" style="font-size:.79rem;">@phase.ClinicalObjective</span>
+                    <span class="ms-auto mono" style="font-size:.85rem;">@Ui.Money(phase.PhaseTotal)</span>
+                    @if (_plan.Status is TreatmentPlanStatus.Draft or TreatmentPlanStatus.Presented)
+                    {
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartAddItem(phase.Id)">
+                            <Icon Name="plus" Size="12" /> Add
+                        </button>
+                    }
+                </div>
+
+                @if (_addingToPhaseId == phase.Id)
+                {
+                    <div class="px-3 py-2" style="background:var(--ds-primary-soft);">
+                        <div class="row g-2">
+                            <div class="col-12 col-md-5">
+                                <label class="form-label">Procedure</label>
+                                <select class="form-select form-select-sm" @bind="_newProcedureCodeId">
+                                    <option value="">Select a procedure</option>
+                                    @foreach (var group in _codes.GroupBy(c => c.Category))
+                                    {
+                                        <optgroup label="@Ui.Humanise(group.Key)">
+                                            @foreach (var procedureCode in group)
+                                            {
+                                                <option value="@procedureCode.Id">@procedureCode.Code - @procedureCode.ShortDescription (@Ui.Money(procedureCode.DefaultFee))</option>
+                                            }
+                                        </optgroup>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label">Tooth</label>
+                                <select class="form-select form-select-sm" @bind="_newToothId">
+                                    <option value="">None</option>
+                                    @foreach (var tooth in _teeth)
+                                    {
+                                        <option value="@tooth.Id">@tooth.FdiNumber</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label">Surfaces</label>
+                                <input class="form-control form-control-sm" @bind="_newSurfaces"
+                                       placeholder="e.g. MOD" maxlength="6" />
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select form-select-sm" @bind="_newPriority">
+                                    @foreach (var priority in Enum.GetValues<TreatmentPriority>())
+                                    {
+                                        <option value="@priority">@Ui.Humanise(priority)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-1 d-flex align-items-end gap-1">
+                                <button class="btn btn-sm btn-primary" @onclick="AddItem">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (phase.Items.Count == 0)
+                {
+                    <div class="px-3 py-2 text-muted" style="font-size:.83rem;">No procedures in this phase.</div>
+                }
+                else
+                {
+                    <div class="table-wrap" style="border:0; border-radius:0;">
+                        <table class="table-ds">
+                            <thead>
+                                <tr>
+                                    @if (_recordingDecision)
+                                    {
+                                        <th style="width:70px;">Accept</th>
+                                    }
+                                    <th style="width:80px;">Code</th>
+                                    <th>Procedure</th>
+                                    <th style="width:60px;">Tooth</th>
+                                    <th style="width:70px;">Surfaces</th>
+                                    <th style="width:100px;">Priority</th>
+                                    <th class="num" style="width:90px;">Fee</th>
+                                    <th class="num" style="width:100px;">Insurance</th>
+                                    <th class="num" style="width:100px;">Patient</th>
+                                    <th style="width:110px;">Status</th>
+                                    <th style="width:40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in phase.Items.OrderBy(i => i.Sequence))
+                                {
+                                    <tr>
+                                        @if (_recordingDecision)
+                                        {
+                                            <td>
+                                                <input type="checkbox" class="form-check-input"
+                                                       checked="@(_decisions.GetValueOrDefault(item.Id))"
+                                                       @onchange="e => _decisions[item.Id] = (bool)(e.Value ?? false)" />
+                                            </td>
+                                        }
+                                        <td class="mono">@item.ProcedureCode?.Code</td>
+                                        <td>@(item.ProcedureCode?.ShortDescription ?? "-")</td>
+                                        <td class="mono">@(item.Tooth?.FdiNumber.ToString() ?? "-")</td>
+                                        <td class="mono">@(item.Surfaces == ToothSurface.None ? "-" : SurfaceNotation.ToCode(item.Surfaces))</td>
+                                        <td><span class="badge-ds @Ui.BadgeFor(item.Priority)">@Ui.Humanise(item.Priority)</span></td>
+                                        <td class="num mono">@Ui.Money(item.NetFee)</td>
+                                        <td class="num mono text-muted">@Ui.Money(item.EstimatedInsurance)</td>
+                                        <td class="num mono">@Ui.Money(item.EstimatedPatient)</td>
+                                        <td><span class="badge-ds @Ui.BadgeFor(item.Status)">@Ui.Humanise(item.Status)</span></td>
+                                        <td>
+                                            @if (item.Status is TreatmentPlanItemStatus.Proposed or TreatmentPlanItemStatus.Accepted)
+                                            {
+                                                <button class="btn-ghost" title="Remove" @onclick="() => RemoveItem(item.Id)">
+                                                    <Icon Name="trash" Size="13" />
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_recordingDecision)
+        {
+            <div class="card-ds-footer d-flex align-items-center gap-2 flex-wrap">
+                <label class="d-flex align-items-center gap-2" style="font-size:.85rem;">
+                    <input type="checkbox" class="form-check-input mt-0" @bind="_consentObtained" />
+                    Written consent obtained
+                </label>
+                <input class="form-control form-control-sm" style="max-width:280px;" @bind="_declineReason"
+                       placeholder="Reason, if the plan was declined" />
+                <button class="btn btn-sm btn-primary" @onclick="SaveDecision" disabled="@_working">Save decision</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _recordingDecision = false">Cancel</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<TreatmentPlan> _plans = new();
+    private TreatmentPlan? _plan;
+    private Guid? _selectedId;
+    private List<ProcedureCode> _codes = new();
+    private List<Tooth> _teeth = new();
+
+    private bool _working;
+    private string? _message;
+    private bool _isError;
+
+    private Guid? _addingToPhaseId;
+    private string _newProcedureCodeId = string.Empty;
+    private string _newToothId = string.Empty;
+    private string _newSurfaces = string.Empty;
+    private TreatmentPriority _newPriority = TreatmentPriority.Routine;
+
+    private bool _recordingDecision;
+    private Dictionary<Guid, bool> _decisions = new();
+    private bool _consentObtained;
+    private string _declineReason = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _plans = await Plans.GetForPatientAsync(PatientId);
+
+        if (_codes.Count == 0)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _codes = await db.ProcedureCodes.AsNoTracking()
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.Category).ThenBy(c => c.Code)
+                .ToListAsync();
+            _teeth = await db.Teeth.AsNoTracking()
+                .Where(t => !t.IsPrimary)
+                .OrderBy(t => t.ChartOrder).ToListAsync();
+        }
+
+        if (_selectedId is null && _plans.Count > 0)
+        {
+            _selectedId = _plans[0].Id;
+            await LoadPlanAsync();
+        }
+    }
+
+    private async Task LoadPlanAsync()
+    {
+        if (_selectedId is null) { _plan = null; return; }
+        _plan = await Plans.GetAsync(_selectedId.Value);
+
+        _decisions = _plan?.AllItems.ToDictionary(
+            i => i.Id,
+            i => i.Status is TreatmentPlanItemStatus.Accepted or TreatmentPlanItemStatus.Completed) ?? new();
+    }
+
+    private async Task OnPlanChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        _selectedId = string.IsNullOrEmpty(value) ? null : Guid.Parse(value);
+        _recordingDecision = false;
+        await LoadPlanAsync();
+    }
+
+    private async Task CreatePlan()
+    {
+        _working = true;
+        var result = await Plans.CreateAsync(PatientId, "Treatment plan", null);
+        _working = false;
+
+        if (result.Failed) { Report(result.ErrorMessage, true); return; }
+
+        _plans = await Plans.GetForPatientAsync(PatientId);
+        _selectedId = result.Value!.Id;
+        await LoadPlanAsync();
+        Report("Plan created. Add procedures to each phase.", false);
+    }
+
+    private void StartAddItem(Guid phaseId)
+    {
+        _addingToPhaseId = _addingToPhaseId == phaseId ? null : phaseId;
+        _newProcedureCodeId = string.Empty;
+        _newToothId = string.Empty;
+        _newSurfaces = string.Empty;
+    }
+
+    private async Task AddItem()
+    {
+        if (_addingToPhaseId is null || !Guid.TryParse(_newProcedureCodeId, out var codeId)) return;
+
+        var request = new PlanItemRequest(
+            codeId,
+            Guid.TryParse(_newToothId, out var toothId) ? toothId : null,
+            SurfaceNotation.Parse(_newSurfaces),
+            Priority: _newPriority);
+
+        _working = true;
+        var result = await Plans.AddItemAsync(_addingToPhaseId.Value, request);
+        _working = false;
+
+        if (result.Failed) { Report(result.ErrorMessage, true); return; }
+
+        _addingToPhaseId = null;
+        _newProcedureCodeId = string.Empty;
+        _newToothId = string.Empty;
+        _newSurfaces = string.Empty;
+
+        await LoadPlanAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveItem(Guid itemId)
+    {
+        var result = await Plans.RemoveItemAsync(itemId);
+        if (result.Failed) { Report(result.ErrorMessage, true); return; }
+        await LoadPlanAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task PresentPlan()
+    {
+        if (_plan is null) return;
+        _working = true;
+        var result = await Plans.PresentAsync(_plan.Id);
+        _working = false;
+
+        if (result.Failed) { Report(result.ErrorMessage, true); return; }
+
+        await LoadPlanAsync();
+        _plans = await Plans.GetForPatientAsync(PatientId);
+        Report("The plan is marked as presented and is valid for 90 days.", false);
+    }
+
+    private async Task SaveDecision()
+    {
+        if (_plan is null) return;
+
+        _working = true;
+        var result = await Plans.RecordDecisionAsync(
+            _plan.Id, _decisions, _consentObtained,
+            string.IsNullOrWhiteSpace(_declineReason) ? null : _declineReason);
+        _working = false;
+
+        if (result.Failed) { Report(result.ErrorMessage, true); return; }
+
+        _recordingDecision = false;
+        await LoadPlanAsync();
+        _plans = await Plans.GetForPatientAsync(PatientId);
+        await OnChanged.InvokeAsync();
+        Report("Decision recorded.", false);
+    }
+
+    private async Task CreateRevision()
+    {
+        if (_plan is null) return;
+        _working = true;
+        var result = await Plans.CreateRevisionAsync(_plan.Id);
+        _working = false;
+
+        if (result.Failed) { Report(result.ErrorMessage, true); return; }
+
+        _plans = await Plans.GetForPatientAsync(PatientId);
+        _selectedId = result.Value!.Id;
+        await LoadPlanAsync();
+        Report("A new version was created. Outstanding items carried over; completed work stayed on the original.", false);
+    }
+
+    private void Report(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+}

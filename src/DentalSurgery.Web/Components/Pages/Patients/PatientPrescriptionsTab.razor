@@ -1,0 +1,328 @@
+@inject ClinicalService Clinical
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<AuthorizeView Policy="@Policies.CanPrescribe">
+    <Authorized>
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="StartPrescription">
+                <Icon Name="plus" Size="13" /> New prescription
+            </button>
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+@if (_drafting is not null)
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header"><h3>New prescription</h3></div>
+        <div class="card-ds-body">
+
+            @if (_warnings.Count > 0)
+            {
+                <div class="alert-ds a-warning mb-3">
+                    <Icon Name="alert-triangle" Size="16" />
+                    <div>
+                        <strong>Safety check</strong>
+                        <ul class="mb-0 mt-1" style="padding-left:1.1rem;">
+                            @foreach (var warning in _warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-12 col-md-5">
+                    <label class="form-label">Medication</label>
+                    <select class="form-select form-select-sm" @bind="_newMedicationId" @bind:after="OnMedicationSelected">
+                        <option value="">Select a medication</option>
+                        @foreach (var group in _medications.GroupBy(m => m.DrugClass ?? "Other"))
+                        {
+                            <optgroup label="@group.Key">
+                                @foreach (var medication in group)
+                                {
+                                    <option value="@medication.Id">@medication.Name</option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Dose</label>
+                    <input class="form-control form-control-sm" @bind="_newDosage" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Frequency</label>
+                    <input class="form-control form-control-sm" @bind="_newFrequency" />
+                </div>
+                <div class="col-4 col-md-1">
+                    <label class="form-label">Days</label>
+                    <input type="number" class="form-control form-control-sm" @bind="_newDurationDays" />
+                </div>
+                <div class="col-4 col-md-1">
+                    <label class="form-label">Qty</label>
+                    <input type="number" class="form-control form-control-sm" @bind="_newQuantity" />
+                </div>
+                <div class="col-4 col-md-1">
+                    <button class="btn btn-sm btn-outline-secondary w-100" @onclick="AddItem">Add</button>
+                </div>
+            </div>
+
+            @if (_drafting.Items.Count == 0)
+            {
+                <div class="text-muted" style="font-size:.85rem;">Add at least one medication.</div>
+            }
+            else
+            {
+                <div class="table-wrap mb-3">
+                    <table class="table-ds">
+                        <thead>
+                            <tr><th>Medication</th><th>Directions</th><th class="num">Quantity</th><th style="width:40px;"></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _drafting.Items)
+                            {
+                                <tr>
+                                    <td style="font-weight:500;">@item.DisplayName</td>
+                                    <td>@item.Sig</td>
+                                    <td class="num mono">@item.Quantity @item.Unit</td>
+                                    <td>
+                                        <button class="btn-ghost" @onclick="() => RemoveItem(item)">
+                                            <Icon Name="trash" Size="13" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="row g-2">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Indication</label>
+                    <input class="form-control form-control-sm" @bind="_drafting.Indication"
+                           placeholder="Why the medication is being prescribed" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Pharmacy</label>
+                    <select class="form-select form-select-sm" @bind="_pharmacyId">
+                        <option value="">Patient will choose</option>
+                        @foreach (var pharmacy in _pharmacies)
+                        {
+                            <option value="@pharmacy.Id">@pharmacy.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-ds-footer d-flex gap-2 align-items-center">
+            <button class="btn btn-sm btn-primary" @onclick="Issue" disabled="@(_saving || _drafting.Items.Count == 0)">
+                Issue prescription
+            </button>
+            @if (_warnings.Any(w => w.StartsWith("ALLERGY")))
+            {
+                <label class="d-flex align-items-center gap-2 text-danger" style="font-size:.83rem;">
+                    <input type="checkbox" class="form-check-input mt-0" @bind="_acknowledgeWarnings" />
+                    I have reviewed the allergy warning and am prescribing anyway
+                </label>
+            }
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _drafting = null">Cancel</button>
+        </div>
+    </div>
+}
+
+@if (_prescriptions.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="pill" Title="No prescriptions"
+                    Message="Prescriptions issued to this patient appear here." />
+    </div>
+}
+else
+{
+    <div class="d-flex flex-column gap-2">
+        @foreach (var prescription in _prescriptions)
+        {
+            <div class="card-ds">
+                <div class="card-ds-header">
+                    <span class="mono" style="font-weight:600;">@prescription.PrescriptionNumber</span>
+                    <span class="badge-ds @Ui.BadgeFor(prescription.Status)">@Ui.Humanise(prescription.Status)</span>
+                    <span class="text-muted" style="font-size:.79rem;">
+                        @Ui.Date(prescription.IssueDate) &middot; @(prescription.PrescriberStaff?.DisplayName ?? "-")
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(prescription.InteractionWarnings))
+                    {
+                        <span class="badge-ds b-warning" title="@prescription.InteractionWarnings">
+                            <Icon Name="alert-triangle" Size="11" /> Warnings recorded
+                        </span>
+                    }
+                    <a class="btn btn-sm btn-outline-secondary ms-auto d-inline-flex align-items-center gap-1"
+                       href="/api/exports/documents/prescription/@prescription.Id" target="_blank" rel="noopener">
+                        <Icon Name="printer" Size="12" /> Print
+                    </a>
+                </div>
+                <div class="table-wrap" style="border:0; border-radius:0;">
+                    <table class="table-ds">
+                        <thead>
+                            <tr><th>Medication</th><th>Directions</th><th>Route</th><th class="num">Quantity</th><th class="num">Repeats</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in prescription.Items.OrderBy(i => i.Sequence))
+                            {
+                                <tr>
+                                    <td style="font-weight:500;">@item.DisplayName</td>
+                                    <td>
+                                        @item.Sig
+                                        @if (!string.IsNullOrWhiteSpace(item.Instructions))
+                                        {
+                                            <div class="text-muted" style="font-size:.75rem;">@item.Instructions</div>
+                                        }
+                                    </td>
+                                    <td>@Ui.Humanise(item.Route)</td>
+                                    <td class="num mono">@item.Quantity</td>
+                                    <td class="num mono">@item.Repeats</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<Prescription> _prescriptions = new();
+    private List<Medication> _medications = new();
+    private List<Pharmacy> _pharmacies = new();
+    private Prescription? _drafting;
+    private List<string> _warnings = new();
+
+    private string _newMedicationId = string.Empty;
+    private string _newDosage = string.Empty;
+    private string _newFrequency = string.Empty;
+    private int? _newDurationDays;
+    private decimal _newQuantity = 1;
+    private string _pharmacyId = string.Empty;
+    private bool _acknowledgeWarnings;
+    private bool _saving;
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _prescriptions = await Clinical.GetPrescriptionsAsync(PatientId);
+
+        if (_medications.Count == 0)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _medications = await db.Medications.AsNoTracking()
+                .Where(m => m.IsActive && !m.IsAnaesthetic)
+                .OrderBy(m => m.DrugClass).ThenBy(m => m.Name).ToListAsync();
+            _pharmacies = await db.Pharmacies.AsNoTracking()
+                .Where(p => p.IsActive).OrderBy(p => p.Name).ToListAsync();
+        }
+    }
+
+    private void StartPrescription()
+    {
+        _drafting = new Prescription { PatientId = PatientId, IssueDate = Clock.Today };
+        _warnings = new List<string>();
+        _acknowledgeWarnings = false;
+    }
+
+    private void OnMedicationSelected()
+    {
+        if (!Guid.TryParse(_newMedicationId, out var id)) return;
+        var medication = _medications.FirstOrDefault(m => m.Id == id);
+        if (medication is null) return;
+
+        // Pre-fill the usual directions so the prescriber only adjusts what differs.
+        _newDosage = medication.DefaultDosage ?? string.Empty;
+        _newFrequency = medication.DefaultFrequency ?? string.Empty;
+        _newDurationDays = medication.DefaultDurationDays;
+        _newQuantity = medication.DefaultQuantity ?? 1;
+    }
+
+    private async Task AddItem()
+    {
+        if (_drafting is null || !Guid.TryParse(_newMedicationId, out var medicationId)) return;
+
+        var medication = _medications.FirstOrDefault(m => m.Id == medicationId);
+        if (medication is null) return;
+
+        _drafting.Items.Add(new PrescriptionItem
+        {
+            PrescriptionId = _drafting.Id,
+            MedicationId = medicationId,
+            Dosage = _newDosage,
+            Frequency = _newFrequency,
+            Route = medication.DefaultRoute,
+            DurationDays = _newDurationDays,
+            Quantity = _newQuantity,
+            Unit = medication.Form == MedicationForm.Tablet ? "tablets"
+                 : medication.Form == MedicationForm.Capsule ? "capsules" : "ml",
+            Instructions = medication.DefaultInstructions,
+            Sequence = _drafting.Items.Count + 1
+        });
+
+        _newMedicationId = string.Empty;
+        _newDosage = string.Empty;
+        _newFrequency = string.Empty;
+        _newDurationDays = null;
+        _newQuantity = 1;
+
+        await RefreshWarningsAsync();
+    }
+
+    private async Task RemoveItem(PrescriptionItem item)
+    {
+        _drafting?.Items.Remove(item);
+        await RefreshWarningsAsync();
+    }
+
+    private async Task RefreshWarningsAsync()
+    {
+        if (_drafting is null) return;
+
+        var ids = _drafting.Items.Where(i => i.MedicationId.HasValue).Select(i => i.MedicationId!.Value);
+        _warnings = (await Clinical.CheckPrescriptionSafetyAsync(PatientId, ids)).ToList();
+    }
+
+    private async Task Issue()
+    {
+        if (_drafting is null) return;
+
+        if (Guid.TryParse(_pharmacyId, out var pharmacyId)) _drafting.PharmacyId = pharmacyId;
+
+        _saving = true;
+        var result = await Clinical.IssuePrescriptionAsync(_drafting, _acknowledgeWarnings);
+        _saving = false;
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        _drafting = null;
+        _message = "Prescription issued and added to the patient's medication list.";
+        _isError = false;
+        _prescriptions = await Clinical.GetPrescriptionsAsync(PatientId);
+    }
+}

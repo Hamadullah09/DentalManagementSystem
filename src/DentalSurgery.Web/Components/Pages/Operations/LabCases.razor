@@ -1,0 +1,221 @@
+@page "/lab-cases"
+@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<PageTitle>Laboratory - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Laboratory cases"
+            Subtitle="Work sent out, what is due back, and anything running late." />
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds a-success mb-3">
+        <Icon Name="check-circle" Size="15" /><div>@_message</div>
+    </div>
+}
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Open cases" Value="@OpenCount.ToString()" Accent="primary" Icon="flask" />
+    <StatTile Label="Overdue" Value="@_cases.Count(c => c.IsOverdue).ToString()"
+              Accent="@(_cases.Any(c => c.IsOverdue) ? "danger" : "success")" Icon="alert-circle" />
+    <StatTile Label="Due this week" Value="@DueThisWeek.ToString()" Accent="warning" Icon="clock" />
+    <StatTile Label="Awaiting fit" Value="@_cases.Count(c => c.Status == LabCaseStatus.Received).ToString()"
+              Accent="accent" />
+    <StatTile Label="Remakes" Value="@_cases.Count(c => c.IsRemake || c.Status == LabCaseStatus.Remake).ToString()"
+              Accent="@(_cases.Any(c => c.IsRemake) ? "warning" : "success")"
+              Caption="@($"{RemakeRate:0.#}% of cases")" />
+    <StatTile Label="Lab spend" Value="@Ui.MoneyCompact(_cases.Sum(c => c.LabFee ?? 0))" Accent="neutral" />
+</div>
+
+<div class="filter-bar">
+    <div class="field">
+        <label class="form-label">Status</label>
+        <select class="form-select form-select-sm" @bind="_statusFilter">
+            <option value="">All statuses</option>
+            @foreach (var status in Enum.GetValues<LabCaseStatus>())
+            {
+                <option value="@status">@Ui.Humanise(status)</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label class="form-label">Laboratory</label>
+        <select class="form-select form-select-sm" @bind="_labFilter">
+            <option value="">All laboratories</option>
+            @foreach (var lab in _cases.Where(c => c.DentalLaboratory is not null)
+                                       .Select(c => c.DentalLaboratory!).DistinctBy(l => l.Id))
+            {
+                <option value="@lab.Id">@lab.Name</option>
+            }
+        </select>
+    </div>
+    <div class="field" style="min-width:auto;">
+        <label class="form-label">Show</label>
+        <button class="btn btn-sm @(_overdueOnly ? "btn-primary" : "btn-outline-secondary")"
+                @onclick="() => _overdueOnly = !_overdueOnly">
+            Overdue only
+        </button>
+    </div>
+</div>
+
+@if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="flask" Title="No laboratory cases"
+                    Message="Nothing matches the current filters." />
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Case</th>
+                    <th>Patient</th>
+                    <th>Type</th>
+                    <th>Teeth</th>
+                    <th>Shade</th>
+                    <th>Laboratory</th>
+                    <th>Provider</th>
+                    <th class="nowrap">Sent</th>
+                    <th class="nowrap">Due</th>
+                    <th class="num">Fee</th>
+                    <th style="width:120px;">Status</th>
+                    <th style="width:110px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var labCase in Filtered)
+                {
+                    <tr>
+                        <td class="mono">
+                            @labCase.CaseNumber
+                            @if (labCase.IsRemake)
+                            {
+                                <div><span class="badge-ds b-warning">Remake</span></div>
+                            }
+                        </td>
+                        <td>
+                            <a href="/patients/@labCase.PatientId" style="font-weight:600;">
+                                @(labCase.Patient?.Name.Display ?? "Unknown")
+                            </a>
+                        </td>
+                        <td>@Ui.Humanise(labCase.CaseType)</td>
+                        <td class="mono" style="font-size:.76rem;">
+                            @(labCase.ToothNumbers ?? (labCase.Arch.HasValue ? Ui.Humanise(labCase.Arch.Value) : "-"))
+                        </td>
+                        <td class="mono">@(labCase.Shade ?? "-")</td>
+                        <td style="font-size:.8rem;">@(labCase.DentalLaboratory?.Name ?? "-")</td>
+                        <td class="nowrap" style="font-size:.8rem;">@(labCase.Provider?.Name.Display ?? "-")</td>
+                        <td class="nowrap">@Ui.DateShort(labCase.SentDate)</td>
+                        <td class="nowrap @(labCase.IsOverdue ? "text-danger fw-semibold" : "")">
+                            @Ui.DateShort(labCase.DueDate)
+                            @if (labCase.DaysUntilDue is { } days && labCase.Status != LabCaseStatus.Delivered)
+                            {
+                                <div style="font-size:.7rem;">
+                                    @(days < 0 ? $"{-days} days late" : days == 0 ? "today" : $"in {days} days")
+                                </div>
+                            }
+                        </td>
+                        <td class="num mono">@(labCase.LabFee.HasValue ? Ui.Money(labCase.LabFee.Value) : "-")</td>
+                        <td><span class="badge-ds @Ui.BadgeFor(labCase.Status)">@Ui.Humanise(labCase.Status)</span></td>
+                        <td>
+                            @if (labCase.Status is LabCaseStatus.Sent or LabCaseStatus.InProduction or LabCaseStatus.Shipped)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => Receive(labCase.Id)">
+                                    Book in
+                                </button>
+                            }
+                            else if (labCase.Status is LabCaseStatus.Received or LabCaseStatus.TryIn)
+                            {
+                                <button class="btn btn-sm btn-primary" @onclick="() => Deliver(labCase.Id)">
+                                    Fitted
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<LabCase> _cases = new();
+    private string _statusFilter = string.Empty;
+    private string _labFilter = string.Empty;
+    private bool _overdueOnly;
+    private string? _message;
+
+    private int OpenCount => _cases.Count(c =>
+        c.Status is not (LabCaseStatus.Delivered or LabCaseStatus.Cancelled));
+
+    private int DueThisWeek => _cases.Count(c =>
+        c.DueDate.HasValue && c.DueDate.Value >= Clock.Today && c.DueDate.Value <= Clock.Today.AddDays(7) &&
+        c.Status is not (LabCaseStatus.Delivered or LabCaseStatus.Cancelled));
+
+    private decimal RemakeRate =>
+        _cases.Count == 0 ? 0 : Math.Round(100m * _cases.Count(c => c.IsRemake) / _cases.Count, 1);
+
+    private List<LabCase> Filtered
+    {
+        get
+        {
+            var query = _cases.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_statusFilter) && Enum.TryParse<LabCaseStatus>(_statusFilter, out var status))
+                query = query.Where(c => c.Status == status);
+
+            if (Guid.TryParse(_labFilter, out var labId))
+                query = query.Where(c => c.DentalLaboratoryId == labId);
+
+            if (_overdueOnly) query = query.Where(c => c.IsOverdue);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _cases = await db.LabCases.AsNoTracking()
+            .Include(c => c.Patient)
+            .Include(c => c.DentalLaboratory)
+            .Include(c => c.Provider)
+            .OrderBy(c => c.Status == LabCaseStatus.Delivered)
+            .ThenBy(c => c.DueDate)
+            .ToListAsync();
+    }
+
+    private async Task Receive(Guid caseId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var labCase = await db.LabCases.FirstOrDefaultAsync(c => c.Id == caseId);
+        if (labCase is null) return;
+
+        labCase.Status = LabCaseStatus.Received;
+        labCase.ReceivedDate = Clock.Today;
+        await db.SaveChangesAsync();
+
+        _message = $"Case {labCase.CaseNumber} booked in. Contact the patient to arrange the fit appointment.";
+        await LoadAsync();
+    }
+
+    private async Task Deliver(Guid caseId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var labCase = await db.LabCases.FirstOrDefaultAsync(c => c.Id == caseId);
+        if (labCase is null) return;
+
+        labCase.Status = LabCaseStatus.Delivered;
+        labCase.DeliveryDate = Clock.Today;
+        await db.SaveChangesAsync();
+
+        _message = $"Case {labCase.CaseNumber} marked as fitted.";
+        await LoadAsync();
+    }
+}

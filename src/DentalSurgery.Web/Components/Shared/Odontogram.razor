@@ -1,0 +1,229 @@
+@*
+    Interactive dental chart. Each tooth is drawn as five clickable surface
+    regions (a Zsigmondy-style box) so findings can be recorded per surface.
+*@
+
+<div class="odontogram">
+
+    @if (Chart is null)
+    {
+        <div class="d-flex flex-column gap-2">
+            <div class="skeleton" style="height:70px;"></div>
+            <div class="skeleton" style="height:70px;"></div>
+        </div>
+    }
+    else
+    {
+        <div class="tooth-row">
+            @foreach (var tooth in Chart.UpperRow)
+            {
+                @RenderTooth(tooth, upper: true)
+            }
+        </div>
+
+        <div class="arch-divider"></div>
+
+        <div class="tooth-row">
+            @foreach (var tooth in Chart.LowerRow)
+            {
+                @RenderTooth(tooth, upper: false)
+            }
+        </div>
+
+        @if (ShowLegend)
+        {
+            <div class="chart-legend">
+                <span class="legend-item"><span class="legend-swatch" style="background:#ffffff"></span>Sound</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#20c997"></span>Restored</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#dc3545"></span>Caries</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#0d6efd"></span>Planned</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#ffc107"></span>Crown</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#6f42c1"></span>Implant</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#e9ecef"></span>Missing</span>
+                <span class="legend-item ms-auto">
+                    DMFT <strong class="ms-1">@Chart.Dmft</strong>
+                    <span class="text-faint ms-2">@Chart.PresentCount present / @Chart.MissingCount missing</span>
+                </span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public DentalChart? Chart { get; set; }
+    [Parameter] public Guid? SelectedToothId { get; set; }
+    [Parameter] public EventCallback<ToothState> OnToothSelected { get; set; }
+    [Parameter] public EventCallback<(ToothState Tooth, ToothSurface Surface)> OnSurfaceSelected { get; set; }
+    [Parameter] public bool ShowLegend { get; set; } = true;
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private const int Box = 30;      // outer square, in SVG units
+    private const int Inset = 9;     // depth of each outer surface band
+
+    private RenderFragment RenderTooth(ToothState state, bool upper) => builder =>
+    {
+        var selected = SelectedToothId == state.Tooth.Id;
+        var classes = "tooth"
+                      + (selected ? " selected" : string.Empty)
+                      + (state.IsMissing ? " is-missing" : string.Empty);
+
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", classes);
+        builder.AddAttribute(2, "title", Tooltip(state));
+
+        if (!ReadOnly)
+        {
+            builder.AddAttribute(3, "onclick",
+                EventCallback.Factory.Create<MouseEventArgs>(this, () => SelectTooth(state)));
+        }
+
+        // Upper arch: number above the tooth. Lower arch: number below.
+        if (upper) builder.AddContent(4, LabelFragment(state));
+        builder.AddContent(5, ToothSvgFragment(state));
+        if (!upper) builder.AddContent(6, LabelFragment(state));
+
+        builder.CloseElement();
+    };
+
+    private RenderFragment LabelFragment(ToothState state) => builder =>
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "tooth-label");
+        builder.AddContent(2, state.Tooth.FdiNumber);
+        builder.CloseElement();
+    };
+
+    private RenderFragment ToothSvgFragment(ToothState state) => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "svg");
+        builder.AddAttribute(seq++, "width", "34");
+        builder.AddAttribute(seq++, "height", "34");
+        builder.AddAttribute(seq++, "viewBox", $"0 0 {Box} {Box}");
+
+        if (state.IsMissing)
+        {
+            // A missing tooth is shown as a crossed-out outline.
+            AddPath(builder, ref seq, $"M0 0 H{Box} V{Box} H0 Z", "#e9ecef", "#c3cdd8", 1);
+            AddLine(builder, ref seq, 4, 4, Box - 4, Box - 4, "#8a95a3", 1.6);
+            AddLine(builder, ref seq, Box - 4, 4, 4, Box - 4, "#8a95a3", 1.6);
+        }
+        else if (state.IsImplant)
+        {
+            AddPath(builder, ref seq, $"M0 0 H{Box} V{Box} H0 Z", "#efe9fb", "#6f42c1", 1.2);
+            // Threaded fixture glyph.
+            AddPath(builder, ref seq, "M12 6 H18 L17 24 H13 Z", "#6f42c1", "#6f42c1", 0.5);
+            for (var y = 9; y <= 21; y += 4)
+                AddLine(builder, ref seq, 10, y, 20, y, "#6f42c1", 1.1);
+        }
+        else if (state.IsCrowned)
+        {
+            AddPath(builder, ref seq, $"M0 0 H{Box} V{Box} H0 Z", "#fff3cd", "#c77700", 1.2);
+            AddPath(builder, ref seq, "M6 20 L9 10 L15 16 L21 10 L24 20 Z", "#ffc107", "#c77700", 0.8);
+        }
+        else
+        {
+            // Five surfaces: mesial, distal, buccal, lingual/palatal, occlusal.
+            AddSurface(builder, ref seq, state, ToothSurface.Buccal,
+                $"M0 0 H{Box} L{Box - Inset} {Inset} H{Inset} Z");
+            AddSurface(builder, ref seq, state, state.Tooth.Arch == DentalArch.Upper ? ToothSurface.Palatal : ToothSurface.Lingual,
+                $"M0 {Box} H{Box} L{Box - Inset} {Box - Inset} H{Inset} Z");
+            AddSurface(builder, ref seq, state, ToothSurface.Mesial,
+                $"M0 0 V{Box} L{Inset} {Box - Inset} V{Inset} Z");
+            AddSurface(builder, ref seq, state, ToothSurface.Distal,
+                $"M{Box} 0 V{Box} L{Box - Inset} {Box - Inset} V{Inset} Z");
+            AddSurface(builder, ref seq, state,
+                state.Tooth.HasOcclusalSurface ? ToothSurface.Occlusal : ToothSurface.Incisal,
+                $"M{Inset} {Inset} H{Box - Inset} V{Box - Inset} H{Inset} Z");
+        }
+
+        // Root-treated teeth carry a marker regardless of the crown state.
+        if (state.IsRootTreated)
+        {
+            AddLine(builder, ref seq, 15, 3, 15, Box - 3, "#d13438", 1.4);
+            AddLine(builder, ref seq, 11, 6, 19, 6, "#d13438", 1.4);
+        }
+
+        builder.CloseElement();
+    };
+
+    private void AddSurface(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, ToothState state, ToothSurface surface, string path)
+    {
+        var fill = SurfaceFill(state, surface);
+
+        builder.OpenElement(seq++, "path");
+        builder.AddAttribute(seq++, "d", path);
+        builder.AddAttribute(seq++, "fill", fill);
+        builder.AddAttribute(seq++, "stroke", "#8a95a3");
+        builder.AddAttribute(seq++, "stroke-width", "0.7");
+        builder.AddAttribute(seq++, "style", ReadOnly ? null : "cursor:pointer;");
+
+        if (!ReadOnly)
+        {
+            builder.AddAttribute(seq++, "onclick",
+                EventCallback.Factory.Create<MouseEventArgs>(this, () => SelectSurface(state, surface)));
+            builder.AddEventStopPropagationAttribute(seq++, "onclick", true);
+        }
+
+        builder.CloseElement();
+    }
+
+    private static void AddPath(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, string path, string fill, string stroke, double width)
+    {
+        builder.OpenElement(seq++, "path");
+        builder.AddAttribute(seq++, "d", path);
+        builder.AddAttribute(seq++, "fill", fill);
+        builder.AddAttribute(seq++, "stroke", stroke);
+        builder.AddAttribute(seq++, "stroke-width", width.ToString(CultureInfo.InvariantCulture));
+        builder.CloseElement();
+    }
+
+    private static void AddLine(
+        Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder,
+        ref int seq, double x1, double y1, double x2, double y2, string stroke, double width)
+    {
+        builder.OpenElement(seq++, "line");
+        builder.AddAttribute(seq++, "x1", x1.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(seq++, "y1", y1.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(seq++, "x2", x2.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(seq++, "y2", y2.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(seq++, "stroke", stroke);
+        builder.AddAttribute(seq++, "stroke-width", width.ToString(CultureInfo.InvariantCulture));
+        builder.AddAttribute(seq++, "stroke-linecap", "round");
+        builder.CloseElement();
+    }
+
+    /// <summary>Planned work outranks caries, which outranks an existing restoration.</summary>
+    private static string SurfaceFill(ToothState state, ToothSurface surface)
+    {
+        if (state.PlannedSurfaces.HasFlag(surface)) return "#cfe2ff";
+        if (state.CariousSurfaces.HasFlag(surface)) return "#dc3545";
+        if (state.RestoredSurfaces.HasFlag(surface)) return "#20c997";
+        return "#ffffff";
+    }
+
+    private static string Tooltip(ToothState state)
+    {
+        var lines = new List<string> { $"{state.Tooth.FdiNumber} - {state.Tooth.Name}", state.StatusSummary };
+
+        foreach (var record in state.AllActive.Take(6))
+        {
+            var surfaces = record.Surfaces == ToothSurface.None ? "" : $" {record.SurfaceCode}";
+            lines.Add($"{Ui.Humanise(record.ConditionType)}{surfaces} ({record.RecordedOn:MMM yyyy})");
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    private Task SelectTooth(ToothState state) => OnToothSelected.InvokeAsync(state);
+
+    private async Task SelectSurface(ToothState state, ToothSurface surface)
+    {
+        await OnToothSelected.InvokeAsync(state);
+        await OnSurfaceSelected.InvokeAsync((state, surface));
+    }
+}

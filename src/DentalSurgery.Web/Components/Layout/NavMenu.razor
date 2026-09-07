@@ -1,0 +1,141 @@
+@implements IDisposable
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+<div class="brand">
+    <span class="brand-mark">
+        <Icon Name="tooth" Size="19" CssClass="text-white" />
+    </span>
+    <div>
+        <div class="brand-name">@_practiceName</div>
+        <div class="brand-sub">Practice management</div>
+    </div>
+</div>
+
+<nav class="nav-scroll">
+
+    <div class="nav-section">Clinic</div>
+    <NavItem Href="" Icon="dashboard" Label="Dashboard" Exact="true" />
+    <NavItem Href="schedule" Icon="calendar" Label="Appointment book" />
+    <NavItem Href="waiting-room" Icon="clock" Label="Waiting room" Badge="@_waitingCount" />
+    <NavItem Href="patients" Icon="users" Label="Patients" />
+    <NavItem Href="recalls" Icon="bell" Label="Recalls" Badge="@_recallsOverdue" BadgeMuted="true" />
+    <NavItem Href="waitlist" Icon="list-checks" Label="Waiting list" />
+
+    <AuthorizeView Policy="@Policies.CanViewClinical">
+        <div class="nav-section">Clinical</div>
+        <NavItem Href="treatment-plans" Icon="clipboard" Label="Treatment plans" />
+        <NavItem Href="surgery" Icon="scissors" Label="Surgical register" />
+        <NavItem Href="implants" Icon="activity" Label="Implant registry" />
+        <NavItem Href="prescriptions" Icon="pill" Label="Prescriptions" />
+        <NavItem Href="radiographs" Icon="x-ray" Label="Imaging" />
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.CanManageBilling">
+        <div class="nav-section">Finance</div>
+        <NavItem Href="billing/invoices" Icon="receipt" Label="Invoices" />
+        <NavItem Href="billing/receivables" Icon="credit-card" Label="Outstanding balances" />
+        <NavItem Href="billing/claims" Icon="file-text" Label="Insurance claims" />
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.CanManageInventory">
+        <div class="nav-section">Operations</div>
+        <NavItem Href="inventory" Icon="package" Label="Stock control" Badge="@_lowStock" />
+        <NavItem Href="sterilisation" Icon="shield" Label="Sterilisation" Badge="@_sterilisationFailures" />
+        <NavItem Href="lab-cases" Icon="flask" Label="Laboratory" Badge="@_labsOverdue" />
+        <NavItem Href="purchase-orders" Icon="truck" Label="Purchase orders" />
+    </AuthorizeView>
+
+    <div class="nav-section">Practice</div>
+    <NavItem Href="tasks" Icon="list-checks" Label="Tasks" Badge="@_openTasks" BadgeMuted="true" />
+
+    <AuthorizeView Policy="@Policies.CanViewReports">
+        <NavItem Href="reports" Icon="bar-chart" Label="Reports" />
+        <NavItem Href="exports" Icon="download" Label="Exports" />
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.CanManageStaff">
+        <NavItem Href="staff" Icon="stethoscope" Label="Team" />
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.CanAdminister">
+        <NavItem Href="admin" Icon="settings" Label="Configuration" Exact="true" />
+        <NavItem Href="admin/integrations" Icon="external" Label="Integrations" />
+        <NavItem Href="admin/audit" Icon="shield" Label="Audit trail" />
+    </AuthorizeView>
+
+</nav>
+
+<div class="sidebar-footer">
+    <div class="d-flex justify-content-between align-items-center">
+        <span>@Clock.LocalNow.ToString("ddd d MMM")</span>
+        <a href="/api-docs" target="_blank" class="text-decoration-none" style="color:inherit;" title="API documentation">
+            <Icon Name="external" Size="13" />
+        </a>
+    </div>
+</div>
+
+@code {
+    private string _practiceName = "Dental Surgery";
+    private int _waitingCount;
+    private int _recallsOverdue;
+    private int _lowStock;
+    private int _labsOverdue;
+    private int _sterilisationFailures;
+    private int _openTasks;
+
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        // The badges are live counters; refresh them without a page reload.
+        _refreshTimer = new Timer(async _ =>
+        {
+            await LoadAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2));
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await using var Db = await DbFactory.CreateDbContextAsync();
+
+            var today = Clock.Today;
+            var dayStart = today.ToDateTime(TimeOnly.MinValue);
+            var dayEnd = dayStart.AddDays(1);
+            var monthStart = new DateOnly(today.Year, today.Month, 1).ToDateTime(TimeOnly.MinValue);
+
+            _practiceName = await Db.Practices.AsNoTracking()
+                .Select(p => p.Name).FirstOrDefaultAsync() ?? "Dental Surgery";
+
+            _waitingCount = await Db.Appointments.CountAsync(a =>
+                a.StartUtc >= dayStart && a.StartUtc < dayEnd &&
+                (a.Status == AppointmentStatus.ArrivedWaiting || a.Status == AppointmentStatus.Seated));
+
+            _recallsOverdue = await Db.RecallSchedules.CountAsync(r =>
+                r.IsActive && r.DueDate < today && r.Status != RecallStatus.Booked);
+
+            _lowStock = await Db.InventoryItems.CountAsync(i => i.IsActive && i.CurrentStock <= i.ReorderLevel);
+
+            _labsOverdue = await Db.LabCases.CountAsync(c =>
+                c.DueDate != null && c.DueDate < today &&
+                c.Status != LabCaseStatus.Received && c.Status != LabCaseStatus.Delivered &&
+                c.Status != LabCaseStatus.Cancelled);
+
+            _sterilisationFailures = await Db.SterilisationCycles.CountAsync(c =>
+                c.Result == SterilisationResult.Fail && c.StartedAtUtc >= monthStart);
+
+            _openTasks = await Db.WorkTasks.CountAsync(t => !t.IsCompleted);
+        }
+        catch (Exception)
+        {
+            // The navigation must render even when a counter query fails.
+        }
+    }
+
+    public void Dispose() => _refreshTimer?.Dispose();
+}

@@ -1,0 +1,317 @@
+@page "/inventory"
+@page "/inventory/expiring"
+@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@inject InventoryService Stock
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Stock control - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Stock control"
+            Subtitle="Consumables, materials and implant components, with lot and expiry tracking.">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" @onclick="ExportCsv">
+            <Icon Name="download" Size="13" /> Export
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="WriteOffExpired" disabled="@_working">
+            Write off expired lots
+        </button>
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
+                @onclick="GenerateReorders" disabled="@_working">
+            <Icon Name="truck" Size="13" /> Draft reorders
+        </button>
+    </Actions>
+</PageHeader>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Active lines" Value="@_items.Count.ToString()" Accent="primary" Icon="package" />
+    <StatTile Label="Below reorder level" Value="@_items.Count(i => i.IsBelowReorderLevel).ToString()"
+              Accent="@(_items.Any(i => i.IsBelowReorderLevel) ? "warning" : "success")" />
+    <StatTile Label="Out of stock" Value="@_items.Count(i => i.IsOutOfStock).ToString()"
+              Accent="@(_items.Any(i => i.IsOutOfStock) ? "danger" : "success")" />
+    <StatTile Label="Stock value" Value="@Ui.MoneyCompact(_items.Sum(i => i.StockValue))" Accent="accent" />
+    <StatTile Label="Expiring in 90 days" Value="@_expiring.Count(l => !l.IsExpired).ToString()" Accent="warning" Icon="clock" />
+    <StatTile Label="Already expired" Value="@_expiring.Count(l => l.IsExpired).ToString()"
+              Accent="@(_expiring.Any(l => l.IsExpired) ? "danger" : "success")" />
+</div>
+
+<div class="tabs-ds">
+    <button class="tab-ds @(_view == "stock" ? "active" : "")" @onclick='() => _view = "stock"'>
+        Stock levels <span class="count">@_items.Count</span>
+    </button>
+    <button class="tab-ds @(_view == "expiring" ? "active" : "")" @onclick='() => _view = "expiring"'>
+        Lots and expiry <span class="count">@_expiring.Count</span>
+    </button>
+</div>
+
+@if (_view == "stock")
+{
+    <div class="filter-bar">
+        <div class="field grow">
+            <label class="form-label">Search</label>
+            <input class="form-control form-control-sm" placeholder="Name, SKU or manufacturer"
+                   @bind="_search" @bind:event="oninput" />
+        </div>
+        <div class="field">
+            <label class="form-label">Category</label>
+            <select class="form-select form-select-sm" @bind="_categoryFilter">
+                <option value="">All categories</option>
+                @foreach (var category in _items.Select(i => i.Category).Distinct().OrderBy(c => c.ToString()))
+                {
+                    <option value="@category">@Ui.Humanise(category)</option>
+                }
+            </select>
+        </div>
+        <div class="field" style="min-width:auto;">
+            <label class="form-label">Show</label>
+            <button class="btn btn-sm @(_lowOnly ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => _lowOnly = !_lowOnly">
+                Needs reordering
+            </button>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>SKU</th>
+                    <th>Item</th>
+                    <th>Category</th>
+                    <th>Supplier</th>
+                    <th>Location</th>
+                    <th class="num">In stock</th>
+                    <th class="num">Reorder at</th>
+                    <th style="width:120px;">Level</th>
+                    <th class="num">Unit cost</th>
+                    <th class="num">Value</th>
+                    <th style="width:170px;">Adjust</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in FilteredItems)
+                {
+                    <tr>
+                        <td class="mono">@item.Sku</td>
+                        <td>
+                            <div style="font-weight:500;">@item.Name</div>
+                            <div class="d-flex gap-1 mt-1">
+                                @if (item.RequiresLotTracking)
+                                {
+                                    <span class="badge-ds b-neutral">Lot tracked</span>
+                                }
+                                @if (item.IsControlledSubstance)
+                                {
+                                    <span class="badge-ds b-danger">Controlled</span>
+                                }
+                                @if (item.RequiresColdStorage)
+                                {
+                                    <span class="badge-ds b-info">Cold chain</span>
+                                }
+                            </div>
+                        </td>
+                        <td style="font-size:.8rem;">@Ui.Humanise(item.Category)</td>
+                        <td style="font-size:.8rem;">@(item.PreferredSupplier?.Name ?? "-")</td>
+                        <td style="font-size:.78rem;">@(item.StorageLocation ?? "-")</td>
+                        <td class="num mono @(item.IsOutOfStock ? "text-danger fw-bold" : item.IsBelowReorderLevel ? "text-warning fw-semibold" : "")">
+                            @item.CurrentStock.ToString("0.##") <span class="text-faint">@item.UnitOfMeasure</span>
+                        </td>
+                        <td class="num mono text-muted">@item.ReorderLevel.ToString("0.##")</td>
+                        <td>
+                            <div class="bar-track">
+                                <div class="bar-fill @(item.IsOutOfStock ? "danger" : item.IsBelowReorderLevel ? "warning" : "success")"
+                                     style="width:@StockPercent(item)%"></div>
+                            </div>
+                        </td>
+                        <td class="num mono">@Ui.Money(item.UnitCost)</td>
+                        <td class="num mono">@Ui.Money(item.StockValue)</td>
+                        <td>
+                            <div class="d-flex gap-1 align-items-center">
+                                <input type="number" step="1" class="form-control form-control-sm" style="width:64px;"
+                                       value="@GetAdjustment(item.Id)"
+                                       @onchange="e => SetAdjustment(item.Id, e.Value?.ToString())" />
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => Adjust(item.Id)">
+                                    Apply
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table-ds">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Lot</th>
+                    <th class="nowrap">Received</th>
+                    <th class="nowrap">Expires</th>
+                    <th class="nowrap">Days left</th>
+                    <th class="num">Remaining</th>
+                    <th class="num">Value</th>
+                    <th style="width:110px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var lot in _expiring)
+                {
+                    <tr>
+                        <td>
+                            <div style="font-weight:500;">@(lot.InventoryItem?.Name ?? "-")</div>
+                            <div class="text-faint mono" style="font-size:.72rem;">@lot.InventoryItem?.Sku</div>
+                        </td>
+                        <td class="mono">@lot.LotNumber</td>
+                        <td class="nowrap">@Ui.DateShort(lot.ReceivedDate)</td>
+                        <td class="nowrap @(lot.IsExpired ? "text-danger fw-semibold" : lot.IsExpiringSoon ? "text-warning" : "")">
+                            @Ui.DateShort(lot.ExpiryDate)
+                        </td>
+                        <td class="num mono">@(lot.DaysUntilExpiry?.ToString() ?? "-")</td>
+                        <td class="num mono">@lot.QuantityRemaining.ToString("0.##")</td>
+                        <td class="num mono">@Ui.Money(lot.QuantityRemaining * lot.UnitCost)</td>
+                        <td>
+                            <span class="badge-ds @(lot.IsExpired ? "b-danger" : lot.IsExpiringSoon ? "b-warning" : "b-success")">
+                                @(lot.IsExpired ? "Expired" : lot.IsExpiringSoon ? "Expiring" : "In date")
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<InventoryItem> _items = new();
+    private List<InventoryLot> _expiring = new();
+    private Dictionary<Guid, string> _adjustments = new();
+
+    private string _view = "stock";
+    private string _search = string.Empty;
+    private string _categoryFilter = string.Empty;
+    private bool _lowOnly;
+    private bool _working;
+    private string? _message;
+    private bool _isError;
+
+    private List<InventoryItem> FilteredItems
+    {
+        get
+        {
+            var query = _items.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_search))
+            {
+                var text = _search.Trim();
+                query = query.Where(i =>
+                    i.Name.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                    i.Sku.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                    (i.Manufacturer?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+
+            if (!string.IsNullOrEmpty(_categoryFilter) &&
+                Enum.TryParse<InventoryCategory>(_categoryFilter, out var category))
+                query = query.Where(i => i.Category == category);
+
+            if (_lowOnly) query = query.Where(i => i.IsBelowReorderLevel);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Navigation.Uri.Contains("/expiring", StringComparison.OrdinalIgnoreCase)) _view = "expiring";
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _items = await Stock.GetItemsAsync();
+        _expiring = await Stock.GetExpiringLotsAsync(90);
+    }
+
+    /// <summary>Stock as a share of twice the reorder level, so a healthy line sits near full.</summary>
+    private static int StockPercent(InventoryItem item)
+    {
+        var target = item.MaximumStock ?? Math.Max(1m, item.ReorderLevel * 2);
+        return (int)Math.Clamp(item.CurrentStock / target * 100, 0, 100);
+    }
+
+    private string GetAdjustment(Guid itemId) => _adjustments.GetValueOrDefault(itemId, string.Empty);
+
+    private void SetAdjustment(Guid itemId, string? value) => _adjustments[itemId] = value ?? string.Empty;
+
+    private async Task Adjust(Guid itemId)
+    {
+        if (!_adjustments.TryGetValue(itemId, out var raw) || !decimal.TryParse(raw, out var quantity) || quantity == 0)
+        {
+            _message = "Enter a positive number to add stock, or a negative number to remove it.";
+            _isError = true;
+            return;
+        }
+
+        var result = await Stock.AdjustAsync(
+            itemId, quantity, StockMovementType.Adjustment, "Manual adjustment from the stock screen");
+
+        _message = result.Succeeded
+            ? $"Stock adjusted by {quantity:+0.##;-0.##}."
+            : result.ErrorMessage;
+        _isError = result.Failed;
+
+        _adjustments[itemId] = string.Empty;
+        await LoadAsync();
+    }
+
+    private async Task GenerateReorders()
+    {
+        _working = true;
+        var orders = await Stock.GenerateReorderDraftsAsync();
+        _working = false;
+
+        _message = orders.Count == 0
+            ? "Nothing is below its reorder level."
+            : $"Created {orders.Count} draft purchase order(s). Review them under Purchase orders.";
+        _isError = false;
+    }
+
+    private async Task WriteOffExpired()
+    {
+        _working = true;
+        var count = await Stock.WriteOffExpiredLotsAsync();
+        _working = false;
+
+        _message = count == 0 ? "No expired lots to write off." : $"Wrote off {count} expired lot(s).";
+        _isError = false;
+        await LoadAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        var csv = CsvExport.Build(FilteredItems,
+            ("SKU", i => i.Sku),
+            ("Name", i => i.Name),
+            ("Category", i => i.Category.ToString()),
+            ("Supplier", i => i.PreferredSupplier?.Name ?? ""),
+            ("Unit", i => i.UnitOfMeasure),
+            ("In stock", i => i.CurrentStock.ToString("0.##")),
+            ("Reorder level", i => i.ReorderLevel.ToString("0.##")),
+            ("Reorder quantity", i => i.ReorderQuantity.ToString("0.##")),
+            ("Unit cost", i => CsvExport.Money(i.UnitCost)),
+            ("Stock value", i => CsvExport.Money(i.StockValue)));
+
+        await CsvExport.DownloadAsync(JS, "stock-levels.csv", csv);
+    }
+}

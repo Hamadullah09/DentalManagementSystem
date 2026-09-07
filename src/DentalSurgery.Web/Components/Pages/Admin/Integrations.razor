@@ -1,0 +1,499 @@
+@page "/admin/integrations"
+@attribute [Authorize(Policy = Policies.CanAdminister)]
+@inject IOptions<NotificationOptions> NotificationSettings
+@inject IOptions<ClaimSubmissionOptions> ClaimSettings
+@inject INotificationSender Notifier
+@inject ClaimGatewaySelector GatewaySelector
+@inject FeeScheduleImporter FeeImporter
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+@inject IJSRuntime JS
+
+<PageTitle>Integrations - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Integrations"
+            Subtitle="Messaging, claim submission and pricing. Configured in appsettings.json, tested here." />
+
+<div class="tabs-ds">
+    <button class="tab-ds @(_view == "messaging" ? "active" : "")" @onclick='() => _view = "messaging"'>Messaging</button>
+    <button class="tab-ds @(_view == "claims" ? "active" : "")" @onclick='() => _view = "claims"'>Claim submission</button>
+    <button class="tab-ds @(_view == "fees" ? "active" : "")" @onclick='() => _view = "fees"'>Fee schedules</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" />
+        <div style="white-space:pre-line;">@_message</div>
+    </div>
+}
+
+@if (_view == "messaging")
+{
+    var email = NotificationSettings.Value.Email;
+    var sms = NotificationSettings.Value.Sms;
+
+    <div class="stat-grid mb-3">
+        <StatTile Label="Email gateway" Value="@(email.IsUsable ? "Configured" : "Not configured")"
+                  Accent="@(email.IsUsable ? "success" : "neutral")" Icon="mail"
+                  Caption="@(email.IsUsable ? $"{email.Host}:{email.Port}" : "Messages are recorded only")" />
+        <StatTile Label="SMS gateway" Value="@(sms.IsUsable ? "Configured" : "Not configured")"
+                  Accent="@(sms.IsUsable ? "success" : "neutral")" Icon="phone"
+                  Caption="@(sms.IsUsable ? sms.Provider : "Messages are recorded only")" />
+        <StatTile Label="Outbound" Value="@(NotificationSettings.Value.SuppressOutbound ? "Suppressed" : "Live")"
+                  Accent="@(NotificationSettings.Value.SuppressOutbound ? "warning" : "success")" />
+        <StatTile Label="Reminders pending" Value="@_pendingReminders.ToString()" Accent="primary" Icon="clock"
+                  Caption="@($"checked every {NotificationSettings.Value.DispatchIntervalMinutes} minutes")" />
+        <StatTile Label="Sent in the last 7 days" Value="@_sentThisWeek.ToString()" Accent="accent" />
+        <StatTile Label="Failed in the last 7 days" Value="@_failedThisWeek.ToString()"
+                  Accent="@(_failedThisWeek > 0 ? "danger" : "success")" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(NotificationSettings.Value.RedirectAllTo))
+    {
+        <div class="alert-ds a-warning mb-3">
+            <Icon Name="alert-triangle" Size="16" />
+            <div>
+                <strong>All outbound messages are being redirected to @NotificationSettings.Value.RedirectAllTo.</strong>
+                No patient will receive anything. Clear <span class="mono">Notifications:RedirectAllTo</span> to send normally.
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Send a test message</h3></div>
+                <div class="card-ds-body">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Channel</label>
+                            <select class="form-select form-select-sm" @bind="_testChannel">
+                                <option value="@CommunicationChannel.Email">Email</option>
+                                <option value="@CommunicationChannel.Sms">SMS</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Send to</label>
+                            <input class="form-control form-control-sm" @bind="_testRecipient"
+                                   placeholder="Your own address or number" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Message</label>
+                            <textarea class="form-control form-control-sm" rows="3" @bind="_testBody"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-ds-footer d-flex gap-2 align-items-center">
+                    <button class="btn btn-sm btn-primary" @onclick="SendTest" disabled="@_working">
+                        Send test
+                    </button>
+                    <span class="text-faint" style="font-size:.76rem;">
+                        Sends through the real gateway. Nothing is written to a patient record.
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Configuration</h3></div>
+                <div class="card-ds-body">
+                    <dl class="kv" style="font-size:.82rem;">
+                        <dt>SMTP host</dt><dd class="mono">@(Blank(email.Host))</dd>
+                        <dt>Port</dt><dd class="mono">@email.Port @(email.UseSsl ? "(implicit TLS)" : email.UseStartTls ? "(STARTTLS)" : "(no TLS)")</dd>
+                        <dt>From</dt><dd class="mono">@(Blank(email.FromAddress))</dd>
+                        <dt>Authenticated</dt><dd>@(string.IsNullOrWhiteSpace(email.Username) ? "No" : "Yes")</dd>
+                        <dt>SMS endpoint</dt><dd class="mono">@(Blank(sms.Endpoint))</dd>
+                        <dt>SMS shape</dt><dd>@sms.Provider</dd>
+                        <dt>SMS from</dt><dd class="mono">@(Blank(sms.FromNumber))</dd>
+                        <dt>Retry limit</dt><dd>@NotificationSettings.Value.MaxAttempts attempts</dd>
+                        <dt>Abandon after</dt><dd>@NotificationSettings.Value.AbandonAfterHours hours</dd>
+                    </dl>
+
+                    <div class="text-faint mt-2" style="font-size:.76rem;">
+                        Credentials are never shown. Set them under
+                        <span class="mono">Notifications:Email</span> and
+                        <span class="mono">Notifications:Sms</span>, ideally through user secrets or
+                        environment variables rather than the file.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_recentMessages.Count > 0)
+    {
+        <div class="card-ds mt-3">
+            <div class="card-ds-header"><h3>Recent outbound messages</h3></div>
+            <div class="table-wrap" style="border:0; border-radius:0;">
+                <table class="table-ds">
+                    <thead>
+                        <tr><th class="nowrap">When</th><th>Channel</th><th>Recipient</th><th>Subject</th><th>Gateway</th><th style="width:110px;">Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _recentMessages)
+                        {
+                            <tr>
+                                <td class="nowrap">@entry.OccurredAtUtc.ToString("dd/MM HH:mm")</td>
+                                <td>@Ui.Humanise(entry.Channel)</td>
+                                <td class="mono" style="font-size:.76rem;">@Mask(entry.Recipient)</td>
+                                <td style="font-size:.8rem;">@Ui.Truncate(entry.Subject, 40)</td>
+                                <td style="font-size:.78rem;">@(entry.Sender ?? "-")</td>
+                                <td>
+                                    <span class="badge-ds @(entry.Status switch
+                                    {
+                                        CommunicationStatus.Sent or CommunicationStatus.Delivered => "b-success",
+                                        CommunicationStatus.Failed or CommunicationStatus.Bounced => "b-danger",
+                                        CommunicationStatus.Queued => "b-warning",
+                                        _ => "b-neutral"
+                                    })">@Ui.Humanise(entry.Status)</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+else if (_view == "claims")
+{
+    var claims = ClaimSettings.Value;
+    var gateway = GatewaySelector.Resolve();
+
+    <div class="stat-grid mb-3">
+        <StatTile Label="Gateway" Value="@gateway.Name"
+                  Accent="@(gateway.IsConfigured ? "success" : "warning")" Icon="file-text"
+                  Caption="@($"mode: {claims.Mode}")" />
+        <StatTile Label="Environment" Value="@(claims.UsageIndicator == "P" ? "Production" : "Test")"
+                  Accent="@(claims.UsageIndicator == "P" ? "danger" : "info")"
+                  Caption="ISA15 usage indicator" />
+        <StatTile Label="Claims ready to send" Value="@_claimsReady.ToString()" Accent="primary" />
+        <StatTile Label="Submitted, awaiting payment" Value="@_claimsAwaiting.ToString()" Accent="warning" />
+        <StatTile Label="Files generated" Value="@_generatedFiles.ToString()" Accent="accent" Icon="package" />
+    </div>
+
+    @if (claims.UsageIndicator == "P")
+    {
+        <div class="alert-ds a-danger mb-3">
+            <Icon Name="alert-triangle" Size="16" />
+            <div>
+                <strong>Claims are marked as production.</strong>
+                Anything submitted will be treated as a real claim by the payer.
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Interchange identifiers</h3></div>
+                <div class="card-ds-body">
+                    <dl class="kv" style="font-size:.82rem;">
+                        <dt>Submitter ID</dt><dd class="mono">@claims.SubmitterId</dd>
+                        <dt>Submitter name</dt><dd class="mono">@claims.SubmitterName</dd>
+                        <dt>Receiver ID</dt><dd class="mono">@claims.ReceiverId</dd>
+                        <dt>ISA sender</dt><dd class="mono">@claims.InterchangeSenderId</dd>
+                        <dt>ISA receiver</dt><dd class="mono">@claims.InterchangeReceiverId</dd>
+                        <dt>Billing provider</dt><dd class="mono">@claims.BillingProviderId</dd>
+                        <dt>Tax reference</dt><dd class="mono">@claims.BillingProviderTaxId</dd>
+                    </dl>
+                    <div class="text-faint mt-2" style="font-size:.76rem;">
+                        Your clearing house issues these in its companion guide. They must match exactly
+                        or the interchange is rejected before the claim is read.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card-ds h-100">
+                <div class="card-ds-header"><h3>Transport</h3></div>
+                <div class="card-ds-body">
+                    <dl class="kv" style="font-size:.82rem;">
+                        <dt>Mode</dt><dd>@claims.Mode</dd>
+                        <dt>Outbound folder</dt><dd class="mono" style="font-size:.75rem;">@claims.OutboundFolder</dd>
+                        <dt>Archive folder</dt><dd class="mono" style="font-size:.75rem;">@claims.ArchiveFolder</dd>
+                        <dt>HTTP endpoint</dt><dd class="mono" style="font-size:.75rem;">@Blank(claims.Endpoint)</dd>
+                        <dt>Configured</dt>
+                        <dd>
+                            <span class="badge-ds @(gateway.IsConfigured ? "b-success" : "b-warning")">
+                                @(gateway.IsConfigured ? "Yes" : "Falls back to manual")
+                            </span>
+                        </dd>
+                    </dl>
+                    <div class="text-faint mt-2" style="font-size:.76rem;">
+                        In file-drop mode the 837D is written to the outbound folder for the clearing house
+                        agent to collect, and a copy is archived. In HTTP mode it is posted directly.
+                    </div>
+                    <a href="/billing/claims" class="btn btn-sm btn-primary mt-2">Go to claims</a>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header"><h3>Import a price list</h3></div>
+        <div class="card-ds-body">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-12 col-md-5">
+                    <label class="form-label">Fee schedule</label>
+                    <select class="form-select form-select-sm" @bind="_feeScheduleId">
+                        <option value="">Select a schedule</option>
+                        @foreach (var schedule in _feeSchedules)
+                        {
+                            <option value="@schedule.Id">@schedule.Name (@schedule.Items.Count priced)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label">CSV file</label>
+                    <InputFile class="form-control form-control-sm" OnChange="OnFeeFileSelected" accept=".csv,text/csv" />
+                </div>
+                <div class="col-12 col-md-3 d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadTemplate"
+                            disabled="@(!Guid.TryParse(_feeScheduleId, out _))">
+                        <Icon Name="download" Size="12" /> Template
+                    </button>
+                    @if (_feePreview is { CanApply: true })
+                    {
+                        <button class="btn btn-sm btn-primary" @onclick="ApplyFees" disabled="@_working">
+                            Apply @_feePreview.Valid
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="text-faint" style="font-size:.78rem;">
+                The file needs a header row with <span class="mono">Code</span> and <span class="mono">Fee</span>.
+                <span class="mono">Allowed</span>, <span class="mono">Coverage</span> and
+                <span class="mono">Description</span> are optional. Download the template to get the current
+                prices in the right shape.
+            </div>
+        </div>
+    </div>
+
+    @if (_feePreview is not null)
+    {
+        <div class="stat-grid mb-3">
+            <StatTile Label="Rows read" Value="@_feePreview.Rows.Count.ToString()" Accent="primary" />
+            <StatTile Label="Will import" Value="@_feePreview.Valid.ToString()" Accent="success" />
+            <StatTile Label="Price changes" Value="@_feePreview.Changes.ToString()" Accent="warning" />
+            <StatTile Label="Rejected" Value="@_feePreview.Invalid.ToString()"
+                      Accent="@(_feePreview.Invalid > 0 ? "danger" : "neutral")" />
+        </div>
+
+        <div class="table-wrap">
+            <table class="table-ds">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">Line</th>
+                        <th style="width:80px;">Code</th>
+                        <th>Description</th>
+                        <th class="num">Current</th>
+                        <th class="num">New</th>
+                        <th class="num">Allowed</th>
+                        <th class="num">Coverage</th>
+                        <th style="width:110px;">Outcome</th>
+                        <th>Problem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _feePreview.Rows.Take(400))
+                    {
+                        <tr style="@(row.IsValid ? "" : "opacity:.65;")">
+                            <td class="mono">@row.LineNumber</td>
+                            <td class="mono">@row.Code</td>
+                            <td style="font-size:.82rem;">@row.Description</td>
+                            <td class="num mono text-muted">@(row.CurrentFee.HasValue ? Ui.Money(row.CurrentFee.Value) : "-")</td>
+                            <td class="num mono @(row.IsChange ? "fw-semibold" : "")">
+                                @(row.Fee.HasValue ? Ui.Money(row.Fee.Value) : "-")
+                            </td>
+                            <td class="num mono">@(row.AllowedAmount.HasValue ? Ui.Money(row.AllowedAmount.Value) : "-")</td>
+                            <td class="num mono">@(row.CoveragePercent.HasValue ? $"{row.CoveragePercent}%" : "-")</td>
+                            <td>
+                                <span class="badge-ds @(row.Outcome switch
+                                {
+                                    "Add" => "b-success",
+                                    "Update" => "b-warning",
+                                    "Unchanged" => "b-neutral",
+                                    _ => "b-danger"
+                                })">@row.Outcome</span>
+                            </td>
+                            <td class="text-danger" style="font-size:.78rem;">@row.Problem</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private string _view = "messaging";
+    private bool _working;
+    private string? _message;
+    private bool _isError;
+
+    private CommunicationChannel _testChannel = CommunicationChannel.Email;
+    private string _testRecipient = string.Empty;
+    private string _testBody = "This is a test message from the practice management system. No action is needed.";
+
+    private int _pendingReminders;
+    private int _sentThisWeek;
+    private int _failedThisWeek;
+    private List<CommunicationLog> _recentMessages = new();
+
+    private int _claimsReady;
+    private int _claimsAwaiting;
+    private int _generatedFiles;
+
+    private List<FeeSchedule> _feeSchedules = new();
+    private string _feeScheduleId = string.Empty;
+    private string? _feeCsv;
+    private FeeImportPreview? _feePreview;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var weekAgo = Clock.UtcNow.AddDays(-7);
+
+        _pendingReminders = await db.AppointmentReminders
+            .CountAsync(r => r.Status == ReminderStatus.Pending);
+
+        _sentThisWeek = await db.CommunicationLogs.CountAsync(c =>
+            c.OccurredAtUtc >= weekAgo && c.Direction == CommunicationDirection.Outbound &&
+            (c.Status == CommunicationStatus.Sent || c.Status == CommunicationStatus.Delivered));
+
+        _failedThisWeek = await db.CommunicationLogs.CountAsync(c =>
+            c.OccurredAtUtc >= weekAgo && c.Status == CommunicationStatus.Failed);
+
+        _recentMessages = await db.CommunicationLogs.AsNoTracking()
+            .Where(c => c.Direction == CommunicationDirection.Outbound)
+            .OrderByDescending(c => c.OccurredAtUtc)
+            .Take(15)
+            .ToListAsync();
+
+        _claimsReady = await db.InsuranceClaims.CountAsync(c =>
+            c.Status == ClaimStatus.Draft || c.Status == ClaimStatus.ReadyToSend);
+
+        _claimsAwaiting = await db.InsuranceClaims.CountAsync(c =>
+            c.Status == ClaimStatus.Submitted || c.Status == ClaimStatus.Received || c.Status == ClaimStatus.InReview);
+
+        _generatedFiles = await db.PatientDocuments.CountAsync(d => d.ContentType == "application/edi-x12");
+
+        _feeSchedules = await db.FeeSchedules.AsNoTracking()
+            .Include(f => f.Items)
+            .OrderByDescending(f => f.IsDefault)
+            .ToListAsync();
+    }
+
+    private async Task SendTest()
+    {
+        if (string.IsNullOrWhiteSpace(_testRecipient))
+        {
+            _message = "Enter an address or number to send the test to.";
+            _isError = true;
+            return;
+        }
+
+        _working = true;
+        var result = await Notifier.SendAsync(_testChannel, _testRecipient.Trim(),
+            "Test message from the practice management system", _testBody);
+        _working = false;
+
+        _message = result.Delivered
+            ? $"Sent through {result.Provider}." +
+              (result.ProviderMessageId is null ? "" : $" Provider reference: {result.ProviderMessageId}")
+            : result.WasRecordedOnly
+                ? $"No gateway is configured for {_testChannel}, so nothing was transmitted. " +
+                  "Set the gateway in appsettings.json and restart."
+                : $"The gateway rejected the message: {result.Error}";
+
+        _isError = !result.Delivered;
+        await LoadAsync();
+    }
+
+    private async Task OnFeeFileSelected(InputFileChangeEventArgs args)
+    {
+        if (!Guid.TryParse(_feeScheduleId, out var scheduleId))
+        {
+            _message = "Choose a fee schedule before selecting a file.";
+            _isError = true;
+            return;
+        }
+
+        try
+        {
+            // A price list is small; 2 MB is ample and bounds the read.
+            await using var stream = args.File.OpenReadStream(2 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            _feeCsv = await reader.ReadToEndAsync();
+
+            var preview = await FeeImporter.PreviewAsync(scheduleId, _feeCsv);
+
+            if (preview.Failed)
+            {
+                _feePreview = null;
+                _message = preview.ErrorMessage;
+                _isError = true;
+                return;
+            }
+
+            _feePreview = preview.Value;
+            _message = $"Read {_feePreview!.Rows.Count} rows. {_feePreview.Valid} will import, " +
+                       $"{_feePreview.Changes} are price changes. Nothing has been saved yet.";
+            _isError = false;
+        }
+        catch (IOException ex)
+        {
+            _message = $"The file could not be read: {ex.Message}";
+            _isError = true;
+        }
+    }
+
+    private async Task ApplyFees()
+    {
+        if (!Guid.TryParse(_feeScheduleId, out var scheduleId) || _feeCsv is null) return;
+
+        _working = true;
+        var result = await FeeImporter.ApplyAsync(scheduleId, _feeCsv);
+        _working = false;
+
+        _message = result.Succeeded
+            ? $"Imported {result.Value} fees. New treatment planned against this schedule uses the updated prices."
+            : result.ErrorMessage;
+        _isError = result.Failed;
+
+        _feePreview = null;
+        _feeCsv = null;
+        await LoadAsync();
+    }
+
+    private async Task DownloadTemplate()
+    {
+        if (!Guid.TryParse(_feeScheduleId, out var scheduleId)) return;
+
+        var csv = await FeeImporter.ExportTemplateAsync(scheduleId);
+        await CsvExport.DownloadAsync(JS, "fee-schedule.csv", csv);
+    }
+
+    private static string Blank(string? value) => string.IsNullOrWhiteSpace(value) ? "not set" : value;
+
+    private static string Mask(string? recipient)
+    {
+        if (string.IsNullOrWhiteSpace(recipient)) return "-";
+        if (recipient.Contains('@'))
+        {
+            var parts = recipient.Split('@');
+            return $"{parts[0][..Math.Min(2, parts[0].Length)]}***@{parts[^1]}";
+        }
+        return recipient.Length <= 4 ? "***" : $"***{recipient[^4..]}";
+    }
+}

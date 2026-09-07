@@ -1,0 +1,383 @@
+@page "/patients/new"
+@page "/patients/{PatientId:guid}/edit"
+@attribute [Authorize]
+@inject PatientService Patients
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+@inject NavigationManager Navigation
+
+<PageTitle>@(IsNew ? "Register a patient" : "Edit patient") - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="@(IsNew ? "Register a new patient" : $"Edit {_patient.Name.Display}")"
+            Subtitle="@(IsNew ? "Capture the details needed to open a clinical record." : _patient.PatientNumber)"
+            Breadcrumbs="@_breadcrumbs">
+    <Actions>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="Cancel">Cancel</button>
+        <button class="btn btn-sm btn-primary" @onclick="Save" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner-border spinner-border-sm me-1"></span>
+            }
+            @(IsNew ? "Register patient" : "Save changes")
+        </button>
+    </Actions>
+</PageHeader>
+
+@if (_errors.Count > 0)
+{
+    <div class="alert-ds a-danger mb-3">
+        <Icon Name="alert-circle" Size="16" />
+        <div>
+            <strong>The record could not be saved.</strong>
+            <ul class="mb-0 mt-1" style="padding-left:1.1rem;">
+                @foreach (var error in _errors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+<div class="row g-3">
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds mb-3">
+            <div class="card-ds-header"><h3>Name and identity</h3></div>
+            <div class="card-ds-body">
+                <div class="row g-2">
+                    <div class="col-4 col-md-2">
+                        <label class="form-label">Title</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Name.Title" list="titles" />
+                        <datalist id="titles">
+                            @foreach (var title in new[] { "Mr", "Mrs", "Ms", "Miss", "Dr", "Prof", "Mx" })
+                            {
+                                <option value="@title" />
+                            }
+                        </datalist>
+                    </div>
+                    <div class="col-8 col-md-5">
+                        <label class="form-label">First name *</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Name.FirstName" />
+                    </div>
+                    <div class="col-12 col-md-5">
+                        <label class="form-label">Surname *</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Name.LastName" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Middle name</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Name.MiddleName" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Preferred name</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Name.PreferredName"
+                               placeholder="What the patient likes to be called" />
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label class="form-label">Date of birth</label>
+                        <input type="date" class="form-control form-control-sm"
+                               value="@_patient.DateOfBirth?.ToString("yyyy-MM-dd")"
+                               @onchange="OnDateOfBirthChanged" />
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label class="form-label">Gender</label>
+                        <select class="form-select form-select-sm" @bind="_patient.Gender">
+                            @foreach (var gender in Enum.GetValues<Gender>())
+                            {
+                                <option value="@gender">@Ui.Humanise(gender)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Marital status</label>
+                        <select class="form-select form-select-sm" @bind="_patient.MaritalStatus">
+                            @foreach (var status in Enum.GetValues<MaritalStatus>())
+                            {
+                                <option value="@status">@Ui.Humanise(status)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">NHS number</label>
+                        <input class="form-control form-control-sm" @bind="_patient.NhsNumber" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Occupation</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Occupation" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-ds">
+            <div class="card-ds-header"><h3>Contact</h3></div>
+            <div class="card-ds-body">
+                <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Mobile</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Contact.MobilePhone" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Home phone</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Contact.HomePhone" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control form-control-sm" @bind="_patient.Contact.Email" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Address line 1</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Address.Line1" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Address line 2</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Address.Line2" />
+                    </div>
+                    <div class="col-12 col-md-5">
+                        <label class="form-label">Town or city</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Address.City" />
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label class="form-label">County</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Address.County" />
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Postcode</label>
+                        <input class="form-control form-control-sm" @bind="_patient.Address.PostCode" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds mb-3">
+            <div class="card-ds-header"><h3>Care and recall</h3></div>
+            <div class="card-ds-body">
+                <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Primary dentist</label>
+                        <select class="form-select form-select-sm" @bind="_providerId">
+                            <option value="">Not assigned</option>
+                            @foreach (var provider in _dentists)
+                            {
+                                <option value="@provider.Id">@provider.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Hygienist</label>
+                        <select class="form-select form-select-sm" @bind="_hygienistId">
+                            <option value="">Not assigned</option>
+                            @foreach (var hygienist in _hygienists)
+                            {
+                                <option value="@hygienist.Id">@hygienist.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Preferred location</label>
+                        <select class="form-select form-select-sm" @bind="_locationId">
+                            <option value="">No preference</option>
+                            @foreach (var location in _locations)
+                            {
+                                <option value="@location.Id">@location.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Recall (months)</label>
+                        <input type="number" min="1" max="60" class="form-control form-control-sm"
+                               @bind="_patient.RecallIntervalMonths" />
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-select form-select-sm" @bind="_patient.Status">
+                            @foreach (var status in Enum.GetValues<PatientStatus>())
+                            {
+                                <option value="@status">@Ui.Humanise(status)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">How did they hear about us</label>
+                        <input class="form-control form-control-sm" @bind="_patient.ReferralSource" list="sources" />
+                        <datalist id="sources">
+                            @foreach (var source in new[]
+                            {
+                                "Existing patient referral", "Google search", "Practice website",
+                                "Passing trade", "Social media", "GP referral", "Specialist referral"
+                            })
+                            {
+                                <option value="@source" />
+                            }
+                        </datalist>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Preferred language</label>
+                        <input class="form-control form-control-sm" @bind="_patient.PreferredLanguage" />
+                    </div>
+                    <div class="col-12">
+                        <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_patient.RequiresInterpreter" />
+                            An interpreter is required
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-ds mb-3">
+            <div class="card-ds-header"><h3>Communication preferences</h3></div>
+            <div class="card-ds-body">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_patient.AllowEmail" /> Email
+                        </label>
+                    </div>
+                    <div class="col-6">
+                        <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_patient.AllowSms" /> Text message
+                        </label>
+                    </div>
+                    <div class="col-6">
+                        <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_patient.AllowPhoneCall" /> Telephone
+                        </label>
+                    </div>
+                    <div class="col-6">
+                        <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_patient.AllowPost" /> Post
+                        </label>
+                    </div>
+                    <div class="col-12">
+                        <label class="d-flex align-items-center gap-2" style="font-size:.86rem;">
+                            <input type="checkbox" class="form-check-input mt-0" @bind="_patient.AllowMarketing" />
+                            Happy to receive practice news and offers
+                        </label>
+                    </div>
+                </div>
+                <div class="text-faint mt-2" style="font-size:.76rem;">
+                    Reminders and recalls are only sent through the channels ticked here.
+                </div>
+            </div>
+        </div>
+
+        <div class="card-ds">
+            <div class="card-ds-header"><h3>Notes</h3></div>
+            <div class="card-ds-body">
+                <textarea class="form-control form-control-sm" rows="4" @bind="_patient.Notes"
+                          placeholder="Anything the team should know that does not belong in the clinical record"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? PatientId { get; set; }
+
+    private Patient _patient = new();
+    private List<Staff> _dentists = new();
+    private List<Staff> _hygienists = new();
+    private List<Location> _locations = new();
+
+    private string _providerId = string.Empty;
+    private string _hygienistId = string.Empty;
+    private string _locationId = string.Empty;
+
+    private bool _saving;
+    private List<string> _errors = new();
+
+    private bool IsNew => PatientId is null;
+
+    private IReadOnlyList<PageHeader.Crumb> _breadcrumbs = Array.Empty<PageHeader.Crumb>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var staff = await db.Staff.AsNoTracking()
+            .Where(s => s.IsActive && s.IsProvider)
+            .OrderBy(s => s.Name.LastName).ToListAsync();
+
+        _dentists = staff.Where(s => s.Role is StaffRole.Dentist or StaffRole.OralSurgeon or StaffRole.Orthodontist
+            or StaffRole.Endodontist or StaffRole.Periodontist or StaffRole.Prosthodontist or StaffRole.PaediatricDentist).ToList();
+
+        _hygienists = staff.Where(s => s.Role is StaffRole.DentalHygienist or StaffRole.DentalTherapist).ToList();
+
+        _locations = await db.Locations.AsNoTracking()
+            .Where(l => l.IsActive).OrderByDescending(l => l.IsPrimary).ToListAsync();
+
+        if (PatientId is { } id)
+        {
+            var existing = await Patients.GetAsync(id);
+            if (existing is not null)
+            {
+                _patient = existing;
+                _providerId = existing.PrimaryProviderId?.ToString() ?? string.Empty;
+                _hygienistId = existing.PrimaryHygienistId?.ToString() ?? string.Empty;
+                _locationId = existing.PreferredLocationId?.ToString() ?? string.Empty;
+            }
+
+            _breadcrumbs = new[]
+            {
+                new PageHeader.Crumb("Patients", "/patients"),
+                new PageHeader.Crumb(_patient.Name.Display, $"/patients/{id}"),
+                new PageHeader.Crumb("Edit")
+            };
+        }
+        else
+        {
+            _patient = new Patient
+            {
+                RegistrationDate = Clock.Today,
+                RecallIntervalMonths = 6,
+                Status = PatientStatus.Active,
+                PreferredLocationId = _locations.FirstOrDefault(l => l.IsPrimary)?.Id
+            };
+            _locationId = _patient.PreferredLocationId?.ToString() ?? string.Empty;
+
+            _breadcrumbs = new[]
+            {
+                new PageHeader.Crumb("Patients", "/patients"),
+                new PageHeader.Crumb("Register")
+            };
+        }
+    }
+
+    private void OnDateOfBirthChanged(ChangeEventArgs args)
+    {
+        _patient.DateOfBirth = DateOnly.TryParse(args.Value?.ToString(), out var date) ? date : null;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        _errors.Clear();
+
+        _patient.PrimaryProviderId = Guid.TryParse(_providerId, out var providerId) ? providerId : null;
+        _patient.PrimaryHygienistId = Guid.TryParse(_hygienistId, out var hygienistId) ? hygienistId : null;
+        _patient.PreferredLocationId = Guid.TryParse(_locationId, out var locationId) ? locationId : null;
+
+        if (IsNew)
+        {
+            var result = await Patients.CreateAsync(_patient);
+            _saving = false;
+
+            if (result.Failed) { _errors = result.Errors.ToList(); return; }
+            Navigation.NavigateTo($"/patients/{result.Value!.Id}");
+        }
+        else
+        {
+            var result = await Patients.UpdateAsync(_patient);
+            _saving = false;
+
+            if (result.Failed) { _errors = result.Errors.ToList(); return; }
+            Navigation.NavigateTo($"/patients/{_patient.Id}");
+        }
+    }
+
+    private void Cancel() =>
+        Navigation.NavigateTo(IsNew ? "/patients" : $"/patients/{PatientId}");
+}

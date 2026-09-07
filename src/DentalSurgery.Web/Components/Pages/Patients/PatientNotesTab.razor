@@ -1,0 +1,296 @@
+@inject ClinicalService Clinical
+@inject IDateTimeProvider Clock
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="StartNote">
+        <Icon Name="plus" Size="13" /> New note
+    </button>
+    <span class="ms-auto text-muted" style="font-size:.82rem;">
+        @_notes.Count note@(_notes.Count == 1 ? "" : "s") &middot;
+        @_notes.Count(n => n.IsSigned) signed
+    </span>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-ds @(_isError ? "a-danger" : "a-success") mb-3">
+        <Icon Name="@(_isError ? "alert-circle" : "check-circle")" Size="15" /><div>@_message</div>
+    </div>
+}
+
+@if (_editing is not null)
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-header">
+            <h3>New clinical note</h3>
+            <select class="form-select form-select-sm ms-auto" style="width:auto;" @bind="_editing.NoteType">
+                @foreach (var type in Enum.GetValues<ClinicalNoteType>())
+                {
+                    <option value="@type">@Ui.Humanise(type)</option>
+                }
+            </select>
+        </div>
+        <div class="card-ds-body">
+            <div class="mb-2">
+                <label class="form-label">Chief complaint</label>
+                <input class="form-control form-control-sm" @bind="_editing.ChiefComplaint"
+                       placeholder="What the patient reports in their own words" />
+            </div>
+
+            @if (_editing.NoteType == ClinicalNoteType.Soap)
+            {
+                <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Subjective</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="_editing.Subjective"
+                                  placeholder="History, symptoms and what the patient tells you"></textarea>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Objective</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="_editing.Objective"
+                                  placeholder="Examination findings, radiographs, special tests"></textarea>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Assessment</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="_editing.Assessment"
+                                  placeholder="Diagnosis and prognosis"></textarea>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Plan</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="_editing.Plan"
+                                  placeholder="Treatment provided and what happens next"></textarea>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="mb-2">
+                    <label class="form-label">Note</label>
+                    <textarea class="form-control form-control-sm" rows="8" @bind="_editing.Body"></textarea>
+                </div>
+            }
+
+            <div class="row g-2 mt-1">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Treatment provided</label>
+                    <input class="form-control form-control-sm" @bind="_editing.TreatmentProvided" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Instructions given to the patient</label>
+                    <input class="form-control form-control-sm" @bind="_editing.PatientInstructions" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Plan for the next visit</label>
+                    <input class="form-control form-control-sm" @bind="_editing.NextVisitPlan" />
+                </div>
+            </div>
+
+            <label class="d-flex align-items-center gap-2 mt-2" style="font-size:.85rem;">
+                <input type="checkbox" class="form-check-input mt-0" @bind="_editing.OralCancerScreeningDone" />
+                Soft-tissue and oral cancer screening carried out
+            </label>
+        </div>
+        <div class="card-ds-footer d-flex gap-2">
+            <button class="btn btn-sm btn-primary" @onclick="() => SaveNote(true)" disabled="@_saving">
+                Save and sign
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => SaveNote(false)" disabled="@_saving">
+                Save as draft
+            </button>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="() => _editing = null">Cancel</button>
+        </div>
+    </div>
+}
+
+@if (_notes.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="file-text" Title="No clinical notes"
+                    Message="Record a note for every clinical contact with the patient." />
+    </div>
+}
+else
+{
+    <div class="d-flex flex-column gap-2">
+        @foreach (var note in _notes)
+        {
+            <div class="card-ds">
+                <div class="card-ds-header">
+                    <span class="badge-ds b-neutral">@Ui.Humanise(note.NoteType)</span>
+                    <strong style="font-size:.9rem;">@(note.Title ?? note.ChiefComplaint ?? "Clinical note")</strong>
+                    <span class="text-muted" style="font-size:.79rem;">
+                        @note.NoteDateUtc.ToString("ddd d MMM yyyy HH:mm") &middot;
+                        @(note.Provider?.DisplayName ?? "Unknown clinician")
+                    </span>
+                    <span class="ms-auto d-flex gap-1">
+                        @if (note.IsSigned)
+                        {
+                            <span class="badge-ds b-success" title="@($"Signed by {note.SignedBy} at {note.SignedAtUtc:HH:mm dd/MM/yyyy}")">
+                                <Icon Name="check" Size="11" /> Signed
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge-ds b-warning">Draft</span>
+                        }
+                        @if (note.IsAmended)
+                        {
+                            <span class="badge-ds b-info">Amended</span>
+                        }
+                        <button class="btn-ghost" @onclick="() => Toggle(note.Id)">
+                            <Icon Name="@(_expanded.Contains(note.Id) ? "chevron-down" : "chevron-right")" Size="14" />
+                        </button>
+                    </span>
+                </div>
+
+                @if (_expanded.Contains(note.Id))
+                {
+                    <div class="card-ds-body" style="font-size:.86rem;">
+                        @RenderSection("Chief complaint", note.ChiefComplaint)
+                        @RenderSection("Subjective", note.Subjective)
+                        @RenderSection("Objective", note.Objective)
+                        @RenderSection("Assessment", note.Assessment)
+                        @RenderSection("Plan", note.Plan)
+                        @RenderSection("Note", note.Body)
+                        @RenderSection("Soft tissue examination", note.SoftTissueExam)
+                        @RenderSection("Occlusion", note.OcclusionNotes)
+                        @RenderSection("Treatment provided", note.TreatmentProvided)
+                        @RenderSection("Patient instructions", note.PatientInstructions)
+                        @RenderSection("Next visit", note.NextVisitPlan)
+
+                        @if (note.Addenda.Count > 0)
+                        {
+                            <div class="divider"></div>
+                            <strong style="font-size:.82rem;">Addenda</strong>
+                            @foreach (var addendum in note.Addenda.OrderBy(a => a.AddedAtUtc))
+                            {
+                                <div class="mt-1" style="border-left:3px solid var(--ds-warning); padding-left:.6rem;">
+                                    <div class="text-muted" style="font-size:.76rem;">
+                                        @addendum.AddedAtUtc.ToString("d MMM yyyy HH:mm") &middot; @addendum.AddedBy
+                                        @if (!string.IsNullOrWhiteSpace(addendum.Reason))
+                                        {
+                                            <span> &middot; @addendum.Reason</span>
+                                        }
+                                    </div>
+                                    <div>@addendum.Body</div>
+                                </div>
+                            }
+                        }
+
+                        @if (note.IsSigned)
+                        {
+                            <div class="divider"></div>
+                            @if (_addendumFor == note.Id)
+                            {
+                                <div class="d-flex gap-2 align-items-start">
+                                    <textarea class="form-control form-control-sm" rows="2" @bind="_addendumBody"
+                                              placeholder="A signed note cannot be edited. Add a correction or additional detail here."></textarea>
+                                    <button class="btn btn-sm btn-primary" @onclick="() => SaveAddendum(note.Id)">Add</button>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => _addendumFor = null">Cancel</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _addendumFor = note.Id">
+                                    Add an addendum
+                                </button>
+                            }
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="card-ds-body text-muted" style="font-size:.83rem;">@note.Summary</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PatientId { get; set; }
+
+    private List<ClinicalNote> _notes = new();
+    private ClinicalNote? _editing;
+    private HashSet<Guid> _expanded = new();
+    private Guid? _addendumFor;
+    private string _addendumBody = string.Empty;
+    private bool _saving;
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync() => _notes = await Clinical.GetNotesAsync(PatientId);
+
+    private void StartNote() =>
+        _editing = new ClinicalNote
+        {
+            PatientId = PatientId,
+            NoteDateUtc = Clock.UtcNow,
+            NoteType = ClinicalNoteType.Soap,
+            OralCancerScreeningDone = true
+        };
+
+    private void Toggle(Guid noteId)
+    {
+        if (!_expanded.Add(noteId)) _expanded.Remove(noteId);
+    }
+
+    private async Task SaveNote(bool sign)
+    {
+        if (_editing is null) return;
+
+        _saving = true;
+        var result = await Clinical.SaveNoteAsync(_editing, sign);
+        _saving = false;
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        _editing = null;
+        _message = sign ? "Note saved and signed." : "Note saved as a draft.";
+        _isError = false;
+        await LoadAsync();
+    }
+
+    private async Task SaveAddendum(Guid noteId)
+    {
+        var result = await Clinical.AddAddendumAsync(noteId, _addendumBody, null);
+
+        if (result.Failed)
+        {
+            _message = result.ErrorMessage;
+            _isError = true;
+            return;
+        }
+
+        _addendumFor = null;
+        _addendumBody = string.Empty;
+        await LoadAsync();
+    }
+
+    private RenderFragment RenderSection(string label, string? content) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(content)) return;
+
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "mb-2");
+
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "form-label");
+        builder.AddContent(4, label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "div");
+        builder.AddAttribute(6, "style", "white-space:pre-wrap;");
+        builder.AddContent(7, content);
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+}
