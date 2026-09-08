@@ -1,0 +1,134 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject ICurrentUser CurrentUser
+@inject IDateTimeProvider Clock
+
+@*
+    The clinician's own list, drawn from their linked staff record rather than
+    the whole practice. A dentist opening the application wants to know who is
+    in the chair, who is waiting for them, and what they have left unfinished —
+    not the practice's collections figure.
+*@
+
+<div class="card-ds h-100">
+    <div class="card-ds-header">
+        <h3>@Heading</h3>
+        <span class="badge-ds b-neutral">@_mine.Count booked</span>
+        <a href="/schedule" class="ms-auto" style="font-size:.8rem;">Open the book &rarr;</a>
+    </div>
+
+    @if (CurrentUser.StaffId is null)
+    {
+        <EmptyState IconName="user" Title="This login is not linked to a clinician"
+                    Message="Ask an administrator to link it to your staff record so your own list appears here." />
+    }
+    else if (_loading)
+    {
+        <div class="card-ds-body"><div class="skeleton" style="height:200px;"></div></div>
+    }
+    else if (_mine.Count == 0)
+    {
+        <EmptyState IconName="calendar" Title="Nothing booked for you today"
+                    Message="Your list is clear. The full practice book is still available." />
+    }
+    else
+    {
+        <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+            <table class="table-ds">
+                <caption class="visually-hidden">Your appointments today, in time order</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" style="width:62px;">Time</th>
+                        <th scope="col">Patient</th>
+                        <th scope="col">Reason</th>
+                        <th scope="col" style="width:150px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var appointment in _mine)
+                    {
+                        var waited = WaitingMinutes(appointment);
+
+                        <tr class="row-clickable" @onclick="() => Open(appointment.PatientId)">
+                            <td class="nowrap mono">@appointment.StartUtc.ToLocalTime().ToString("HH:mm")</td>
+                            <td>
+                                <div style="font-weight:600;">@(appointment.Patient?.Name.Display ?? "Unknown")</div>
+                                <div class="text-faint" style="font-size:.72rem;">
+                                    @appointment.Patient?.PatientNumber
+                                    @if (appointment.Patient?.Alerts.Any(a => a.IsActive && a.Severity >= AlertSeverity.High) == true)
+                                    {
+                                        <span class="badge-ds b-danger ms-1">Clinical alert</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>@Ui.Truncate(appointment.Reason ?? Ui.Humanise(appointment.AppointmentType), 38)</td>
+                            <td>
+                                <span class="badge-ds @Ui.BadgeFor(appointment.Status)">
+                                    @Ui.Humanise(appointment.Status)
+                                </span>
+                                @if (waited is { } minutes && minutes > 15)
+                                {
+                                    <span class="badge-ds b-warning ms-1" title="Waiting longer than fifteen minutes">
+                                        @minutes m
+                                    </span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Heading { get; set; } = "My list today";
+
+    /// <summary>Limits the list to surgical bookings, for the surgeon's home.</summary>
+    [Parameter] public bool SurgicalOnly { get; set; }
+
+    [Parameter] public EventCallback<Guid> OnOpenPatient { get; set; }
+
+    private List<Appointment> _mine = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CurrentUser.StaffId is not { } staffId)
+        {
+            _loading = false;
+            return;
+        }
+
+        var dayStart = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        var dayEnd = dayStart.AddDays(1);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var query = db.Appointments.AsNoTracking()
+            .Include(a => a.Patient).ThenInclude(p => p!.Alerts)
+            .Where(a => a.ProviderId == staffId && a.StartUtc >= dayStart && a.StartUtc < dayEnd);
+
+        if (SurgicalOnly)
+        {
+            query = query.Where(a =>
+                a.AppointmentType == AppointmentType.OralSurgery ||
+                a.AppointmentType == AppointmentType.Extraction ||
+                a.AppointmentType == AppointmentType.ImplantSurgery ||
+                a.AppointmentType == AppointmentType.PostOperativeReview);
+        }
+
+        _mine = await query.OrderBy(a => a.StartUtc).ToListAsync();
+        _loading = false;
+    }
+
+    /// <summary>How long a checked-in patient has been waiting, in whole minutes.</summary>
+    private int? WaitingMinutes(Appointment appointment)
+    {
+        if (appointment.Status != AppointmentStatus.ArrivedWaiting) return null;
+        if (appointment.ArrivedAtUtc is not { } arrived) return null;
+
+        return (int)(Clock.UtcNow - arrived).TotalMinutes;
+    }
+
+    private Task Open(Guid patientId) => OnOpenPatient.InvokeAsync(patientId);
+}

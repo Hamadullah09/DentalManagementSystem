@@ -79,7 +79,8 @@ public class PatientService(
     DentalDbContext db,
     INumberSequenceService sequences,
     IDateTimeProvider clock,
-    ILogger<PatientService> logger)
+    ILogger<PatientService> logger,
+    IPermissionGuard guard)
 {
     private readonly MedicalRiskAssessor _riskAssessor = new();
 
@@ -88,6 +89,7 @@ public class PatientService(
     public async Task<PagedResult<PatientListItem>> SearchAsync(
         PatientSearchCriteria criteria, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsView, ct);
         var query = db.Patients.AsNoTracking().AsQueryable();
 
         if (criteria.Status.HasValue)
@@ -184,6 +186,7 @@ public class PatientService(
     public async Task<IReadOnlyList<PatientListItem>> QuickSearchAsync(
         string text, int limit = 10, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsView, ct);
         if (string.IsNullOrWhiteSpace(text) || text.Trim().Length < 2)
             return Array.Empty<PatientListItem>();
 
@@ -196,17 +199,21 @@ public class PatientService(
         return result.Items;
     }
 
-    public Task<Patient?> GetAsync(Guid id, CancellationToken ct = default) =>
-        db.Patients
+    public async Task<Patient?> GetAsync(Guid id, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.PatientsView, ct);
+        return await db.Patients
             .Include(p => p.PrimaryProvider)
             .Include(p => p.PrimaryHygienist)
             .Include(p => p.PreferredLocation)
             .Include(p => p.Contacts)
             .Include(p => p.Alerts)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
+    }
 
     public async Task<PatientSummary?> GetSummaryAsync(Guid id, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsView, ct);
         var patient = await db.Patients
             .Include(p => p.PrimaryProvider)
             .Include(p => p.PrimaryHygienist)
@@ -297,6 +304,7 @@ public class PatientService(
 
     public async Task<Result<Patient>> CreateAsync(Patient patient, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsCreate, ct);
         var validation = Validate(patient);
         if (validation.Failed) return Result<Patient>.Failure(validation.Errors);
 
@@ -352,6 +360,7 @@ public class PatientService(
 
     public async Task<Result> UpdateAsync(Patient patient, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsEdit, ct);
         var validation = Validate(patient);
         if (validation.Failed) return validation;
 
@@ -363,6 +372,7 @@ public class PatientService(
     public async Task<Result> SetStatusAsync(
         Guid patientId, PatientStatus status, string? reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsEdit, ct);
         var patient = await db.Patients.FirstOrDefaultAsync(p => p.Id == patientId, ct);
         if (patient is null) return Result.Failure("Patient not found.");
 
@@ -404,6 +414,7 @@ public class PatientService(
 
     public async Task<Result<PatientAlert>> AddAlertAsync(PatientAlert alert, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsEdit, ct);
         if (string.IsNullOrWhiteSpace(alert.Title))
             return Result<PatientAlert>.Failure("An alert needs a title.");
 
@@ -414,6 +425,7 @@ public class PatientService(
 
     public async Task<Result> DismissAlertAsync(Guid alertId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PatientsEdit, ct);
         var alert = await db.PatientAlerts.FirstOrDefaultAsync(a => a.Id == alertId, ct);
         if (alert is null) return Result.Failure("Alert not found.");
 
@@ -424,6 +436,7 @@ public class PatientService(
 
     public async Task<MedicalRiskProfile> GetRiskProfileAsync(Guid patientId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.MedicalHistoryView, ct);
         var patient = await db.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.Id == patientId, ct);
         if (patient is null) return new MedicalRiskProfile();
 

@@ -14,13 +14,15 @@ public class InventoryService(
     INumberSequenceService sequences,
     ICurrentUser currentUser,
     IDateTimeProvider clock,
-    ILogger<InventoryService> logger)
+    ILogger<InventoryService> logger,
+    IPermissionGuard guard)
 {
     // ------------------------------------------------------------------ stock
 
-    public Task<List<InventoryItem>> GetItemsAsync(
+    public async Task<List<InventoryItem>> GetItemsAsync(
         InventoryCategory? category = null, bool onlyLowStock = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryView, ct);
         var query = db.InventoryItems.AsNoTracking()
             .Include(i => i.PreferredSupplier)
             .Where(i => i.IsActive);
@@ -28,23 +30,29 @@ public class InventoryService(
         if (category.HasValue) query = query.Where(i => i.Category == category.Value);
         if (onlyLowStock) query = query.Where(i => i.CurrentStock <= i.ReorderLevel);
 
-        return query.OrderBy(i => i.Category).ThenBy(i => i.Name).ToListAsync(ct);
+        return await query.OrderBy(i => i.Category).ThenBy(i => i.Name).ToListAsync(ct);
     }
 
-    public Task<InventoryItem?> GetItemAsync(Guid id, CancellationToken ct = default) =>
-        db.InventoryItems
+    public async Task<InventoryItem?> GetItemAsync(Guid id, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.InventoryView, ct);
+        return await db.InventoryItems
             .Include(i => i.PreferredSupplier)
             .Include(i => i.Lots.OrderBy(l => l.ExpiryDate))
             .FirstOrDefaultAsync(i => i.Id == id, ct);
+    }
 
-    public Task<List<StockMovement>> GetMovementsAsync(
-        Guid itemId, int take = 100, CancellationToken ct = default) =>
-        db.StockMovements.AsNoTracking()
+    public async Task<List<StockMovement>> GetMovementsAsync(
+        Guid itemId, int take = 100, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.InventoryView, ct);
+        return await db.StockMovements.AsNoTracking()
             .Include(m => m.InventoryLot)
             .Where(m => m.InventoryItemId == itemId)
             .OrderByDescending(m => m.MovementDateUtc)
             .Take(take)
             .ToListAsync(ct);
+    }
 
     /// <summary>
     /// Issues stock against a procedure, drawing from the lot that expires first
@@ -54,6 +62,7 @@ public class InventoryService(
         Guid itemId, decimal quantity, Guid? procedureId = null,
         Guid? lotId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryAdjust, ct);
         if (quantity <= 0) return Result<StockMovement>.Failure("The quantity must be greater than zero.");
 
         var item = await db.InventoryItems
@@ -114,6 +123,7 @@ public class InventoryService(
         Guid itemId, decimal signedQuantity, StockMovementType type,
         string reason, Guid? lotId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryAdjust, ct);
         var item = await db.InventoryItems.Include(i => i.Lots).FirstOrDefaultAsync(i => i.Id == itemId, ct);
         if (item is null) return Result<StockMovement>.Failure("Inventory item not found.");
         if (signedQuantity == 0) return Result<StockMovement>.Failure("The adjustment cannot be zero.");
@@ -145,6 +155,8 @@ public class InventoryService(
     /// <summary>Writes off every lot that has passed its expiry date.</summary>
     public async Task<int> WriteOffExpiredLotsAsync(CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryAdjust, ct);
+
         var today = clock.Today;
         var expired = await db.InventoryLots
             .Include(l => l.InventoryItem)
@@ -183,10 +195,11 @@ public class InventoryService(
         return expired.Count;
     }
 
-    public Task<List<InventoryLot>> GetExpiringLotsAsync(int withinDays = 90, CancellationToken ct = default)
+    public async Task<List<InventoryLot>> GetExpiringLotsAsync(int withinDays = 90, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryView, ct);
         var cutoff = clock.Today.AddDays(withinDays);
-        return db.InventoryLots.AsNoTracking()
+        return await db.InventoryLots.AsNoTracking()
             .Include(l => l.InventoryItem)
             .Where(l => l.QuantityRemaining > 0 && l.ExpiryDate != null && l.ExpiryDate <= cutoff)
             .OrderBy(l => l.ExpiryDate)
@@ -198,6 +211,7 @@ public class InventoryService(
     public async Task<Result<PurchaseOrder>> CreatePurchaseOrderAsync(
         Guid supplierId, IEnumerable<(Guid ItemId, decimal Quantity)> lines, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryCreate, ct);
         var supplier = await db.Suppliers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == supplierId, ct);
         if (supplier is null) return Result<PurchaseOrder>.Failure("Supplier not found.");
 
@@ -240,6 +254,8 @@ public class InventoryService(
     /// <summary>Builds a draft order for everything currently below its reorder level.</summary>
     public async Task<IReadOnlyList<PurchaseOrder>> GenerateReorderDraftsAsync(CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryCreate, ct);
+
         var low = await db.InventoryItems.AsNoTracking()
             .Where(i => i.IsActive && i.CurrentStock <= i.ReorderLevel && i.PreferredSupplierId != null)
             .ToListAsync(ct);
@@ -263,6 +279,7 @@ public class InventoryService(
         IEnumerable<(Guid LineId, decimal Quantity, string? LotNumber, DateOnly? Expiry)> receipts,
         CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InventoryAdjust, ct);
         var order = await db.PurchaseOrders
             .Include(o => o.Lines).ThenInclude(l => l.InventoryItem)
             .FirstOrDefaultAsync(o => o.Id == orderId, ct);
@@ -324,13 +341,14 @@ public class InventoryService(
 
     // ------------------------------------------------------------------ sterilisation
 
-    public Task<List<SterilisationCycle>> GetCyclesAsync(
+    public async Task<List<SterilisationCycle>> GetCyclesAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.SterilizationView, ct);
         var start = from.ToDateTime(TimeOnly.MinValue);
         var end = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
-        return db.SterilisationCycles.AsNoTracking()
+        return await db.SterilisationCycles.AsNoTracking()
             .Include(c => c.Steriliser).Include(c => c.OperatorStaff)
             .Where(c => c.StartedAtUtc >= start && c.StartedAtUtc < end)
             .OrderByDescending(c => c.StartedAtUtc)
@@ -340,6 +358,7 @@ public class InventoryService(
     public async Task<Result<SterilisationCycle>> RecordCycleAsync(
         SterilisationCycle cycle, IEnumerable<Guid>? instrumentSetIds = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.SterilizationRecordCycle, ct);
         var steriliser = await db.Sterilisers.FirstOrDefaultAsync(s => s.Id == cycle.SteriliserId, ct);
         if (steriliser is null) return Result<SterilisationCycle>.Failure("Steriliser not found.");
 
@@ -395,6 +414,7 @@ public class InventoryService(
     public async Task<Result> RecordInstrumentUseAsync(
         Guid setId, Guid? procedureId, Guid? patientId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.SterilizationRecordCycle, ct);
         var set = await db.InstrumentSets.FirstOrDefaultAsync(s => s.Id == setId, ct);
         if (set is null) return Result.Failure("Instrument set not found.");
         if (set.Status != InstrumentSetStatus.Sterile)
@@ -424,10 +444,13 @@ public class InventoryService(
     /// Traces which patients were treated with instruments from a given cycle.
     /// Used when a cycle failure is discovered after the fact.
     /// </summary>
-    public async Task<List<InstrumentSetUsage>> TraceCycleAsync(Guid cycleId, CancellationToken ct = default) =>
-        await db.InstrumentSetUsages.AsNoTracking()
+    public async Task<List<InstrumentSetUsage>> TraceCycleAsync(Guid cycleId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.SterilizationView, ct);
+        return await db.InstrumentSetUsages.AsNoTracking()
             .Include(u => u.InstrumentSet)
             .Where(u => u.CycleIdAtTimeOfUse == cycleId)
             .OrderBy(u => u.UsedAtUtc)
             .ToListAsync(ct);
+    }
 }

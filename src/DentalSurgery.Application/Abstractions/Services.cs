@@ -129,6 +129,7 @@ public static class Roles
     public const string Administrator = "Administrator";
     public const string PracticeManager = "PracticeManager";
     public const string Dentist = "Dentist";
+    public const string OralSurgeon = "OralSurgeon";
     public const string Hygienist = "Hygienist";
     public const string Nurse = "Nurse";
     public const string Receptionist = "Receptionist";
@@ -137,26 +138,57 @@ public static class Roles
 
     public static readonly string[] All =
     {
-        Administrator, PracticeManager, Dentist, Hygienist, Nurse, Receptionist, Accounts, ReadOnly
+        Administrator, PracticeManager, Dentist, OralSurgeon, Hygienist, Nurse,
+        Receptionist, Accounts, ReadOnly
+    };
+
+    /// <summary>
+    /// The six roles a dental hospital is organised around. Each has its own
+    /// home dashboard and its own default permission grant.
+    /// </summary>
+    public static readonly string[] Primary =
+    {
+        Administrator, PracticeManager, Dentist, OralSurgeon, Hygienist, Receptionist
     };
 
     /// <summary>Roles permitted to write clinical records.</summary>
-    public static readonly string[] Clinical = { Administrator, Dentist, Hygienist, Nurse };
+    public static readonly string[] Clinical = { Administrator, Dentist, OralSurgeon, Hygienist, Nurse };
 
     /// <summary>Roles permitted to change money.</summary>
     public static readonly string[] Financial = { Administrator, PracticeManager, Accounts, Receptionist };
+
+    /// <summary>The label shown in the interface for a role name.</summary>
+    public static string Display(string role) => role switch
+    {
+        PracticeManager => "Practice manager",
+        OralSurgeon => "Oral surgeon",
+        ReadOnly => "Read only",
+        _ => role
+    };
 }
 
-/// <summary>Authorisation policy names used by the UI and API.</summary>
+/// <summary>
+/// Authorisation policy names.
+/// <para>
+/// Every policy here is a permission name from <see cref="Permissions"/>. The
+/// policy provider builds a requirement for whatever string it is handed, so
+/// <c>[Authorize(Policy = Permissions.PatientsView)]</c> works without anything
+/// being registered up front. The aliases below only exist so that a page
+/// guarding a whole module reads as one idea rather than a list.
+/// </para>
+/// </summary>
 public static class Policies
 {
-    public const string CanViewClinical = "CanViewClinical";
-    public const string CanEditClinical = "CanEditClinical";
-    public const string CanPrescribe = "CanPrescribe";
-    public const string CanManageSchedule = "CanManageSchedule";
-    public const string CanManageBilling = "CanManageBilling";
-    public const string CanManageInventory = "CanManageInventory";
-    public const string CanManageStaff = "CanManageStaff";
-    public const string CanViewReports = "CanViewReports";
-    public const string CanAdminister = "CanAdminister";
+    /// <summary>Signed in, active, and holding at least one permission.</summary>
+    public const string StaffMember = "StaffMember";
+
+    public const string CanViewClinical = Permissions.ClinicalRecordsView;
+    public const string CanEditClinical = Permissions.ClinicalRecordsCreate;
+    public const string CanPrescribe = Permissions.PrescriptionsCreate;
+    public const string CanManageSchedule = Permissions.AppointmentsView;
+    public const string CanManageBilling = Permissions.BillingView;
+    public const string CanManageInventory = Permissions.InventoryView;
+    public const string CanManageStaff = Permissions.UsersView;
+    public const string CanViewReports = Permissions.ReportsView;
+    public const string CanAdminister = Permissions.SettingsEdit;
 }

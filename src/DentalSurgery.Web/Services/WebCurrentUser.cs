@@ -14,6 +14,13 @@ public static class DentalClaimTypes
     public const string DisplayName = "dental:display_name";
     public const string LocationId = "dental:location_id";
     public const string JobTitle = "dental:job_title";
+
+    /// <summary>
+    /// Present while the account still owes a password change. Carried on the
+    /// cookie so the shell can strip itself back to the one thing the user is
+    /// allowed to do, without a database round trip on every render.
+    /// </summary>
+    public const string MustChangePassword = "dental:must_change_password";
 }
 
 /// <summary>
@@ -41,6 +48,9 @@ public class DentalClaimsPrincipalFactory(
 
         if (!string.IsNullOrWhiteSpace(user.JobTitle))
             identity.AddClaim(new Claim(DentalClaimTypes.JobTitle, user.JobTitle));
+
+        if (user.MustChangePassword)
+            identity.AddClaim(new Claim(DentalClaimTypes.MustChangePassword, "true"));
 
         return identity;
     }

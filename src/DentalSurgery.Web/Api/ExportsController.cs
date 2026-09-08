@@ -18,7 +18,7 @@ public class ExportsController(ExportService exports, ILogger<ExportsController>
 {
     /// <summary>Lists the reports available for export.</summary>
     [HttpGet]
-    [Authorize(Policy = Policies.CanViewReports)]
+    [Authorize(Policy = Permissions.ReportsExport)]
     public IActionResult Available() =>
         Ok(new
         {
@@ -34,7 +34,7 @@ public class ExportsController(ExportService exports, ILogger<ExportsController>
 
     /// <summary>Downloads a report in the requested format.</summary>
     [HttpGet("{key}")]
-    [Authorize(Policy = Policies.CanViewReports)]
+    [Authorize(Policy = Permissions.ReportsExport)]
     [Produces("text/csv", "application/pdf", "application/json",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
     public async Task<IActionResult> Report(
@@ -64,28 +64,28 @@ public class ExportsController(ExportService exports, ILogger<ExportsController>
     // ---------------------------------------------------------------- documents
 
     [HttpGet("documents/invoice/{id:guid}")]
-    [Authorize(Policy = Policies.CanManageBilling)]
+    [Authorize(Policy = Permissions.BillingView)]
     public Task<IActionResult> Invoice(Guid id, CancellationToken ct) =>
         Download(() => exports.InvoicePdfAsync(id, ct));
 
     [HttpGet("documents/treatment-plan/{id:guid}")]
-    [Authorize(Policy = Policies.CanViewClinical)]
+    [Authorize(Policy = Permissions.TreatmentPlansView)]
     public Task<IActionResult> TreatmentPlan(Guid id, CancellationToken ct) =>
         Download(() => exports.TreatmentPlanPdfAsync(id, ct));
 
     [HttpGet("documents/prescription/{id:guid}")]
-    [Authorize(Policy = Policies.CanViewClinical)]
+    [Authorize(Policy = Permissions.PrescriptionsView)]
     public Task<IActionResult> Prescription(Guid id, CancellationToken ct) =>
         Download(() => exports.PrescriptionPdfAsync(id, ct));
 
     [HttpGet("documents/claim/{id:guid}")]
-    [Authorize(Policy = Policies.CanManageBilling)]
+    [Authorize(Policy = Permissions.BillingView)]
     public Task<IActionResult> ClaimForm(Guid id, CancellationToken ct) =>
         Download(() => exports.ClaimFormPdfAsync(id, ct));
 
     /// <summary>The patient's clinical summary, or a referral letter when a referral is named.</summary>
     [HttpGet("documents/clinical-summary/{patientId:guid}")]
-    [Authorize(Policy = Policies.CanViewClinical)]
+    [Authorize(Policy = Permissions.ClinicalRecordsView)]
     public Task<IActionResult> ClinicalSummary(
         Guid patientId, [FromQuery] Guid? referralId, CancellationToken ct) =>
         Download(() => exports.ClinicalSummaryPdfAsync(patientId, referralId, ct));

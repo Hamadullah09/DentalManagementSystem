@@ -15,7 +15,8 @@ public class ClinicalService(
     INumberSequenceService sequences,
     ICurrentUser currentUser,
     IDateTimeProvider clock,
-    ILogger<ClinicalService> logger)
+    ILogger<ClinicalService> logger,
+    IPermissionGuard guard)
 {
     private readonly DentalChartBuilder _chartBuilder = new();
     private readonly PeriodontalAnalyser _perioAnalyser = new();
@@ -26,6 +27,7 @@ public class ClinicalService(
         Guid patientId, Dentition dentition = Dentition.Permanent,
         DateOnly? asOf = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DentalChartView, ct);
         var teeth = await db.Teeth.AsNoTracking().OrderBy(t => t.ChartOrder).ToListAsync(ct);
 
         var records = await db.ToothConditionRecords.AsNoTracking()
@@ -37,19 +39,23 @@ public class ClinicalService(
         return _chartBuilder.Build(patientId, teeth, records, dentition, asOf);
     }
 
-    public Task<List<ToothConditionRecord>> GetToothHistoryAsync(
-        Guid patientId, Guid toothId, CancellationToken ct = default) =>
-        db.ToothConditionRecords.AsNoTracking()
+    public async Task<List<ToothConditionRecord>> GetToothHistoryAsync(
+        Guid patientId, Guid toothId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.DentalChartView, ct);
+        return await db.ToothConditionRecords.AsNoTracking()
             .Include(r => r.RecordedByStaff)
             .Include(r => r.Procedure).ThenInclude(p => p!.ProcedureCode)
             .Where(r => r.PatientId == patientId && r.ToothId == toothId)
             .OrderByDescending(r => r.RecordedOn)
             .ThenByDescending(r => r.CreatedAtUtc)
             .ToListAsync(ct);
+    }
 
     public async Task<Result<ToothConditionRecord>> RecordToothConditionAsync(
         ToothConditionRecord record, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DentalChartEdit, ct);
         var tooth = await db.Teeth.AsNoTracking().FirstOrDefaultAsync(t => t.Id == record.ToothId, ct);
         if (tooth is null) return Result<ToothConditionRecord>.Failure("Tooth not found.");
 
@@ -113,6 +119,7 @@ public class ClinicalService(
 
     public async Task<Result> VoidToothConditionAsync(Guid recordId, string reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DentalChartEdit, ct);
         var record = await db.ToothConditionRecords.FirstOrDefaultAsync(r => r.Id == recordId, ct);
         if (record is null) return Result.Failure("Chart entry not found.");
 
@@ -135,23 +142,30 @@ public class ClinicalService(
 
     // ------------------------------------------------------------------ periodontal
 
-    public Task<List<PeriodontalChart>> GetPerioChartsAsync(Guid patientId, CancellationToken ct = default) =>
-        db.PeriodontalCharts.AsNoTracking()
+    public async Task<List<PeriodontalChart>> GetPerioChartsAsync(Guid patientId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.PeriodontalView, ct);
+        return await db.PeriodontalCharts.AsNoTracking()
             .Include(c => c.ExaminerStaff)
             .Where(c => c.PatientId == patientId)
             .OrderByDescending(c => c.ExamDate)
             .ToListAsync(ct);
+    }
 
-    public Task<PeriodontalChart?> GetPerioChartAsync(Guid chartId, CancellationToken ct = default) =>
-        db.PeriodontalCharts
+    public async Task<PeriodontalChart?> GetPerioChartAsync(Guid chartId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.PeriodontalView, ct);
+        return await db.PeriodontalCharts
             .Include(c => c.Measurements).ThenInclude(m => m.Tooth)
             .Include(c => c.ExaminerStaff)
             .FirstOrDefaultAsync(c => c.Id == chartId, ct);
+    }
 
     /// <summary>Creates a chart pre-populated with six sites for every present tooth.</summary>
     public async Task<Result<PeriodontalChart>> StartPerioChartAsync(
         Guid patientId, Guid? examinerStaffId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PeriodontalEdit, ct);
         var chart = await GetChartAsync(patientId, Dentition.Permanent, null, ct);
 
         var present = chart.AllTeeth.Where(t => !t.IsMissing).ToList();
@@ -190,6 +204,7 @@ public class ClinicalService(
     public async Task<Result<PeriodontalSummary>> SavePerioChartAsync(
         PeriodontalChart chart, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PeriodontalEdit, ct);
         var patient = await db.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.Id == chart.PatientId, ct);
         var social = await db.SocialHistories.AsNoTracking()
             .Where(s => s.PatientId == chart.PatientId)
@@ -260,26 +275,48 @@ public class ClinicalService(
 
     // ------------------------------------------------------------------ clinical notes
 
-    public Task<List<ClinicalNote>> GetNotesAsync(Guid patientId, CancellationToken ct = default) =>
-        db.ClinicalNotes.AsNoTracking()
+    public async Task<List<ClinicalNote>> GetNotesAsync(Guid patientId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.ClinicalRecordsView, ct);
+        return await db.ClinicalNotes.AsNoTracking()
             .Include(n => n.Provider)
             .Include(n => n.Addenda)
             .Where(n => n.PatientId == patientId)
             .OrderByDescending(n => n.NoteDateUtc)
             .ToListAsync(ct);
+    }
 
-    public Task<ClinicalNote?> GetNoteAsync(Guid noteId, CancellationToken ct = default) =>
-        db.ClinicalNotes
+    public async Task<ClinicalNote?> GetNoteAsync(Guid noteId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.ClinicalRecordsView, ct);
+        return await db.ClinicalNotes
             .Include(n => n.Provider)
             .Include(n => n.Addenda)
             .Include(n => n.Appointment)
             .FirstOrDefaultAsync(n => n.Id == noteId, ct);
+    }
 
+    /// <summary>
+    /// Writes or updates a clinical note, and signs it when asked.
+    /// <para>
+    /// Three separate permissions, because they are three separate acts.
+    /// Writing a note is not the same as correcting someone else's draft, and
+    /// neither is the same as signing — signing is what turns a draft into a
+    /// finalised clinical record that can only be amended afterwards. A single
+    /// blanket check here would let anyone who can start a note also put their
+    /// signature on one.
+    /// </para>
+    /// </summary>
     public async Task<Result<ClinicalNote>> SaveNoteAsync(ClinicalNote note, bool sign, CancellationToken ct = default)
     {
         var existing = note.Id != Guid.Empty
             ? await db.ClinicalNotes.FirstOrDefaultAsync(n => n.Id == note.Id, ct)
             : null;
+
+        await guard.DemandAsync(
+            existing is null ? Permissions.ClinicalRecordsCreate : Permissions.ClinicalRecordsEdit, ct);
+
+        if (sign) await guard.DemandAsync(Permissions.ClinicalRecordsSign, ct);
 
         if (existing is not null && existing.IsSigned)
             return Result<ClinicalNote>.Failure(
@@ -315,6 +352,7 @@ public class ClinicalService(
     public async Task<Result> AddAddendumAsync(
         Guid noteId, string body, string? reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ClinicalRecordsEdit, ct);
         if (string.IsNullOrWhiteSpace(body)) return Result.Failure("The addendum is empty.");
 
         var note = await db.ClinicalNotes.FirstOrDefaultAsync(n => n.Id == noteId, ct);
@@ -355,6 +393,7 @@ public class ClinicalService(
     public async Task<Result<MedicalHistoryReview>> RecordMedicalReviewAsync(
         MedicalHistoryReview review, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.MedicalHistoryEdit, ct);
         review.ReviewedByStaffId ??= currentUser.StaffId;
         if (review.ReviewDate == default) review.ReviewDate = clock.Today;
 
@@ -401,6 +440,7 @@ public class ClinicalService(
     public async Task<IReadOnlyList<string>> CheckPrescriptionSafetyAsync(
         Guid patientId, IEnumerable<Guid> medicationIds, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PrescriptionsView, ct);
         var warnings = new List<string>();
         var ids = medicationIds.ToList();
         if (ids.Count == 0) return warnings;
@@ -475,6 +515,7 @@ public class ClinicalService(
     public async Task<Result<Prescription>> IssuePrescriptionAsync(
         Prescription prescription, bool acknowledgeWarnings, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.PrescriptionsCreate, ct);
         if (prescription.Items.Count == 0)
             return Result<Prescription>.Failure("A prescription needs at least one item.");
 
@@ -529,11 +570,14 @@ public class ClinicalService(
         return Result<Prescription>.Success(prescription);
     }
 
-    public Task<List<Prescription>> GetPrescriptionsAsync(Guid patientId, CancellationToken ct = default) =>
-        db.Prescriptions.AsNoTracking()
+    public async Task<List<Prescription>> GetPrescriptionsAsync(Guid patientId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.PrescriptionsView, ct);
+        return await db.Prescriptions.AsNoTracking()
             .Include(p => p.Items).ThenInclude(i => i.Medication)
             .Include(p => p.PrescriberStaff)
             .Where(p => p.PatientId == patientId)
             .OrderByDescending(p => p.IssueDate)
             .ToListAsync(ct);
+    }
 }

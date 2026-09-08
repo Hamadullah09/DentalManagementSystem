@@ -137,10 +137,34 @@ public class LocalFileStorage(string rootPath, ILogger<LocalFileStorage> logger)
     public string GetPublicUrl(string storagePath) => $"/documents/{storagePath.Replace('\\', '/')}";
 
     /// <summary>Resolves inside the root only, so a crafted path cannot escape the store.</summary>
+    /// <summary>
+    /// Turns a stored relative path into an absolute one, or null if it points
+    /// outside the document root.
+    /// <para>
+    /// The root is compared with a trailing separator. Without one, a plain
+    /// prefix test also accepts a sibling directory whose name merely starts
+    /// with the root's — "/srv/documents-archive" passes a StartsWith check
+    /// against "/srv/documents" — so the guard would let a crafted path escape
+    /// into a neighbouring folder while appearing to contain it.
+    /// </para>
+    /// </summary>
     private string? Resolve(string storagePath)
     {
-        var combined = Path.GetFullPath(Path.Combine(rootPath, storagePath));
+        if (string.IsNullOrWhiteSpace(storagePath)) return null;
+
         var root = Path.GetFullPath(rootPath);
+        if (!root.EndsWith(Path.DirectorySeparatorChar)) root += Path.DirectorySeparatorChar;
+
+        string combined;
+        try
+        {
+            combined = Path.GetFullPath(Path.Combine(root, storagePath));
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
         return combined.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? combined : null;
     }
 

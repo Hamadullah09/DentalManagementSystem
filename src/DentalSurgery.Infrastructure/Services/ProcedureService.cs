@@ -49,30 +49,38 @@ public class ProcedureService(
     InventoryService inventory,
     ICurrentUser currentUser,
     IDateTimeProvider clock,
-    ILogger<ProcedureService> logger)
+    ILogger<ProcedureService> logger,
+    IPermissionGuard guard)
 {
     private readonly FeeCalculator _fees = new();
 
-    public Task<List<Procedure>> GetForPatientAsync(Guid patientId, CancellationToken ct = default) =>
-        db.Procedures.AsNoTracking()
+    public async Task<List<Procedure>> GetForPatientAsync(Guid patientId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.ProceduresView, ct);
+        return await db.Procedures.AsNoTracking()
             .Include(p => p.ProcedureCode).Include(p => p.Tooth)
             .Include(p => p.Provider).Include(p => p.SurgicalRecord)
             .Where(p => p.PatientId == patientId)
             .OrderByDescending(p => p.DateOfService)
             .ToListAsync(ct);
+    }
 
-    public Task<Procedure?> GetAsync(Guid id, CancellationToken ct = default) =>
-        db.Procedures
+    public async Task<Procedure?> GetAsync(Guid id, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.ProceduresView, ct);
+        return await db.Procedures
             .Include(p => p.Patient).Include(p => p.ProcedureCode).Include(p => p.Tooth)
             .Include(p => p.Provider).Include(p => p.Assistant)
             .Include(p => p.SurgicalRecord)
             .Include(p => p.AnaesthesiaRecord).ThenInclude(a => a!.Doses)
             .Include(p => p.MaterialsUsed).ThenInclude(m => m.InventoryItem)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
+    }
 
     public async Task<Result<Procedure>> CompleteAsync(
         CompleteProcedureRequest request, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ProceduresRecord, ct);
         var code = await db.ProcedureCodes.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.ProcedureCodeId, ct);
         if (code is null) return Result<Procedure>.Failure("Procedure code not found.");
@@ -357,6 +365,7 @@ public class ProcedureService(
 
     public async Task<Result> VoidAsync(Guid procedureId, string reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ProceduresRecord, ct);
         var procedure = await db.Procedures.FirstOrDefaultAsync(p => p.Id == procedureId, ct);
         if (procedure is null) return Result.Failure("Procedure not found.");
         if (procedure.Status == ProcedureStatus.Voided) return Result.Failure("This procedure is already voided.");
@@ -385,20 +394,24 @@ public class ProcedureService(
         return Result.Success();
     }
 
-    public Task<List<DentalImplant>> GetImplantsAsync(Guid patientId, CancellationToken ct = default) =>
-        db.DentalImplants.AsNoTracking()
+    public async Task<List<DentalImplant>> GetImplantsAsync(Guid patientId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.ImplantsView, ct);
+        return await db.DentalImplants.AsNoTracking()
             .Include(i => i.Tooth).Include(i => i.SurgeonStaff)
             .Where(i => i.PatientId == patientId)
             .OrderByDescending(i => i.PlacementDate)
             .ToListAsync(ct);
+    }
 
-    public Task<List<Procedure>> GetSurgicalCasesAsync(
+    public async Task<List<Procedure>> GetSurgicalCasesAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.SurgeryView, ct);
         var start = from.ToDateTime(TimeOnly.MinValue);
         var end = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
-        return db.Procedures.AsNoTracking()
+        return await db.Procedures.AsNoTracking()
             .Include(p => p.Patient).Include(p => p.ProcedureCode)
             .Include(p => p.Tooth).Include(p => p.Provider)
             .Include(p => p.SurgicalRecord)

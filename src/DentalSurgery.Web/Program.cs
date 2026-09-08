@@ -7,6 +7,7 @@ using DentalSurgery.Web.Components;
 using DentalSurgery.Web.Components.Account;
 using DentalSurgery.Infrastructure.Services;
 using DentalSurgery.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
@@ -59,7 +60,11 @@ builder.Services.AddRazorComponents()
         options.DetailedErrors = builder.Environment.IsDevelopment();
     });
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // A refusal from the service layer becomes a 403, not a 500.
+        options.Filters.Add<ForbiddenExceptionFilter>();
+    })
     .AddJsonOptions(options =>
     {
         // Enums are written as names, so they must also be read as names.
@@ -67,6 +72,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
 
+builder.Services.AddScoped<ForbiddenExceptionFilter>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCascadingAuthenticationState();
 
@@ -86,6 +92,10 @@ builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 builder.Services.AddScoped<ICurrentUser, WebCurrentUser>();
+
+// Registered before AddDentalInfrastructure, whose TryAdd fallback would
+// otherwise install the permissive system guard used by the seeder.
+builder.Services.AddScoped<IPermissionGuard, PermissionGuard>();
 
 builder.Services.AddAuthentication(options =>
     {
@@ -124,6 +134,34 @@ builder.Services.ConfigureApplicationCookie(options =>
     }
 
     options.Events.OnValidatePrincipal = AccountSecurityCookieEvents.ValidatePrincipalAsync;
+
+    // A browser is redirected to sign in or to the access-denied page; an API
+    // caller is given the status code it can act on. Without this an
+    // unauthorised /api request answers 200 with a page of HTML, which a client
+    // has no way to tell apart from success.
+    options.Events.OnRedirectToLogin = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        }
+
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
 });
 
 // ---------------------------------------------------------------- infrastructure
@@ -146,25 +184,28 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 // ---------------------------------------------------------------- authorisation
+//
+// Policies are permission names, resolved at request time through the
+// role-to-permission map rather than by testing role names here. Adding a role,
+// or changing what an existing one may do, is a data change; it does not touch
+// this file.
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, StaffMemberHandler>();
+
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(Policies.CanViewClinical, p => p.RequireRole(
-        Roles.Administrator, Roles.PracticeManager, Roles.Dentist, Roles.Hygienist,
-        Roles.Nurse, Roles.Receptionist, Roles.ReadOnly))
-    .AddPolicy(Policies.CanEditClinical, p => p.RequireRole(
-        Roles.Administrator, Roles.Dentist, Roles.Hygienist, Roles.Nurse))
-    .AddPolicy(Policies.CanPrescribe, p => p.RequireRole(
-        Roles.Administrator, Roles.Dentist))
-    .AddPolicy(Policies.CanManageSchedule, p => p.RequireRole(
-        Roles.Administrator, Roles.PracticeManager, Roles.Receptionist, Roles.Dentist, Roles.Hygienist))
-    .AddPolicy(Policies.CanManageBilling, p => p.RequireRole(
-        Roles.Administrator, Roles.PracticeManager, Roles.Accounts, Roles.Receptionist))
-    .AddPolicy(Policies.CanManageInventory, p => p.RequireRole(
-        Roles.Administrator, Roles.PracticeManager, Roles.Nurse))
-    .AddPolicy(Policies.CanManageStaff, p => p.RequireRole(
-        Roles.Administrator, Roles.PracticeManager))
-    .AddPolicy(Policies.CanViewReports, p => p.RequireRole(
-        Roles.Administrator, Roles.PracticeManager, Roles.Accounts, Roles.Dentist))
-    .AddPolicy(Policies.CanAdminister, p => p.RequireRole(Roles.Administrator));
+    // A bare [Authorize] means "a member of staff", not merely "holds a cookie".
+    // An account with no role grants nothing, so a self-provisioned or
+    // half-configured login cannot read a patient record by signing in.
+    .SetDefaultPolicy(new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .AddRequirements(new StaffMemberRequirement())
+        .Build())
+    .AddPolicy(Policies.StaffMember, p => p
+        .RequireAuthenticatedUser()
+        .AddRequirements(new StaffMemberRequirement()));
+
+var rateLimitingEnabled = builder.Configuration.RateLimitingEnabled();
 
 var app = builder.Build();
 
@@ -225,7 +266,9 @@ app.UseHttpsRedirection();
 app.UseSecurityHeaders();
 app.UseStaticFiles();
 
-app.UseRateLimiter();
+// Only when the limiter was actually registered. UseRateLimiter throws if it
+// was not, which turned "RateLimiting:Enabled=false" into a start-up crash.
+if (rateLimitingEnabled) app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -246,12 +289,23 @@ app.UseMustChangePassword();
 
 app.MapApplicationHealthChecks();
 
-app.MapControllers().RequireRateLimiting(ProductionHardening.ApiPolicy);
+var controllers = app.MapControllers();
+if (rateLimitingEnabled) controllers.RequireRateLimiting(ProductionHardening.ApiPolicy);
 
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode()
-    .ApplySignInRateLimit();
+var components = app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
+
+if (rateLimitingEnabled) components.ApplySignInRateLimit();
 
 app.MapAdditionalIdentityEndpoints();
 
 app.Run();
+
+/// <summary>
+/// Top-level statements compile to an internal <c>Program</c>, which
+/// <c>WebApplicationFactory&lt;T&gt;</c> cannot reach. Declaring it here makes the
+/// real composition root — this file, with its actual middleware order and its
+/// actual authorisation wiring — the thing the integration tests boot, rather
+/// than a second host assembled to look like it.
+/// </summary>
+public partial class Program;

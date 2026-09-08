@@ -1,5 +1,5 @@
 @page "/lab-cases"
-@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@attribute [Authorize(Policy = Permissions.LaboratoryView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 

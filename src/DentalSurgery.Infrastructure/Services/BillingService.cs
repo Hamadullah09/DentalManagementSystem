@@ -36,7 +36,8 @@ public class BillingService(
     INumberSequenceService sequences,
     ICurrentUser currentUser,
     IDateTimeProvider clock,
-    ILogger<BillingService> logger)
+    ILogger<BillingService> logger,
+    IPermissionGuard guard)
 {
     private readonly LedgerCalculator _ledger = new();
     private readonly InsuranceEstimator _estimator = new();
@@ -45,6 +46,7 @@ public class BillingService(
 
     public async Task<PatientAccount> GetAccountAsync(Guid patientId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingView, ct);
         var invoices = await db.Invoices.AsNoTracking()
             .Include(i => i.Lines)
             .Where(i => i.PatientId == patientId)
@@ -109,6 +111,7 @@ public class BillingService(
     /// </summary>
     public async Task<Result<Invoice>> ChargeProcedureAsync(Guid procedureId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingCreate, ct);
         var procedure = await db.Procedures
             .Include(p => p.ProcedureCode)
             .Include(p => p.Tooth)
@@ -188,6 +191,7 @@ public class BillingService(
     public async Task<Result> ReverseProcedureChargeAsync(
         Guid procedureId, string reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingEdit, ct);
         var procedure = await db.Procedures.FirstOrDefaultAsync(p => p.Id == procedureId, ct);
         if (procedure?.InvoiceLineId is null) return Result.Success();
 
@@ -243,6 +247,7 @@ public class BillingService(
 
     public async Task<Result<Invoice>> IssueInvoiceAsync(Guid invoiceId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingCreate, ct);
         var invoice = await db.Invoices.Include(i => i.Lines).FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
         if (invoice is null) return Result<Invoice>.Failure("Invoice not found.");
         if (invoice.Status != InvoiceStatus.Draft) return Result<Invoice>.Failure("This invoice has already been issued.");
@@ -258,6 +263,7 @@ public class BillingService(
 
     public async Task<Result> VoidInvoiceAsync(Guid invoiceId, string reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingEdit, ct);
         var invoice = await db.Invoices.Include(i => i.Lines).FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
         if (invoice is null) return Result.Failure("Invoice not found.");
         if (invoice.AmountPaid > 0) return Result.Failure("A paid invoice cannot be voided. Refund it instead.");
@@ -295,6 +301,7 @@ public class BillingService(
         string? reference = null, IEnumerable<Guid>? invoiceIds = null,
         CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingCreate, ct);
         if (amount <= 0) return Result<Payment>.Failure("The payment amount must be greater than zero.");
 
         var payment = new Payment
@@ -365,6 +372,7 @@ public class BillingService(
     public async Task<Result> RefundPaymentAsync(
         Guid paymentId, decimal amount, string reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingRefund, ct);
         var payment = await db.Payments.Include(p => p.Allocations).FirstOrDefaultAsync(p => p.Id == paymentId, ct);
         if (payment is null) return Result.Failure("Payment not found.");
 
@@ -415,6 +423,7 @@ public class BillingService(
         Guid patientId, decimal amount, AdjustmentType type, string reason,
         Guid? invoiceId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingEdit, ct);
         if (amount == 0) return Result<AccountAdjustment>.Failure("The adjustment amount cannot be zero.");
         if (string.IsNullOrWhiteSpace(reason)) return Result<AccountAdjustment>.Failure("A reason is required.");
 
@@ -464,6 +473,7 @@ public class BillingService(
     public async Task<Result<PaymentPlan>> CreatePaymentPlanAsync(
         PaymentPlan plan, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.BillingEdit, ct);
         if (plan.TotalAmount <= 0) return Result<PaymentPlan>.Failure("The plan total must be greater than zero.");
         if (plan.NumberOfInstallments <= 0) return Result<PaymentPlan>.Failure("Set the number of instalments.");
 
@@ -486,6 +496,7 @@ public class BillingService(
         Guid patientId, Guid patientInsuranceId, IEnumerable<Guid> procedureIds,
         bool isPreAuthorisation = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InsuranceCreate, ct);
         var insurance = await db.PatientInsurances
             .Include(i => i.InsurancePlan).ThenInclude(p => p!.InsuranceCarrier)
             .FirstOrDefaultAsync(i => i.Id == patientInsuranceId, ct);
@@ -547,6 +558,7 @@ public class BillingService(
 
     public async Task<Result> SubmitClaimAsync(Guid claimId, string method, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InsuranceSubmitClaim, ct);
         var claim = await db.InsuranceClaims.FirstOrDefaultAsync(c => c.Id == claimId, ct);
         if (claim is null) return Result.Failure("Claim not found.");
         if (claim.Status is not (ClaimStatus.Draft or ClaimStatus.ReadyToSend))
@@ -565,6 +577,7 @@ public class BillingService(
         Guid claimId, decimal amountPaid, decimal writeOff, string? denialReason,
         CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.InsuranceCreate, ct);
         var claim = await db.InsuranceClaims
             .Include(c => c.Lines)
             .Include(c => c.PatientInsurance)
@@ -691,6 +704,15 @@ public class BillingService(
     }
 
     /// <summary>Rebuilds a patient's ledger balances after a data correction.</summary>
+    /// <summary>
+    /// Recomputes a patient's running balance from their charges and payments.
+    /// <para>
+    /// No permission demand: this is an internal repair called by the billing
+    /// operations that have already been authorised, and by nothing a user can
+    /// reach directly. Demanding a permission here would make it fail inside a
+    /// legitimately authorised operation whose own permission differs.
+    /// </para>
+    /// </summary>
     public async Task<decimal> RebuildLedgerAsync(Guid patientId, CancellationToken ct = default)
     {
         var entries = await db.LedgerEntries

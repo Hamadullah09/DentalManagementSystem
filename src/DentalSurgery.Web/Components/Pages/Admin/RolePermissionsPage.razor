@@ -1,0 +1,366 @@
+@page "/admin/roles"
+@attribute [Authorize(Policy = Permissions.RolesView)]
+@using Microsoft.AspNetCore.Identity
+@using System.Security.Claims
+@inject RoleManager<ApplicationRole> RoleManager
+@inject PermissionCatalogue Catalogue
+@inject IPermissionGuard Guard
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject ILogger<RolePermissionsPage> Logger
+
+<PageTitle>Roles and permissions - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="Roles and permissions"
+            Subtitle="What each role is allowed to do. Every check in the system resolves through this table."
+            Breadcrumbs="@(new List<PageHeader.Crumb> { new("Administration"), new("Roles and permissions") })">
+    <Actions>
+        @if (_canEdit && _dirty)
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Reload" disabled="@_busy">Discard changes</button>
+            <button class="btn btn-sm btn-primary" @onclick="SaveAsync" disabled="@_busy">
+                @(_busy ? "Saving…" : $"Save {Pending.Count} change(s)")
+            </button>
+        }
+    </Actions>
+</PageHeader>
+
+@if (_status is not null)
+{
+    <div class="alert-ds @(_statusIsError ? "a-danger" : "a-success") mb-3" role="status">
+        <Icon Name="@(_statusIsError ? "alert-circle" : "check-circle")" Size="16" />
+        <div>@_status</div>
+    </div>
+}
+
+<div class="alert-ds a-info mb-3">
+    <Icon Name="info" Size="16" />
+    <div>
+        <strong>This is the live grant, not a description of one.</strong>
+        A tick here is what the server checks when a page is opened and again when
+        a service is asked to do the work. Removing one takes effect on the
+        affected users' next request — they do not have to sign out and back in.
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="skeleton" style="height:400px;"></div>
+}
+else
+{
+    <div class="card-ds mb-3">
+        <div class="card-ds-body">
+            <div class="row g-3">
+                @foreach (var role in Roles.All)
+                {
+                    var count = Held(role).Count;
+                    <div class="col-6 col-md-4 col-xl-3">
+                        <div class="role-summary @(role == _focusRole ? "is-focus" : "")"
+                             role="button" tabindex="0"
+                             @onclick="() => FocusRole(role)"
+                             @onkeydown="e => FocusKey(e, role)">
+                            <div class="role-summary-name">@Roles.Display(role)</div>
+                            <div class="role-summary-count">@count of @Permissions.All.Length permissions</div>
+                            @if (Roles.Primary.Contains(role))
+                            {
+                                <span class="badge-ds b-primary mt-1">Primary role</span>
+                            }
+                            else
+                            {
+                                <span class="badge-ds b-neutral mt-1">Secondary</span>
+                            }
+                            <div class="text-muted mt-1" style="font-size:.75rem;">
+                                @_userCounts.GetValueOrDefault(role, 0) account(s)
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card-ds">
+        <div class="card-ds-body">
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                <label class="form-label-sm mb-0" for="perm-search">Filter permissions</label>
+                <input id="perm-search" class="form-control form-control-sm" style="max-width:20rem;"
+                       placeholder="Module or action, e.g. billing" @bind="_filter" @bind:event="oninput" />
+                @if (_focusRole is not null)
+                {
+                    <span class="badge-ds b-primary">Highlighting @Roles.Display(_focusRole)</span>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => FocusRole(null)">Clear</button>
+                }
+            </div>
+
+            <div class="table-wrap">
+                <table class="table-ds perm-matrix">
+                    <caption class="visually-hidden">
+                        Permission grid. Each row is a permission; each column is a role.
+                    </caption>
+                    <thead>
+                        <tr>
+                            <th scope="col" class="perm-col">Permission</th>
+                            @foreach (var role in Roles.All)
+                            {
+                                <th scope="col" class="text-center @(role == _focusRole ? "is-focus" : "")">
+                                    <span class="perm-role-head">@Roles.Display(role)</span>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var moduleGroup in VisiblePermissions.GroupBy(Permissions.ModuleOf))
+                        {
+                            <tr class="perm-module-row">
+                                <th scope="rowgroup" colspan="@(Roles.All.Length + 1)">@Humanise(moduleGroup.Key)</th>
+                            </tr>
+
+                            @foreach (var permission in moduleGroup)
+                            {
+                                <tr>
+                                    <th scope="row" class="perm-col">
+                                        <div class="perm-name">@Permissions.ActionOf(permission)</div>
+                                        <div class="perm-desc">@Permissions.Descriptions.GetValueOrDefault(permission)</div>
+                                    </th>
+
+                                    @foreach (var role in Roles.All)
+                                    {
+                                        var isHeld = Held(role).Contains(permission);
+                                        var isAdmin = role == Roles.Administrator;
+
+                                        <td class="text-center @(role == _focusRole ? "is-focus" : "")">
+                                            <input type="checkbox"
+                                                   class="form-check-input"
+                                                   checked="@isHeld"
+                                                   disabled="@(!_canEdit || isAdmin)"
+                                                   title="@(isAdmin
+                                                       ? "The administrator role always holds every permission."
+                                                       : $"{Roles.Display(role)}: {permission}")"
+                                                   aria-label="@($"{Roles.Display(role)} — {permission}")"
+                                                   @onchange="e => Toggle(role, permission, e)" />
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (!VisiblePermissions.Any())
+            {
+                <EmptyState IconName="search" Title="No permissions match that filter"
+                            Message="Try a module name such as billing, clinical or inventory." />
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>The grant as it stands in the database.</summary>
+    private readonly Dictionary<string, HashSet<string>> _saved = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The grant as the administrator has edited it on screen.</summary>
+    private readonly Dictionary<string, HashSet<string>> _grants = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, int> _userCounts = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool _loading = true;
+    private bool _busy;
+    private bool _canEdit;
+    private string _filter = "";
+    private string? _focusRole;
+    private string? _status;
+    private bool _statusIsError;
+
+    /// <summary>
+    /// The edits not yet written, derived by comparing the working copy against
+    /// what was loaded.
+    /// <para>
+    /// Derived rather than accumulated. An accumulated list has to be kept in
+    /// step with the working copy by every code path that touches either, and
+    /// the two drift the moment one of them is updated twice — a duplicated
+    /// change event is enough. Recomputing the difference cannot drift, and
+    /// ticking a box and unticking it again correctly leaves nothing to save.
+    /// </para>
+    /// </summary>
+    private List<(string Role, string Permission, bool Granted)> Pending
+    {
+        get
+        {
+            var changes = new List<(string, string, bool)>();
+
+            foreach (var role in Roles.All)
+            {
+                var saved = _saved.TryGetValue(role, out var s) ? s : [];
+                var working = _grants.TryGetValue(role, out var w) ? w : [];
+
+                foreach (var permission in working.Except(saved)) changes.Add((role, permission, true));
+                foreach (var permission in saved.Except(working)) changes.Add((role, permission, false));
+            }
+
+            return changes;
+        }
+    }
+
+    private bool _dirty => Pending.Count > 0;
+
+    private HashSet<string> Held(string role) =>
+        _grants.TryGetValue(role, out var set) ? set : [];
+
+    private IEnumerable<string> VisiblePermissions =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? Permissions.All
+            : Permissions.All.Where(p =>
+                p.Contains(_filter, StringComparison.OrdinalIgnoreCase)
+                || (Permissions.Descriptions.GetValueOrDefault(p) ?? "")
+                    .Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canEdit = await Guard.HasAsync(Permissions.RolesEdit);
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        _loading = true;
+        _saved.Clear();
+        _grants.Clear();
+        _userCounts.Clear();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var rows = await (
+            from claim in db.RoleClaims.AsNoTracking()
+            join role in db.Roles.AsNoTracking() on claim.RoleId equals role.Id
+            where claim.ClaimType == PermissionCatalogue.ClaimType
+            select new { RoleName = role.Name!, claim.ClaimValue })
+            .ToListAsync();
+
+        foreach (var name in Roles.All) _saved[name] = [];
+
+        foreach (var row in rows)
+        {
+            if (row.ClaimValue is null) continue;
+            if (!_saved.TryGetValue(row.RoleName, out var set)) _saved[row.RoleName] = set = [];
+            set.Add(row.ClaimValue);
+        }
+
+        // The working copy starts as a distinct copy of what was loaded, so the
+        // two can be compared to find what changed.
+        foreach (var (role, permissions) in _saved)
+            _grants[role] = new HashSet<string>(permissions, StringComparer.Ordinal);
+
+        var counts = await (
+            from userRole in db.UserRoles.AsNoTracking()
+            join role in db.Roles.AsNoTracking() on userRole.RoleId equals role.Id
+            group userRole by role.Name! into g
+            select new { Role = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        foreach (var c in counts) _userCounts[c.Role] = c.Count;
+
+        _loading = false;
+    }
+
+    private void FocusRole(string? role) => _focusRole = _focusRole == role ? null : role;
+
+    private void FocusKey(KeyboardEventArgs e, string role)
+    {
+        if (e.Key is "Enter" or " ") FocusRole(role);
+    }
+
+    /// <summary>
+    /// Records what the checkbox now says. Idempotent: the same event arriving
+    /// twice leaves the same state.
+    /// </summary>
+    private void Toggle(string role, string permission, ChangeEventArgs e)
+    {
+        if (!_grants.TryGetValue(role, out var working)) _grants[role] = working = [];
+
+        if (e.Value is true) working.Add(permission);
+        else working.Remove(permission);
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _status = null;
+
+        try
+        {
+            await Guard.DemandAsync(Permissions.RolesEdit);
+
+            var changes = Pending;
+
+            foreach (var (roleName, permission, granted) in changes)
+            {
+                // Belt and braces: the administrator checkbox is disabled in the
+                // interface, and the write is refused here as well. Leaving the
+                // system with nobody able to administer it is not a state an
+                // administrator should be able to reach by accident.
+                if (roleName == Roles.Administrator) continue;
+
+                var role = await RoleManager.FindByNameAsync(roleName);
+                if (role is null) continue;
+
+                var claim = new Claim(PermissionCatalogue.ClaimType, permission);
+
+                var result = granted
+                    ? await RoleManager.AddClaimAsync(role, claim)
+                    : await RoleManager.RemoveClaimAsync(role, claim);
+
+                if (!result.Succeeded)
+                {
+                    _status = string.Join(" ", result.Errors.Select(x => x.Description));
+                    _statusIsError = true;
+                    return;
+                }
+
+                Logger.LogWarning(
+                    "Permission {Permission} was {Action} for role {Role}.",
+                    permission, granted ? "granted to" : "revoked from", roleName);
+            }
+
+            var changed = changes.Count;
+
+            // The map is cached for the life of the process, so it has to be
+            // dropped explicitly or the change would not be seen until a restart.
+            Catalogue.Invalidate();
+
+            await Reload();
+
+            _status = $"{changed} permission change(s) saved. They apply from each affected user's next request.";
+            _statusIsError = false;
+        }
+        catch (ForbiddenException ex)
+        {
+            _status = "Your role does not allow that. Required permission: " + ex.Permission;
+            _statusIsError = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Saving role permissions failed.");
+            _status = "The changes could not be saved. The problem has been logged.";
+            _statusIsError = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Turns a PascalCase module name into a readable heading.</summary>
+    private static string Humanise(string module) =>
+        module switch
+        {
+            "MedicalHistory" => "Medical history",
+            "ClinicalRecords" => "Clinical notes",
+            "DentalChart" => "Dental chart",
+            "TreatmentPlans" => "Treatment plans",
+            "WaitingRoom" => "Waiting room",
+            "Sterilization" => "Sterilisation",
+            _ => module
+        };
+}

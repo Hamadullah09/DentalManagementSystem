@@ -1,71 +1,107 @@
-﻿@page "/Account/Login"
+@page "/Account/Login"
+@layout DentalSurgery.Web.Components.Account.Shared.AuthLayout
 
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
 @using DentalSurgery.Infrastructure.Identity
+@using DentalSurgery.Infrastructure.Persistence
+@using Microsoft.EntityFrameworkCore
 
 @inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
+@inject IDbContextFactory<DentalDbContext> DbFactory
 
-<PageTitle>Log in</PageTitle>
+<PageTitle>Sign in — @_practiceName</PageTitle>
 
-<h1>Log in</h1>
-<div class="row">
-    <div class="col-md-4">
-        <section>
-            <StatusMessage Message="@errorMessage" />
-            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
-                <DataAnnotationsValidator />
-                <h2>Use a local account to log in.</h2>
-                <hr />
-                <ValidationSummary class="text-danger" role="alert" />
-                <div class="form-floating mb-3">
-                    <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                    <label for="email" class="form-label">Email</label>
-                    <ValidationMessage For="() => Input.Email" class="text-danger" />
-                </div>
-                <div class="form-floating mb-3">
-                    <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
-                    <label for="password" class="form-label">Password</label>
-                    <ValidationMessage For="() => Input.Password" class="text-danger" />
-                </div>
-                <div class="checkbox mb-3">
-                    <label class="form-label">
-                        <InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
-                        Remember me
-                    </label>
-                </div>
-                <div>
-                    <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-                </div>
-                <div>
-                    <p>
-                        <a href="Account/ForgotPassword">Forgot your password?</a>
-                    </p>
-                    <p>
-                        <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Register as a new user</a>
-                    </p>
-                    <p>
-                        <a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
-                    </p>
-                </div>
-            </EditForm>
-        </section>
+<div class="auth-card">
+
+    <div class="auth-card-head">
+        <h1 class="auth-title">Sign in</h1>
+        <p class="auth-subtitle">Use the account issued to you by the practice.</p>
     </div>
-    <div class="col-md-6 col-md-offset-2">
-        <section>
-            <h3>Use another service to log in.</h3>
-            <hr />
-            <ExternalLoginPicker />
-        </section>
-    </div>
+
+    @if (_notice is not null)
+    {
+        <div class="auth-alert @_noticeClass" role="alert">
+            <Icon Name="@_noticeIcon" Size="17" CssClass="auth-alert-icon" />
+            <div>
+                <strong>@_notice.Title</strong>
+                <span>@_notice.Detail</span>
+            </div>
+        </div>
+    }
+
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login" class="auth-form">
+        <DataAnnotationsValidator />
+
+        <div class="field">
+            <label class="field-label" for="login-email">
+                Email address <span class="req" aria-hidden="true">*</span>
+            </label>
+            <InputText id="login-email" @bind-Value="Input.Email" class="form-control"
+                       autocomplete="username" inputmode="email" autofocus
+                       aria-required="true" placeholder="you@practice.example" />
+            <ValidationMessage For="() => Input.Email" class="field-error" />
+        </div>
+
+        <div class="field">
+            <label class="field-label" for="login-password">
+                Password <span class="req" aria-hidden="true">*</span>
+            </label>
+            <div class="password-wrap">
+                <InputText id="login-password" type="password" @bind-Value="Input.Password"
+                           class="form-control" autocomplete="current-password"
+                           aria-required="true" placeholder="Enter your password" />
+                <button type="button" class="password-toggle" data-password-toggle="login-password"
+                        aria-controls="login-password" aria-pressed="false"
+                        aria-label="Show password" title="Show password">
+                    <Icon Name="eye" Size="16" />
+                </button>
+            </div>
+            <ValidationMessage For="() => Input.Password" class="field-error" />
+        </div>
+
+        <div class="auth-row">
+            <label class="check">
+                <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
+                <span>Keep me signed in</span>
+            </label>
+            <a href="Account/ForgotPassword" class="auth-link">Forgotten your password?</a>
+        </div>
+
+        <button type="submit" class="btn btn-primary auth-submit" data-busy-label="Signing in…">
+            <span class="submit-label">Sign in</span>
+        </button>
+    </EditForm>
+
+    <p class="auth-foot">
+        Accounts are issued by your practice administrator. If you cannot sign in,
+        contact them rather than creating another account.
+    </p>
 </div>
 
 @code {
-    private string? errorMessage;
+    private sealed record Notice(string Title, string Detail, string Kind);
+
+    private Notice? _notice;
+    private string _practiceName = "Meridian Dental Surgery";
+
+    private string _noticeClass => _notice?.Kind switch
+    {
+        "warning" => "is-warning",
+        "info" => "is-info",
+        _ => "is-danger"
+    };
+
+    private string _noticeIcon => _notice?.Kind switch
+    {
+        "info" => "info",
+        _ => "alert-triangle"
+    };
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -76,23 +112,50 @@
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
+    /// <summary>Set when the user arrives here because their session ran out.</summary>
+    [SupplyParameterFromQuery(Name = "timeout")]
+    private string? TimedOut { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            _practiceName = await db.Practices.AsNoTracking()
+                .Select(p => p.Name).FirstOrDefaultAsync() ?? _practiceName;
+        }
+
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
-            // Clear the existing external cookie to ensure a clean login process
+            // Any half-finished external handshake is cleared, so a fresh
+            // sign-in never inherits state from an abandoned one.
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
+            if (TimedOut is not null)
+            {
+                _notice = new Notice(
+                    "Your session ended.",
+                    "You were signed out after a period of inactivity. Sign in again to continue.",
+                    "info");
+            }
         }
     }
 
     public async Task LoginUser()
     {
-        // This doesn't count login failures towards account lockout
-        // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        // lockoutOnFailure was false in the scaffolded page, which left the
+        // configured five-attempt lockout inert: the policy existed, counted
+        // nothing and locked nobody out. Passing true is what turns the
+        // configuration into an actual brute-force control.
+        var result = await SignInManager.PasswordSignInAsync(
+            Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
+
         if (result.Succeeded)
         {
-            Logger.LogInformation("User logged in.");
+            await RecordSuccessfulSignInAsync();
+
+            // Session fixation: Identity issues a new cookie on sign-in, and the
+            // pre-authentication cookie is dropped rather than reused.
+            Logger.LogInformation("Sign-in succeeded for {Email}.", Input.Email);
             RedirectManager.RedirectTo(ReturnUrl);
         }
         else if (result.RequiresTwoFactor)
@@ -103,26 +166,56 @@
         }
         else if (result.IsLockedOut)
         {
-            Logger.LogWarning("User account locked out.");
+            Logger.LogWarning("Sign-in blocked for {Email}: the account is locked out.", Input.Email);
             RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else if (result.IsNotAllowed)
+        {
+            // Reached when the account is deactivated. Said plainly, because a
+            // member of staff whose access was withdrawn needs to know to talk to
+            // an administrator rather than keep retrying a working password.
+            Logger.LogWarning("Sign-in refused for {Email}: the account is not permitted to sign in.", Input.Email);
+
+            _notice = new Notice(
+                "This account cannot sign in.",
+                "It may have been deactivated. Contact your practice administrator.",
+                "warning");
         }
         else
         {
-            errorMessage = "Error: Invalid login attempt.";
+            // One message for "no such account" and for "wrong password". Telling
+            // the two apart would let anyone confirm which addresses hold
+            // accounts here, which is the first step of a credential-stuffing run.
+            Logger.LogWarning("Failed sign-in attempt for {Email}.", Input.Email);
+
+            _notice = new Notice(
+                "Those details were not recognised.",
+                "Check the email address and password and try again.",
+                "danger");
         }
+    }
+
+    /// <summary>Records when and from where the account was last used.</summary>
+    private async Task RecordSuccessfulSignInAsync()
+    {
+        var user = await UserManager.FindByEmailAsync(Input.Email);
+        if (user is null) return;
+
+        user.LastLoginUtc = DateTime.UtcNow;
+        user.LastLoginIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await UserManager.UpdateAsync(user);
     }
 
     private sealed class InputModel
     {
-        [Required]
-        [EmailAddress]
+        [Required(ErrorMessage = "Enter your email address.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
         public string Email { get; set; } = "";
 
-        [Required]
+        [Required(ErrorMessage = "Enter your password.")]
         [DataType(DataType.Password)]
         public string Password { get; set; } = "";
 
-        [Display(Name = "Remember me?")]
         public bool RememberMe { get; set; }
     }
 }

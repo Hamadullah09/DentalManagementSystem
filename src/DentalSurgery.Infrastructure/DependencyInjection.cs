@@ -193,6 +193,13 @@ public static class DependencyInjection
         services.AddSingleton<DentalChartBuilder>();
         services.AddSingleton<AvailabilityCalculator>();
 
+        // Authorisation for the service layer. The catalogue holds the
+        // role-to-permission map; the guard is what a service calls to refuse
+        // work the operator is not entitled to.
+        services.AddMemoryCache();
+        services.AddSingleton<PermissionCatalogue>();
+        services.TryAddPermissionGuardFallback();
+
         services.AddScoped<PatientService>();
         services.AddScoped<AppointmentService>();
         services.AddScoped<ClinicalService>();
@@ -261,6 +268,16 @@ public static class DependencyInjection
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
         return builder.ToString();
+    }
+
+    private static void TryAddPermissionGuardFallback(this IServiceCollection services)
+    {
+        // The web host registers the real guard against the signed-in user.
+        // Anything else hosting this assembly — the seeder, a background
+        // dispatcher, a test fixture — has no operator to check, so it gets the
+        // system guard rather than silently failing every permission.
+        if (services.Any(d => d.ServiceType == typeof(IPermissionGuard))) return;
+        services.AddScoped<IPermissionGuard, SystemPermissionGuard>();
     }
 
     private static void TryAddCurrentUserFallback(this IServiceCollection services)

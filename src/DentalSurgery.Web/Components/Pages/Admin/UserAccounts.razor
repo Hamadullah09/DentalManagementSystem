@@ -1,0 +1,774 @@
+@page "/admin/users"
+@attribute [Authorize(Policy = Permissions.UsersView)]
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@inject UserManager<ApplicationUser> Users
+@inject RoleManager<ApplicationRole> RoleManager
+@inject IPermissionGuard Guard
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+@inject ILogger<UserAccounts> Logger
+
+<PageTitle>User accounts - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="User accounts"
+            Subtitle="Logins that can reach this system, and what each one is allowed to do."
+            Breadcrumbs="@(new List<PageHeader.Crumb> { new("Administration"), new("User accounts") })">
+    <Actions>
+        @if (_canCreate)
+        {
+            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" @onclick="StartCreate">
+                <Icon Name="user-plus" Size="14" /> New account
+            </button>
+        }
+    </Actions>
+</PageHeader>
+
+<div class="alert-ds a-info mb-3">
+    <Icon Name="info" Size="16" />
+    <div>
+        <strong>Accounts are issued here, not requested.</strong>
+        There is no self-registration: a person can only sign in once an
+        administrator has created their account and given it a role. An account
+        with no role can sign in but cannot open anything.
+    </div>
+</div>
+
+@if (_status is not null)
+{
+    <div class="alert-ds @(_statusIsError ? "a-danger" : "a-success") mb-3" role="status">
+        <Icon Name="@(_statusIsError ? "alert-circle" : "check-circle")" Size="16" />
+        <div>@_status</div>
+    </div>
+}
+
+<div class="stat-grid mb-3">
+    <StatTile Label="Active accounts" Value="@_rows.Count(r => r.IsActive).ToString()" Accent="primary" Icon="users" />
+    <StatTile Label="Deactivated" Value="@_rows.Count(r => !r.IsActive).ToString()"
+              Accent="@(_rows.Any(r => !r.IsActive) ? "warning" : "neutral")" />
+    <StatTile Label="Locked out" Value="@_rows.Count(r => r.IsLockedOut).ToString()"
+              Accent="@(_rows.Any(r => r.IsLockedOut) ? "danger" : "success")" Icon="lock" />
+    <StatTile Label="Owe a password change" Value="@_rows.Count(r => r.MustChangePassword).ToString()" Accent="accent" Icon="key" />
+    <StatTile Label="Without a role" Value="@_rows.Count(r => r.Roles.Count == 0).ToString()"
+              Accent="@(_rows.Any(r => r.Roles.Count == 0) ? "warning" : "neutral")" />
+</div>
+
+<div class="card-ds mb-3">
+    <div class="card-ds-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label-sm" for="user-search">Search</label>
+                <input id="user-search" class="form-control form-control-sm"
+                       placeholder="Name or email" @bind="_search" @bind:event="oninput" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label-sm" for="user-role">Role</label>
+                <select id="user-role" class="form-select form-select-sm" @bind="_roleFilter">
+                    <option value="">All roles</option>
+                    @foreach (var role in Roles.All)
+                    {
+                        <option value="@role">@Roles.Display(role)</option>
+                    }
+                    <option value="__none">No role assigned</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label-sm" for="user-state">State</label>
+                <select id="user-state" class="form-select form-select-sm" @bind="_stateFilter">
+                    <option value="active">Active</option>
+                    <option value="inactive">Deactivated</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="skeleton" style="height:280px;"></div>
+}
+else if (Filtered.Count == 0)
+{
+    <div class="card-ds">
+        <EmptyState IconName="users" Title="No accounts match those filters"
+                    Message="Change the search or the filters above to see other accounts." />
+    </div>
+}
+else
+{
+    <div class="card-ds">
+        <div class="table-wrap">
+            <table class="table-ds">
+                <caption class="visually-hidden">User accounts with their role, state and last sign-in</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Person</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Linked staff record</th>
+                        <th scope="col">Last signed in</th>
+                        <th scope="col">State</th>
+                        <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Filtered)
+                    {
+                        <tr>
+                            <td>
+                                <div style="font-weight:600;">@row.DisplayName</div>
+                                <div class="text-muted" style="font-size:.79rem;">@row.Email</div>
+                            </td>
+                            <td>
+                                @if (row.Roles.Count == 0)
+                                {
+                                    <span class="badge-ds b-warning">No role</span>
+                                }
+                                else
+                                {
+                                    @foreach (var role in row.Roles)
+                                    {
+                                        <span class="badge-ds b-neutral me-1">@Roles.Display(role)</span>
+                                    }
+                                }
+                            </td>
+                            <td>
+                                @if (row.StaffName is null)
+                                {
+                                    <span class="text-faint">Not linked</span>
+                                }
+                                else
+                                {
+                                    <span>@row.StaffName</span>
+                                }
+                            </td>
+                            <td>
+                                @if (row.LastLoginUtc is { } lastLogin)
+                                {
+                                    var localLogin = lastLogin.ToLocalTime();
+                                    <span title="@localLogin.ToString("f")">
+                                        @Ui.Relative(DateOnly.FromDateTime(localLogin))
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-faint">Never</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!row.IsActive)
+                                {
+                                    <span class="badge-ds b-danger">Deactivated</span>
+                                }
+                                else if (row.IsLockedOut)
+                                {
+                                    <span class="badge-ds b-danger">Locked out</span>
+                                }
+                                else if (row.MustChangePassword)
+                                {
+                                    <span class="badge-ds b-warning">Password change due</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-ds b-success">Active</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                @if (_canEdit)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(row)">
+                                        Manage
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* --------------------------------------------------------------- editor *@
+@if (_editing is not null)
+{
+    <div class="modal-backdrop-ds" @onclick="Cancel"></div>
+    <div class="modal-ds" role="dialog" aria-modal="true" aria-labelledby="user-editor-title">
+        <div class="modal-ds-head">
+            <h2 id="user-editor-title">@(_isNew ? "New account" : _editing.DisplayName)</h2>
+            <button class="btn-ghost" @onclick="Cancel" aria-label="Close">
+                <Icon Name="x" Size="17" />
+            </button>
+        </div>
+
+        <EditForm Model="_form" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+
+            <div class="modal-ds-body">
+                @if (_editorError is not null)
+                {
+                    <div class="alert-ds a-danger mb-3" role="alert">
+                        <Icon Name="alert-circle" Size="16" />
+                        <div>@_editorError</div>
+                    </div>
+                }
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label-sm" for="f-first">First name <span class="req">*</span></label>
+                        <InputText id="f-first" class="form-control form-control-sm" @bind-Value="_form.FirstName" />
+                        <ValidationMessage For="() => _form.FirstName" class="field-error" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label-sm" for="f-last">Last name <span class="req">*</span></label>
+                        <InputText id="f-last" class="form-control form-control-sm" @bind-Value="_form.LastName" />
+                        <ValidationMessage For="() => _form.LastName" class="field-error" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label-sm" for="f-email">Email <span class="req">*</span></label>
+                        <InputText id="f-email" class="form-control form-control-sm" @bind-Value="_form.Email"
+                                   disabled="@(!_isNew)" />
+                        <ValidationMessage For="() => _form.Email" class="field-error" />
+                        @if (!_isNew)
+                        {
+                            <div class="text-muted" style="font-size:.76rem;">
+                                The sign-in address cannot be changed here; the account owner changes it
+                                from their own account settings so the change is confirmed by email.
+                            </div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-sm" for="f-role">Role <span class="req">*</span></label>
+                        <InputSelect id="f-role" class="form-select form-select-sm" @bind-Value="_form.Role">
+                            <option value="">Choose a role…</option>
+                            @foreach (var role in Roles.All)
+                            {
+                                <option value="@role">@Roles.Display(role)</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _form.Role" class="field-error" />
+                        @if (!string.IsNullOrEmpty(_form.Role))
+                        {
+                            <div class="text-muted mt-1" style="font-size:.76rem;">
+                                Grants @RolePermissions.For(_form.Role).Length permission(s).
+                                <a href="/admin/roles">Review them</a>.
+                            </div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-sm" for="f-staff">Linked staff record</label>
+                        <InputSelect id="f-staff" class="form-select form-select-sm" @bind-Value="_form.StaffId">
+                            <option value="">Not linked</option>
+                            @foreach (var member in _staff)
+                            {
+                                <option value="@member.Id">@member.DisplayName</option>
+                            }
+                        </InputSelect>
+                        <div class="text-muted" style="font-size:.76rem;">
+                            Links the login to a clinician so their work is attributed to them.
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-sm" for="f-title">Job title</label>
+                        <InputText id="f-title" class="form-control form-control-sm" @bind-Value="_form.JobTitle" />
+                    </div>
+                </div>
+
+                @if (_isNew)
+                {
+                    <div class="mt-3 p-3" style="background:var(--ds-surface-3); border-radius:var(--ds-radius-sm);">
+                        <div class="form-label-sm mb-1">Opening password <span class="req">*</span></div>
+                        <div class="password-wrap">
+                            <InputText id="f-password" type="password" class="form-control form-control-sm"
+                                       @bind-Value="_form.Password" autocomplete="new-password" />
+                            <button type="button" class="password-toggle" data-password-toggle="f-password"
+                                    aria-controls="f-password" aria-pressed="false" aria-label="Show password">
+                                <Icon Name="eye" Size="14" />
+                            </button>
+                        </div>
+                        <ValidationMessage For="() => _form.Password" class="field-error" />
+                        <div class="text-muted mt-2" style="font-size:.76rem;">
+                            At least 10 characters, with upper and lower case, a digit and a symbol.
+                            The account is required to change it at first sign-in, so this password
+                            only needs to survive being handed over once.
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="mt-3">
+                        <label class="check">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.IsActive" />
+                            <span>Account is active</span>
+                        </label>
+                        <div class="text-muted" style="font-size:.76rem;">
+                            Deactivating withdraws access immediately, on the account's next request.
+                            Everything it has signed keeps naming it as the author.
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-ds-foot">
+                @if (!_isNew && _canDisable)
+                {
+                    <div class="me-auto d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ResetPasswordAsync"
+                                disabled="@_busy">
+                            Reset password
+                        </button>
+                        @if (_editing.IsLockedOut)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="UnlockAsync"
+                                    disabled="@_busy">
+                                Remove lockout
+                            </button>
+                        }
+                    </div>
+                }
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="Cancel" disabled="@_busy">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-sm btn-primary" disabled="@_busy">
+                    @(_busy ? "Saving…" : _isNew ? "Create account" : "Save changes")
+                </button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@if (_generatedPassword is not null)
+{
+    <div class="modal-backdrop-ds" @onclick="DismissGenerated"></div>
+    <div class="modal-ds" role="dialog" aria-modal="true" aria-labelledby="pwd-title">
+        <div class="modal-ds-head">
+            <h2 id="pwd-title">Temporary password</h2>
+        </div>
+        <div class="modal-ds-body">
+            <p style="font-size:.88rem;">
+                Give this to <strong>@_generatedFor</strong> directly. It is shown once and is
+                not stored anywhere in readable form. They must change it when they sign in.
+            </p>
+            <div class="mono p-3 text-center"
+                 style="background:var(--ds-surface-3); border-radius:var(--ds-radius-sm); font-size:1.05rem; user-select:all;">
+                @_generatedPassword
+            </div>
+        </div>
+        <div class="modal-ds-foot">
+            <button class="btn btn-sm btn-primary" @onclick="DismissGenerated">I have passed it on</button>
+        </div>
+    </div>
+}
+
+@code {
+    private sealed record Row(
+        string Id, string DisplayName, string Email, IReadOnlyList<string> Roles,
+        bool IsActive, bool IsLockedOut, bool MustChangePassword,
+        DateTime? LastLoginUtc, Guid? StaffId, string? StaffName, string? JobTitle,
+        string? FirstName, string? LastName);
+
+    private sealed class UserForm
+    {
+        [Required(ErrorMessage = "Enter a first name.")]
+        public string FirstName { get; set; } = "";
+
+        [Required(ErrorMessage = "Enter a last name.")]
+        public string LastName { get; set; } = "";
+
+        [Required(ErrorMessage = "Enter an email address.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Choose a role. An account with no role cannot open anything.")]
+        public string Role { get; set; } = "";
+
+        public string? StaffId { get; set; }
+        public string? JobTitle { get; set; }
+        public bool IsActive { get; set; } = true;
+
+        [MinLength(10, ErrorMessage = "Use at least 10 characters.")]
+        public string? Password { get; set; }
+    }
+
+    private List<Row> _rows = [];
+    private List<Staff> _staff = [];
+    private bool _loading = true;
+    private bool _busy;
+
+    private string _search = "";
+    private string _roleFilter = "";
+    private string _stateFilter = "active";
+
+    private Row? _editing;
+    private bool _isNew;
+    private UserForm _form = new();
+    private string? _editorError;
+    private string? _status;
+    private bool _statusIsError;
+
+    private string? _generatedPassword;
+    private string? _generatedFor;
+
+    private bool _canCreate;
+    private bool _canEdit;
+    private bool _canDisable;
+
+    private List<Row> Filtered => _rows
+        .Where(r => _stateFilter switch
+        {
+            "active" => r.IsActive,
+            "inactive" => !r.IsActive,
+            _ => true
+        })
+        .Where(r => _roleFilter switch
+        {
+            "" => true,
+            "__none" => r.Roles.Count == 0,
+            var role => r.Roles.Contains(role)
+        })
+        .Where(r => string.IsNullOrWhiteSpace(_search)
+            || r.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || r.Email.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(r => r.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreate = await Guard.HasAsync(Permissions.UsersCreate);
+        _canEdit = await Guard.HasAsync(Permissions.UsersEdit);
+        _canDisable = await Guard.HasAsync(Permissions.UsersDisable);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _staff = await db.Staff.AsNoTracking()
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.Name.LastName)
+            .ToListAsync();
+
+        var staffById = _staff.ToDictionary(s => s.Id, s => s.DisplayName);
+
+        var users = await db.Users.AsNoTracking().ToListAsync();
+
+        // One join for every user's roles rather than a UserManager round trip
+        // per account, which is the difference between one query and N.
+        var roleLookup = await (
+            from userRole in db.UserRoles.AsNoTracking()
+            join role in db.Roles.AsNoTracking() on userRole.RoleId equals role.Id
+            select new { userRole.UserId, RoleName = role.Name! })
+            .ToListAsync();
+
+        var rolesByUser = roleLookup
+            .GroupBy(r => r.UserId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(r => r.RoleName).ToList());
+
+        var now = DateTimeOffset.UtcNow;
+
+        _rows = users.Select(u => new Row(
+            u.Id,
+            u.DisplayName,
+            u.Email ?? u.UserName ?? "",
+            rolesByUser.GetValueOrDefault(u.Id, Array.Empty<string>()),
+            u.IsActive,
+            u.LockoutEnd is { } end && end > now,
+            u.MustChangePassword,
+            u.LastLoginUtc,
+            u.StaffId,
+            u.StaffId is { } sid ? staffById.GetValueOrDefault(sid) : null,
+            u.JobTitle,
+            u.FirstName,
+            u.LastName)).ToList();
+
+        _loading = false;
+    }
+
+    private void StartCreate()
+    {
+        _isNew = true;
+        _editorError = null;
+        _form = new UserForm { Password = GeneratePassword() };
+        _editing = new Row("", "", "", [], true, false, false, null, null, null, null, null, null);
+    }
+
+    private void StartEdit(Row row)
+    {
+        _isNew = false;
+        _editorError = null;
+        _editing = row;
+        _form = new UserForm
+        {
+            FirstName = row.FirstName ?? "",
+            LastName = row.LastName ?? "",
+            Email = row.Email,
+            Role = row.Roles.FirstOrDefault() ?? "",
+            StaffId = row.StaffId?.ToString(),
+            JobTitle = row.JobTitle,
+            IsActive = row.IsActive
+        };
+    }
+
+    private void Cancel()
+    {
+        _editing = null;
+        _editorError = null;
+    }
+
+    private void DismissGenerated()
+    {
+        _generatedPassword = null;
+        _generatedFor = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null) return;
+
+        _busy = true;
+        _editorError = null;
+
+        try
+        {
+            // Demanded again here, not merely checked when the buttons were
+            // drawn. The interface state is a convenience; this is the control.
+            await Guard.DemandAsync(_isNew ? Permissions.UsersCreate : Permissions.UsersEdit);
+
+            if (_isNew) await CreateAsync();
+            else await UpdateAsync();
+        }
+        catch (ForbiddenException ex)
+        {
+            _editorError = "Your role does not allow that. Required permission: " + ex.Permission;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Saving a user account failed.");
+            _editorError = "The account could not be saved. The problem has been logged.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        var existing = await Users.FindByEmailAsync(_form.Email);
+        if (existing is not null)
+        {
+            _editorError = "An account already exists for that email address.";
+            return;
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = _form.Email,
+            Email = _form.Email,
+            EmailConfirmed = true,
+            FirstName = _form.FirstName,
+            LastName = _form.LastName,
+            JobTitle = _form.JobTitle,
+            StaffId = Guid.TryParse(_form.StaffId, out var sid) ? sid : null,
+            IsActive = true,
+
+            // The administrator sets an opening password and hands it over. The
+            // account must replace it before it can reach anything, so the
+            // password the administrator knows stops working at first sign-in.
+            MustChangePassword = true
+        };
+
+        var created = await Users.CreateAsync(user, _form.Password ?? GeneratePassword());
+        if (!created.Succeeded)
+        {
+            _editorError = string.Join(" ", created.Errors.Select(e => e.Description));
+            return;
+        }
+
+        var roleResult = await Users.AddToRoleAsync(user, _form.Role);
+        if (!roleResult.Succeeded)
+        {
+            _editorError = string.Join(" ", roleResult.Errors.Select(e => e.Description));
+            return;
+        }
+
+        Logger.LogInformation("Account {Email} created with role {Role}.", _form.Email, _form.Role);
+
+        _generatedPassword = _form.Password;
+        _generatedFor = $"{_form.FirstName} {_form.LastName}";
+        _status = $"The account for {_form.FirstName} {_form.LastName} was created.";
+        _statusIsError = false;
+
+        _editing = null;
+        await LoadAsync();
+    }
+
+    private async Task UpdateAsync()
+    {
+        var user = await Users.FindByIdAsync(_editing!.Id);
+        if (user is null)
+        {
+            _editorError = "That account no longer exists.";
+            return;
+        }
+
+        user.FirstName = _form.FirstName;
+        user.LastName = _form.LastName;
+        user.JobTitle = _form.JobTitle;
+        user.StaffId = Guid.TryParse(_form.StaffId, out var sid) ? sid : null;
+
+        if (user.IsActive != _form.IsActive)
+        {
+            await Guard.DemandAsync(Permissions.UsersDisable);
+            user.IsActive = _form.IsActive;
+
+            // Rotating the stamp invalidates any cookie already issued, so a
+            // deactivation takes effect on the next request rather than
+            // whenever the existing session happens to expire.
+            await Users.UpdateSecurityStampAsync(user);
+
+            Logger.LogWarning("Account {Email} was {State}.", user.Email,
+                _form.IsActive ? "reactivated" : "deactivated");
+        }
+
+        var updated = await Users.UpdateAsync(user);
+        if (!updated.Succeeded)
+        {
+            _editorError = string.Join(" ", updated.Errors.Select(e => e.Description));
+            return;
+        }
+
+        var currentRoles = await Users.GetRolesAsync(user);
+        if (!currentRoles.Contains(_form.Role))
+        {
+            if (currentRoles.Count > 0) await Users.RemoveFromRolesAsync(user, currentRoles);
+            await Users.AddToRoleAsync(user, _form.Role);
+            await Users.UpdateSecurityStampAsync(user);
+
+            Logger.LogWarning("Account {Email} moved from role {Old} to {New}.",
+                user.Email, string.Join(",", currentRoles), _form.Role);
+        }
+
+        _status = $"{user.DisplayName} was updated.";
+        _statusIsError = false;
+        _editing = null;
+        await LoadAsync();
+    }
+
+    private async Task ResetPasswordAsync()
+    {
+        if (_editing is null) return;
+        _busy = true;
+
+        try
+        {
+            await Guard.DemandAsync(Permissions.UsersDisable);
+
+            var user = await Users.FindByIdAsync(_editing.Id);
+            if (user is null) return;
+
+            var password = GeneratePassword();
+            var token = await Users.GeneratePasswordResetTokenAsync(user);
+            var result = await Users.ResetPasswordAsync(user, token, password);
+
+            if (!result.Succeeded)
+            {
+                _editorError = string.Join(" ", result.Errors.Select(e => e.Description));
+                return;
+            }
+
+            user.MustChangePassword = true;
+            await Users.UpdateAsync(user);
+            await Users.UpdateSecurityStampAsync(user);
+
+            Logger.LogWarning("The password for {Email} was reset by an administrator.", user.Email);
+
+            _generatedPassword = password;
+            _generatedFor = user.DisplayName;
+            _editing = null;
+            await LoadAsync();
+        }
+        catch (ForbiddenException ex)
+        {
+            _editorError = "Your role does not allow that. Required permission: " + ex.Permission;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task UnlockAsync()
+    {
+        if (_editing is null) return;
+        _busy = true;
+
+        try
+        {
+            await Guard.DemandAsync(Permissions.UsersDisable);
+
+            var user = await Users.FindByIdAsync(_editing.Id);
+            if (user is null) return;
+
+            await Users.SetLockoutEndDateAsync(user, null);
+            await Users.ResetAccessFailedCountAsync(user);
+
+            Logger.LogWarning("The lockout on {Email} was cleared by an administrator.", user.Email);
+
+            _status = $"{user.DisplayName} can sign in again.";
+            _statusIsError = false;
+            _editing = null;
+            await LoadAsync();
+        }
+        catch (ForbiddenException ex)
+        {
+            _editorError = "Your role does not allow that. Required permission: " + ex.Permission;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// A password strong enough to satisfy the policy and short-lived enough to
+    /// be read out once. Built from a cryptographic source rather than Random,
+    /// which is predictable from any other value it has produced.
+    /// </summary>
+    private static string GeneratePassword()
+    {
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string digits = "23456789";
+        const string symbols = "!@@#$%&*+-";
+
+        var all = upper + lower + digits + symbols;
+
+        var chars = new List<char>
+        {
+            Pick(upper), Pick(lower), Pick(digits), Pick(symbols)
+        };
+
+        while (chars.Count < 14) chars.Add(Pick(all));
+
+        // Shuffle, so the guaranteed characters are not always in positions 1-4.
+        for (var i = chars.Count - 1; i > 0; i--)
+        {
+            var j = System.Security.Cryptography.RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+
+        return new string(chars.ToArray());
+
+        static char Pick(string set) =>
+            set[System.Security.Cryptography.RandomNumberGenerator.GetInt32(set.Length)];
+    }
+}

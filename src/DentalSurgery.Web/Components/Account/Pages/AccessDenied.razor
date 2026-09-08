@@ -1,8 +1,53 @@
-﻿@page "/Account/AccessDenied"
+@page "/Account/AccessDenied"
+@using Microsoft.AspNetCore.Components.Authorization
 
 <PageTitle>Access denied</PageTitle>
 
-<header>
-    <h1 class="text-danger">Access denied</h1>
-    <p class="text-danger">You do not have access to this resource.</p>
-</header>
+<div class="denied-wrap">
+    <div class="denied-card" role="alert" aria-labelledby="denied-title">
+
+        <span class="denied-mark">
+            <Icon Name="shield" Size="24" />
+        </span>
+
+        <h1 id="denied-title" class="denied-title">You do not have access to this page</h1>
+
+        <p class="denied-body">
+            Your account is signed in, but the permissions attached to your role do
+            not cover this part of the system. Nothing has gone wrong — access is
+            restricted deliberately, so that clinical and financial records are only
+            reachable by the staff whose work requires them.
+        </p>
+
+        <AuthorizeView>
+            <Authorized>
+                <div class="denied-who">
+                    <div>
+                        <span class="denied-who-label">Signed in as</span>
+                        <span class="denied-who-value">@context.User.Identity?.Name</span>
+                    </div>
+                    <div>
+                        <span class="denied-who-label">Role</span>
+                        <span class="denied-who-value">
+                            @{
+                                var roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role)
+                                    .Select(c => Roles.Display(c.Value)).ToArray();
+                            }
+                            @(roles.Length == 0 ? "No role assigned" : string.Join(", ", roles))
+                        </span>
+                    </div>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        <p class="denied-next">
+            If you need this access for your work, ask a practice administrator to
+            review the permissions on your role.
+        </p>
+
+        <div class="denied-actions">
+            <a href="/" class="btn btn-primary">Back to my dashboard</a>
+            <a href="/Account/SignOut" class="btn btn-outline-secondary">Sign out</a>
+        </div>
+    </div>
+</div>

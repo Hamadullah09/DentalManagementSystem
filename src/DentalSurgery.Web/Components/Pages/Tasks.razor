@@ -1,5 +1,5 @@
 @page "/tasks"
-@attribute [Authorize]
+@attribute [Authorize(Policy = Permissions.TasksView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject ICurrentUser CurrentUser
 @inject IDateTimeProvider Clock

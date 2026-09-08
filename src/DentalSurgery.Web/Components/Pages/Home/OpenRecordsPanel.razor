@@ -1,0 +1,151 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject ICurrentUser CurrentUser
+@inject IPermissionGuard Guard
+@inject IDateTimeProvider Clock
+
+@*
+    Work the clinician has started and not finished. An unsigned note is not a
+    statistic — it is a record that is not yet a record, and it stops being
+    fixable cheaply the longer it sits. Same for a plan presented and never
+    answered. Both are shown oldest first, because the oldest is the one at risk.
+*@
+
+<div class="card-ds h-100">
+    <div class="card-ds-header">
+        <h3>Still open</h3>
+        @if (Total > 0)
+        {
+            <span class="badge-ds @(_unsigned.Any(n => Age(n.NoteDateUtc) > 2) ? "b-danger" : "b-warning")">
+                @Total
+            </span>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="card-ds-body"><div class="skeleton" style="height:160px;"></div></div>
+    }
+    else if (Total == 0)
+    {
+        <EmptyState IconName="check-circle" Title="Nothing left open"
+                    Message="Every note you have written is signed, and no plan of yours is waiting on a decision." />
+    }
+    else
+    {
+        <div class="card-ds-body d-flex flex-column gap-3">
+
+            @if (_unsigned.Count > 0)
+            {
+                <div>
+                    <div class="panel-subhead">
+                        <Icon Name="edit" Size="14" />
+                        Notes awaiting your signature (@_unsigned.Count)
+                    </div>
+
+                    <div class="d-flex flex-column gap-2 mt-2">
+                        @foreach (var note in _unsigned)
+                        {
+                            var days = Age(note.NoteDateUtc);
+
+                            <a class="open-row" href="/patients/@note.PatientId/notes">
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    <div style="font-size:.86rem; font-weight:600;">
+                                        @(note.Patient?.Name.Display ?? "Unknown patient")
+                                    </div>
+                                    <div class="text-faint" style="font-size:.74rem;">
+                                        @Ui.Humanise(note.NoteType) &middot; @note.NoteDateUtc.ToLocalTime().ToString("d MMM")
+                                    </div>
+                                </div>
+                                @if (days > 2)
+                                {
+                                    <span class="badge-ds b-danger">@days days old</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-ds b-warning">Unsigned</span>
+                                }
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_awaitingDecision.Count > 0)
+            {
+                <div>
+                    <div class="panel-subhead">
+                        <Icon Name="clipboard" Size="14" />
+                        Plans presented, no answer yet (@_awaitingDecision.Count)
+                    </div>
+
+                    <div class="d-flex flex-column gap-2 mt-2">
+                        @foreach (var plan in _awaitingDecision)
+                        {
+                            <a class="open-row" href="/patients/@plan.PatientId/plans">
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    <div style="font-size:.86rem; font-weight:600;">
+                                        @(plan.Patient?.Name.Display ?? "Unknown patient")
+                                    </div>
+                                    <div class="text-faint" style="font-size:.74rem;">
+                                        @plan.PlanNumber &middot; @Ui.Money(plan.EstimatedPatientPortion) to the patient
+                                    </div>
+                                </div>
+                                @if (plan.PresentedOn is { } presented)
+                                {
+                                    <span class="badge-ds b-neutral">
+                                        @Ui.Relative(presented, Clock.Today)
+                                    </span>
+                                }
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<ClinicalNote> _unsigned = [];
+    private List<TreatmentPlan> _awaitingDecision = [];
+    private bool _loading = true;
+
+    private int Total => _unsigned.Count + _awaitingDecision.Count;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CurrentUser.StaffId is not { } staffId)
+        {
+            _loading = false;
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Each half is gated separately, so a hygienist who signs notes but does
+        // not own treatment plans sees only the half that is theirs.
+        if (await Guard.HasAsync(Permissions.ClinicalRecordsView))
+        {
+            _unsigned = await db.ClinicalNotes.AsNoTracking()
+                .Include(n => n.Patient)
+                .Where(n => n.ProviderId == staffId && !n.IsSigned)
+                .OrderBy(n => n.NoteDateUtc)
+                .Take(6)
+                .ToListAsync();
+        }
+
+        if (await Guard.HasAsync(Permissions.TreatmentPlansView))
+        {
+            _awaitingDecision = await db.TreatmentPlans.AsNoTracking()
+                .Include(p => p.Patient)
+                .Where(p => p.ProviderId == staffId && p.Status == TreatmentPlanStatus.Presented)
+                .OrderBy(p => p.PresentedOn)
+                .Take(6)
+                .ToListAsync();
+        }
+
+        _loading = false;
+    }
+
+    private int Age(DateTime noteDateUtc) => (int)(Clock.UtcNow - noteDateUtc).TotalDays;
+}

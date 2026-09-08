@@ -1,5 +1,5 @@
 @page "/surgery"
-@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@attribute [Authorize(Policy = Permissions.SurgeryView)]
 @inject ProcedureService Procedures
 @inject IDateTimeProvider Clock
 @inject IJSRuntime JS

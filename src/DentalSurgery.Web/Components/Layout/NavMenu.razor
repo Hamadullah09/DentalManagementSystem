@@ -1,6 +1,20 @@
 @implements IDisposable
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
+@inject IPermissionGuard Guard
+
+@*
+    Navigation is filtered by permission, not by role name, and every entry
+    points at a page that enforces the same permission on the server. The
+    filtering here is for usability — it keeps a receptionist from being shown
+    a surgical register they cannot open. It is not the access control; see the
+    [Authorize] attribute on each page and the guard calls inside each service.
+
+    Nothing renders, and no counter query runs, until there is a signed-in
+    member of staff. The counters were previously loaded unconditionally, which
+    put live waiting-room and task numbers on the sign-in page for anyone who
+    could reach it.
+*@
 
 <div class="brand">
     <span class="brand-mark">
@@ -12,68 +26,159 @@
     </div>
 </div>
 
-<nav class="nav-scroll">
+<AuthorizeView>
+    <Authorized>
+        <nav class="nav-scroll" aria-label="Main">
 
-    <div class="nav-section">Clinic</div>
-    <NavItem Href="" Icon="dashboard" Label="Dashboard" Exact="true" />
-    <NavItem Href="schedule" Icon="calendar" Label="Appointment book" />
-    <NavItem Href="waiting-room" Icon="clock" Label="Waiting room" Badge="@_waitingCount" />
-    <NavItem Href="patients" Icon="users" Label="Patients" />
-    <NavItem Href="recalls" Icon="bell" Label="Recalls" Badge="@_recallsOverdue" BadgeMuted="true" />
-    <NavItem Href="waitlist" Icon="list-checks" Label="Waiting list" />
+            <NavItem Href="" Icon="dashboard" Label="Home" Exact="true" />
 
-    <AuthorizeView Policy="@Policies.CanViewClinical">
-        <div class="nav-section">Clinical</div>
-        <NavItem Href="treatment-plans" Icon="clipboard" Label="Treatment plans" />
-        <NavItem Href="surgery" Icon="scissors" Label="Surgical register" />
-        <NavItem Href="implants" Icon="activity" Label="Implant registry" />
-        <NavItem Href="prescriptions" Icon="pill" Label="Prescriptions" />
-        <NavItem Href="radiographs" Icon="x-ray" Label="Imaging" />
-    </AuthorizeView>
+            @if (_has(Permissions.PatientsView) || _has(Permissions.AppointmentsView))
+            {
+                <NavSection Title="Clinic">
+                    @if (_has(Permissions.PatientsView))
+                    {
+                        <NavItem Href="patients" Icon="users" Label="Patients" />
+                    }
+                    @if (_has(Permissions.AppointmentsView))
+                    {
+                        <NavItem Href="schedule" Icon="calendar" Label="Appointment book" />
+                    }
+                    @if (_has(Permissions.WaitingRoomView))
+                    {
+                        <NavItem Href="waiting-room" Icon="clock" Label="Waiting room" Badge="@_waitingCount" />
+                    }
+                    @if (_has(Permissions.RecallsView))
+                    {
+                        <NavItem Href="recalls" Icon="bell" Label="Recalls" Badge="@_recallsOverdue" BadgeMuted="true" />
+                    }
+                    @if (_has(Permissions.AppointmentsView))
+                    {
+                        <NavItem Href="waitlist" Icon="list-checks" Label="Waiting list" />
+                    }
+                </NavSection>
+            }
 
-    <AuthorizeView Policy="@Policies.CanManageBilling">
-        <div class="nav-section">Finance</div>
-        <NavItem Href="billing/invoices" Icon="receipt" Label="Invoices" />
-        <NavItem Href="billing/receivables" Icon="credit-card" Label="Outstanding balances" />
-        <NavItem Href="billing/claims" Icon="file-text" Label="Insurance claims" />
-    </AuthorizeView>
+            @if (_hasAny(Permissions.TreatmentPlansView, Permissions.SurgeryView,
+                         Permissions.ImplantsView, Permissions.PrescriptionsView, Permissions.ImagingView))
+            {
+                <NavSection Title="Clinical">
+                    @if (_has(Permissions.TreatmentPlansView))
+                    {
+                        <NavItem Href="treatment-plans" Icon="clipboard" Label="Treatment plans" />
+                    }
+                    @if (_has(Permissions.SurgeryView))
+                    {
+                        <NavItem Href="surgery" Icon="scissors" Label="Surgical register" />
+                    }
+                    @if (_has(Permissions.ImplantsView))
+                    {
+                        <NavItem Href="implants" Icon="activity" Label="Implant registry" />
+                    }
+                    @if (_has(Permissions.PrescriptionsView))
+                    {
+                        <NavItem Href="prescriptions" Icon="pill" Label="Prescriptions" />
+                    }
+                    @if (_has(Permissions.ImagingView))
+                    {
+                        <NavItem Href="radiographs" Icon="x-ray" Label="Imaging" />
+                    }
+                </NavSection>
+            }
 
-    <AuthorizeView Policy="@Policies.CanManageInventory">
-        <div class="nav-section">Operations</div>
-        <NavItem Href="inventory" Icon="package" Label="Stock control" Badge="@_lowStock" />
-        <NavItem Href="sterilisation" Icon="shield" Label="Sterilisation" Badge="@_sterilisationFailures" />
-        <NavItem Href="lab-cases" Icon="flask" Label="Laboratory" Badge="@_labsOverdue" />
-        <NavItem Href="purchase-orders" Icon="truck" Label="Purchase orders" />
-    </AuthorizeView>
+            @if (_hasAny(Permissions.BillingView, Permissions.InsuranceView))
+            {
+                <NavSection Title="Finance">
+                    @if (_has(Permissions.BillingView))
+                    {
+                        <NavItem Href="billing/invoices" Icon="receipt" Label="Invoices" />
+                        <NavItem Href="billing/receivables" Icon="credit-card" Label="Outstanding balances" />
+                    }
+                    @if (_has(Permissions.InsuranceView))
+                    {
+                        <NavItem Href="billing/claims" Icon="file-text" Label="Insurance claims" />
+                    }
+                </NavSection>
+            }
 
-    <div class="nav-section">Practice</div>
-    <NavItem Href="tasks" Icon="list-checks" Label="Tasks" Badge="@_openTasks" BadgeMuted="true" />
+            @if (_hasAny(Permissions.InventoryView, Permissions.SterilizationView, Permissions.LaboratoryView))
+            {
+                <NavSection Title="Operations">
+                    @if (_has(Permissions.InventoryView))
+                    {
+                        <NavItem Href="inventory" Icon="package" Label="Stock control" Badge="@_lowStock" />
+                    }
+                    @if (_has(Permissions.SterilizationView))
+                    {
+                        <NavItem Href="sterilisation" Icon="shield" Label="Sterilisation" Badge="@_sterilisationFailures" />
+                    }
+                    @if (_has(Permissions.LaboratoryView))
+                    {
+                        <NavItem Href="lab-cases" Icon="flask" Label="Laboratory" Badge="@_labsOverdue" />
+                    }
+                    @if (_has(Permissions.InventoryCreate))
+                    {
+                        <NavItem Href="purchase-orders" Icon="truck" Label="Purchase orders" />
+                    }
+                </NavSection>
+            }
 
-    <AuthorizeView Policy="@Policies.CanViewReports">
-        <NavItem Href="reports" Icon="bar-chart" Label="Reports" />
-        <NavItem Href="exports" Icon="download" Label="Exports" />
-    </AuthorizeView>
+            <NavSection Title="Practice">
+                @if (_has(Permissions.TasksView))
+                {
+                    <NavItem Href="tasks" Icon="list-checks" Label="Tasks" Badge="@_openTasks" BadgeMuted="true" />
+                }
+                @if (_has(Permissions.ReportsView))
+                {
+                    <NavItem Href="reports" Icon="bar-chart" Label="Reports" />
+                }
+                @if (_has(Permissions.ReportsExport))
+                {
+                    <NavItem Href="exports" Icon="download" Label="Exports" />
+                }
+            </NavSection>
 
-    <AuthorizeView Policy="@Policies.CanManageStaff">
-        <NavItem Href="staff" Icon="stethoscope" Label="Team" />
-    </AuthorizeView>
+            @if (_hasAny(Permissions.UsersView, Permissions.RolesView,
+                         Permissions.AuditView, Permissions.SettingsView, Permissions.IntegrationsView))
+            {
+                <NavSection Title="Administration" InitiallyOpen="false">
+                    @if (_has(Permissions.UsersView))
+                    {
+                        <NavItem Href="staff" Icon="stethoscope" Label="Team" />
+                        <NavItem Href="admin/users" Icon="user-check" Label="User accounts" />
+                    }
+                    @if (_has(Permissions.RolesView))
+                    {
+                        <NavItem Href="admin/roles" Icon="key" Label="Roles and permissions" />
+                    }
+                    @if (_has(Permissions.AuditView))
+                    {
+                        <NavItem Href="admin/audit" Icon="shield" Label="Audit trail" />
+                    }
+                    @if (_has(Permissions.SettingsView))
+                    {
+                        <NavItem Href="admin" Icon="settings" Label="Configuration" Exact="true" />
+                    }
+                    @if (_has(Permissions.IntegrationsView))
+                    {
+                        <NavItem Href="admin/integrations" Icon="external" Label="Integrations" />
+                    }
+                </NavSection>
+            }
 
-    <AuthorizeView Policy="@Policies.CanAdminister">
-        <NavItem Href="admin" Icon="settings" Label="Configuration" Exact="true" />
-        <NavItem Href="admin/integrations" Icon="external" Label="Integrations" />
-        <NavItem Href="admin/audit" Icon="shield" Label="Audit trail" />
-    </AuthorizeView>
+        </nav>
 
-</nav>
-
-<div class="sidebar-footer">
-    <div class="d-flex justify-content-between align-items-center">
-        <span>@Clock.LocalNow.ToString("ddd d MMM")</span>
-        <a href="/api-docs" target="_blank" class="text-decoration-none" style="color:inherit;" title="API documentation">
-            <Icon Name="external" Size="13" />
-        </a>
-    </div>
-</div>
+        <div class="sidebar-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <span>@Clock.LocalNow.ToString("ddd d MMM")</span>
+                <button type="button" class="nav-help-btn" title="Help for this page (Ctrl+H, F1 or ?)"
+                        aria-label="Open help for this page"
+                        onclick="window.dentalApp.openHelp()">
+                    <Icon Name="help" Size="14" />
+                </button>
+            </div>
+        </div>
+    </Authorized>
+</AuthorizeView>
 
 @code {
     private string _practiceName = "Dental Surgery";
@@ -84,52 +189,93 @@
     private int _sterilisationFailures;
     private int _openTasks;
 
+    private IReadOnlySet<string> _permissions = new HashSet<string>();
     private Timer? _refreshTimer;
+
+    private bool _has(string permission) => _permissions.Contains(permission);
+
+    private bool _hasAny(params string[] permissions) => permissions.Any(_permissions.Contains);
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            _practiceName = await db.Practices.AsNoTracking()
+                .Select(p => p.Name).FirstOrDefaultAsync() ?? "Dental Surgery";
+        }
 
-        // The badges are live counters; refresh them without a page reload.
+        if (AuthState is null) return;
+
+        var state = await AuthState;
+        if (state.User.Identity?.IsAuthenticated != true) return;
+
+        _permissions = await Guard.CurrentAsync();
+
+        await LoadCountersAsync();
+
+        // Live counters, refreshed without a page reload.
         _refreshTimer = new Timer(async _ =>
         {
-            await LoadAsync();
+            await LoadCountersAsync();
             await InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2));
     }
 
-    private async Task LoadAsync()
+    /// <summary>
+    /// Loads only the counters the user is entitled to see. A badge is a fact
+    /// about the practice, so a user without the permission behind it does not
+    /// get the number either.
+    /// </summary>
+    private async Task LoadCountersAsync()
     {
         try
         {
-            await using var Db = await DbFactory.CreateDbContextAsync();
+            await using var db = await DbFactory.CreateDbContextAsync();
 
             var today = Clock.Today;
             var dayStart = today.ToDateTime(TimeOnly.MinValue);
             var dayEnd = dayStart.AddDays(1);
             var monthStart = new DateOnly(today.Year, today.Month, 1).ToDateTime(TimeOnly.MinValue);
 
-            _practiceName = await Db.Practices.AsNoTracking()
-                .Select(p => p.Name).FirstOrDefaultAsync() ?? "Dental Surgery";
+            if (_has(Permissions.WaitingRoomView))
+            {
+                _waitingCount = await db.Appointments.CountAsync(a =>
+                    a.StartUtc >= dayStart && a.StartUtc < dayEnd &&
+                    (a.Status == AppointmentStatus.ArrivedWaiting || a.Status == AppointmentStatus.Seated));
+            }
 
-            _waitingCount = await Db.Appointments.CountAsync(a =>
-                a.StartUtc >= dayStart && a.StartUtc < dayEnd &&
-                (a.Status == AppointmentStatus.ArrivedWaiting || a.Status == AppointmentStatus.Seated));
+            if (_has(Permissions.RecallsView))
+            {
+                _recallsOverdue = await db.RecallSchedules.CountAsync(r =>
+                    r.IsActive && r.DueDate < today && r.Status != RecallStatus.Booked);
+            }
 
-            _recallsOverdue = await Db.RecallSchedules.CountAsync(r =>
-                r.IsActive && r.DueDate < today && r.Status != RecallStatus.Booked);
+            if (_has(Permissions.InventoryView))
+            {
+                _lowStock = await db.InventoryItems.CountAsync(i => i.IsActive && i.CurrentStock <= i.ReorderLevel);
+            }
 
-            _lowStock = await Db.InventoryItems.CountAsync(i => i.IsActive && i.CurrentStock <= i.ReorderLevel);
+            if (_has(Permissions.LaboratoryView))
+            {
+                _labsOverdue = await db.LabCases.CountAsync(c =>
+                    c.DueDate != null && c.DueDate < today &&
+                    c.Status != LabCaseStatus.Received && c.Status != LabCaseStatus.Delivered &&
+                    c.Status != LabCaseStatus.Cancelled);
+            }
 
-            _labsOverdue = await Db.LabCases.CountAsync(c =>
-                c.DueDate != null && c.DueDate < today &&
-                c.Status != LabCaseStatus.Received && c.Status != LabCaseStatus.Delivered &&
-                c.Status != LabCaseStatus.Cancelled);
+            if (_has(Permissions.SterilizationView))
+            {
+                _sterilisationFailures = await db.SterilisationCycles.CountAsync(c =>
+                    c.Result == SterilisationResult.Fail && c.StartedAtUtc >= monthStart);
+            }
 
-            _sterilisationFailures = await Db.SterilisationCycles.CountAsync(c =>
-                c.Result == SterilisationResult.Fail && c.StartedAtUtc >= monthStart);
-
-            _openTasks = await Db.WorkTasks.CountAsync(t => !t.IsCompleted);
+            if (_has(Permissions.TasksView))
+            {
+                _openTasks = await db.WorkTasks.CountAsync(t => !t.IsCompleted);
+            }
         }
         catch (Exception)
         {

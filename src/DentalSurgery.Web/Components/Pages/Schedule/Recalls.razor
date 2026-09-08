@@ -1,5 +1,5 @@
 @page "/recalls"
-@attribute [Authorize]
+@attribute [Authorize(Policy = Permissions.RecallsView)]
 @inject ReportingService Reporting
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock

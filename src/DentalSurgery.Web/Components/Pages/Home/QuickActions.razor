@@ -1,0 +1,87 @@
+@*
+    The handful of things this role does many times a day, one click from the
+    home screen. Ordered by how often the role reaches for them, and filtered by
+    permission so nothing here leads to an access-denied page.
+*@
+
+@if (_actions.Count > 0)
+{
+    <nav class="quick-actions" aria-label="Quick actions">
+        @foreach (var action in _actions)
+        {
+            <a href="@action.Href" class="quick-action @(action.IsPrimary ? "is-primary" : "")">
+                <Icon Name="@action.Icon" Size="15" />
+                @action.Label
+            </a>
+        }
+    </nav>
+}
+
+@code {
+    private sealed record Action(string Label, string Href, string Icon, string Permission, bool IsPrimary = false);
+
+    [Parameter, EditorRequired] public HomeFocus Focus { get; set; }
+    [Parameter, EditorRequired] public IReadOnlySet<string> Held { get; set; } = new HashSet<string>();
+
+    private List<Action> _actions = [];
+
+    protected override void OnParametersSet()
+    {
+        var candidates = Focus switch
+        {
+            HomeFocus.FrontDesk =>
+            [
+                new Action("Register patient", "/patients/new", "user-plus", Permissions.PatientsCreate, true),
+                new Action("Book appointment", "/schedule", "calendar", Permissions.AppointmentsCreate),
+                new Action("Waiting room", "/waiting-room", "clock", Permissions.WaitingRoomView),
+                new Action("Take payment", "/billing/invoices", "credit-card", Permissions.BillingCreate),
+                new Action("Outstanding balances", "/billing/receivables", "receipt", Permissions.BillingView),
+                new Action("Recalls due", "/recalls", "bell", Permissions.RecallsView)
+            ],
+
+            HomeFocus.Clinician or HomeFocus.Hygiene =>
+            [
+                new Action("My schedule", "/schedule", "calendar", Permissions.AppointmentsView, true),
+                new Action("Waiting room", "/waiting-room", "clock", Permissions.WaitingRoomView),
+                new Action("Find patient", "/patients", "search", Permissions.PatientsView),
+                new Action("Treatment plans", "/treatment-plans", "clipboard", Permissions.TreatmentPlansView),
+                new Action("Prescriptions", "/prescriptions", "pill", Permissions.PrescriptionsCreate),
+                new Action("Recalls", "/recalls", "bell", Permissions.RecallsView)
+            ],
+
+            HomeFocus.Surgeon =>
+            [
+                new Action("Surgical register", "/surgery", "scissors", Permissions.SurgeryView, true),
+                new Action("My schedule", "/schedule", "calendar", Permissions.AppointmentsView),
+                new Action("Implant registry", "/implants", "activity", Permissions.ImplantsView),
+                new Action("Waiting room", "/waiting-room", "clock", Permissions.WaitingRoomView),
+                new Action("Find patient", "/patients", "search", Permissions.PatientsView),
+                new Action("Prescriptions", "/prescriptions", "pill", Permissions.PrescriptionsCreate)
+            ],
+
+            HomeFocus.Management =>
+            [
+                new Action("Reports", "/reports", "bar-chart", Permissions.ReportsView, true),
+                new Action("Outstanding balances", "/billing/receivables", "credit-card", Permissions.BillingView),
+                new Action("Insurance claims", "/billing/claims", "file-text", Permissions.InsuranceView),
+                new Action("Appointment book", "/schedule", "calendar", Permissions.AppointmentsView),
+                new Action("Stock control", "/inventory", "package", Permissions.InventoryView),
+                new Action("Laboratory", "/lab-cases", "flask", Permissions.LaboratoryView)
+            ],
+
+            HomeFocus.Administration =>
+            [
+                new Action("User accounts", "/admin/users", "user-check", Permissions.UsersView, true),
+                new Action("Roles and permissions", "/admin/roles", "key", Permissions.RolesView),
+                new Action("Audit trail", "/admin/audit", "shield", Permissions.AuditView),
+                new Action("Configuration", "/admin", "settings", Permissions.SettingsView),
+                new Action("Integrations", "/admin/integrations", "external", Permissions.IntegrationsView),
+                new Action("Team", "/staff", "stethoscope", Permissions.UsersView)
+            ],
+
+            _ => new List<Action>()
+        };
+
+        _actions = candidates.Where(a => Held.Contains(a.Permission)).ToList();
+    }
+}

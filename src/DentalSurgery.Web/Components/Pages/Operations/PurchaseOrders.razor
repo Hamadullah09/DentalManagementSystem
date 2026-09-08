@@ -1,5 +1,5 @@
 @page "/purchase-orders"
-@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@attribute [Authorize(Policy = Permissions.InventoryCreate)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject InventoryService Inventory
 @inject IDateTimeProvider Clock

@@ -1,0 +1,159 @@
+@inject IDbContextFactory<DentalDbContext> DbFactory
+@inject IDateTimeProvider Clock
+
+@*
+    The front desk's two standing jobs, side by side: people physically in the
+    building, and calls that have to happen before the end of the day. Both are
+    time-sensitive in a way a count on a tile is not, so each row names the
+    patient and offers the action rather than only the number.
+*@
+
+<div class="row g-3">
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>In the building</h3>
+                <span class="badge-ds @(_longestWait > 20 ? "b-danger" : "b-neutral")">@_present.Count</span>
+                <a href="/waiting-room" class="ms-auto" style="font-size:.8rem;">Waiting room &rarr;</a>
+            </div>
+
+            @if (_loading)
+            {
+                <div class="card-ds-body"><div class="skeleton" style="height:150px;"></div></div>
+            }
+            else if (_present.Count == 0)
+            {
+                <EmptyState IconName="check-circle" Title="Nobody waiting"
+                            Message="No patient is currently checked in." />
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var appointment in _present)
+                    {
+                        var waited = Waited(appointment);
+
+                        <a class="open-row" href="/patients/@appointment.PatientId">
+                            <div class="flex-grow-1" style="min-width:0;">
+                                <div style="font-size:.86rem; font-weight:600;">
+                                    @(appointment.Patient?.Name.Display ?? "Unknown")
+                                </div>
+                                <div class="text-faint" style="font-size:.74rem;">
+                                    @appointment.StartUtc.ToLocalTime().ToString("HH:mm")
+                                    &middot; @(appointment.Provider?.Name.Display ?? "No provider")
+                                    @if (appointment.Operatory is not null)
+                                    {
+                                        <span> &middot; @appointment.Operatory.Name</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <span class="badge-ds @Ui.BadgeFor(appointment.Status)">
+                                @Ui.Humanise(appointment.Status)
+                            </span>
+
+                            @if (waited is { } minutes)
+                            {
+                                <span class="badge-ds @(minutes > 20 ? "b-danger" : minutes > 10 ? "b-warning" : "b-neutral")"
+                                      title="@($"Checked in {minutes} minutes ago")">
+                                    @minutes m
+                                </span>
+                            }
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card-ds h-100">
+            <div class="card-ds-header">
+                <h3>Confirm for tomorrow</h3>
+                <span class="badge-ds @(_unconfirmed.Count > 0 ? "b-warning" : "b-success")">@_unconfirmed.Count</span>
+                <a href="/schedule" class="ms-auto" style="font-size:.8rem;">Open the book &rarr;</a>
+            </div>
+
+            @if (_loading)
+            {
+                <div class="card-ds-body"><div class="skeleton" style="height:150px;"></div></div>
+            }
+            else if (_unconfirmed.Count == 0)
+            {
+                <EmptyState IconName="check-circle" Title="Tomorrow is confirmed"
+                            Message="Every booking for tomorrow has been confirmed with the patient." />
+            }
+            else
+            {
+                <div class="card-ds-body d-flex flex-column gap-2">
+                    @foreach (var appointment in _unconfirmed)
+                    {
+                        <a class="open-row" href="/patients/@appointment.PatientId">
+                            <div class="flex-grow-1" style="min-width:0;">
+                                <div style="font-size:.86rem; font-weight:600;">
+                                    @(appointment.Patient?.Name.Display ?? "Unknown")
+                                </div>
+                                <div class="text-faint" style="font-size:.74rem;">
+                                    @appointment.StartUtc.ToLocalTime().ToString("HH:mm")
+                                    &middot; @Ui.Humanise(appointment.AppointmentType)
+                                </div>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(appointment.Patient?.Contact.MobilePhone))
+                            {
+                                <span class="mono text-muted" style="font-size:.76rem;">
+                                    @appointment.Patient!.Contact.MobilePhone
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge-ds b-warning">No mobile</span>
+                            }
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Appointment> _present = [];
+    private List<Appointment> _unconfirmed = [];
+    private bool _loading = true;
+    private int _longestWait;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var dayStart = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        var dayEnd = dayStart.AddDays(1);
+        var tomorrowEnd = dayEnd.AddDays(1);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _present = await db.Appointments.AsNoTracking()
+            .Include(a => a.Patient).Include(a => a.Provider).Include(a => a.Operatory)
+            .Where(a => a.StartUtc >= dayStart && a.StartUtc < dayEnd
+                && (a.Status == AppointmentStatus.ArrivedWaiting || a.Status == AppointmentStatus.Seated))
+            .OrderBy(a => a.ArrivedAtUtc ?? a.StartUtc)
+            .ToListAsync();
+
+        _unconfirmed = await db.Appointments.AsNoTracking()
+            .Include(a => a.Patient)
+            .Where(a => a.StartUtc >= dayEnd && a.StartUtc < tomorrowEnd
+                && a.Status == AppointmentStatus.Unconfirmed)
+            .OrderBy(a => a.StartUtc)
+            .Take(10)
+            .ToListAsync();
+
+        _longestWait = _present.Select(a => Waited(a) ?? 0).DefaultIfEmpty(0).Max();
+
+        _loading = false;
+    }
+
+    private int? Waited(Appointment appointment) =>
+        appointment.ArrivedAtUtc is { } arrived
+            ? (int)(Clock.UtcNow - arrived).TotalMinutes
+            : null;
+}

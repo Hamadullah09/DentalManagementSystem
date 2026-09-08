@@ -10,12 +10,13 @@ namespace DentalSurgery.Web.Api;
 /// <summary>The appointment book: day sheets, availability and booking.</summary>
 [ApiController]
 [Route("api/schedule")]
-[Authorize(Policy = Policies.CanManageSchedule)]
+[Authorize(Policy = Permissions.AppointmentsView)]
 [Produces("application/json")]
 public class ScheduleController(AppointmentService appointments, IDateTimeProvider clock) : ControllerBase
 {
     /// <summary>Returns one day of the appointment book, arranged by surgery.</summary>
     [HttpGet("day")]
+    [Authorize(Policy = Permissions.AppointmentsView)]
     public async Task<IActionResult> Day([FromQuery] DateOnly? date, [FromQuery] Guid? locationId, CancellationToken ct)
     {
         var sheet = await appointments.GetDaySheetAsync(date ?? clock.Today, locationId, ct);
@@ -58,6 +59,7 @@ public class ScheduleController(AppointmentService appointments, IDateTimeProvid
 
     /// <summary>Finds free slots for a provider over a date range.</summary>
     [HttpGet("availability")]
+    [Authorize(Policy = Permissions.AppointmentsView)]
     public async Task<IActionResult> Availability(
         [FromQuery] Guid providerId,
         [FromQuery] DateOnly from,
@@ -80,6 +82,7 @@ public class ScheduleController(AppointmentService appointments, IDateTimeProvid
 
     /// <summary>Books an appointment, reporting any clash rather than creating a double booking.</summary>
     [HttpPost]
+    [Authorize(Policy = Permissions.AppointmentsCreate)]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Book([FromBody] BookAppointmentRequest request, CancellationToken ct)
@@ -113,6 +116,7 @@ public class ScheduleController(AppointmentService appointments, IDateTimeProvid
 
     /// <summary>Moves an appointment through the front-desk workflow.</summary>
     [HttpPost("{id:guid}/status")]
+    [Authorize(Policy = Permissions.AppointmentsEdit)]
     public async Task<IActionResult> SetStatus(Guid id, [FromBody] SetStatusRequest request, CancellationToken ct)
     {
         var result = await appointments.SetStatusAsync(id, request.Status, ct);
@@ -123,6 +127,7 @@ public class ScheduleController(AppointmentService appointments, IDateTimeProvid
 
     /// <summary>Cancels an appointment, or records it as a non-attendance.</summary>
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Policy = Permissions.AppointmentsCancel)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelRequest request, CancellationToken ct)
     {
         var result = await appointments.CancelAsync(id, request.Reason, request.NoShow, ct);

@@ -1,6 +1,7 @@
 using DentalSurgery.Application.Abstractions;
 using DentalSurgery.Domain.Entities;
 using DentalSurgery.Domain.Enums;
+using DentalSurgery.Infrastructure.Identity;
 using DentalSurgery.Infrastructure.Persistence;
 using DentalSurgery.Infrastructure.Persistence.Interceptors;
 using DentalSurgery.Infrastructure.Services;
@@ -41,7 +42,8 @@ public class FeeImportTests : IDisposable
             .Options;
 
         _factory = new TestContextFactory(options);
-        _importer = new FeeScheduleImporter(_factory, NullLogger<FeeScheduleImporter>.Instance);
+        _importer = new FeeScheduleImporter(
+            _factory, new SystemPermissionGuard(), NullLogger<FeeScheduleImporter>.Instance);
 
         Seed();
     }

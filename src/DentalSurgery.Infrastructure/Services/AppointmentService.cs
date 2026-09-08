@@ -40,7 +40,8 @@ public class AppointmentService(
     DentalDbContext db,
     INumberSequenceService sequences,
     IDateTimeProvider clock,
-    ILogger<AppointmentService> logger)
+    ILogger<AppointmentService> logger,
+    IPermissionGuard guard)
 {
     private readonly AvailabilityCalculator _availability = new();
 
@@ -49,6 +50,7 @@ public class AppointmentService(
     public async Task<DaySheet> GetDaySheetAsync(
         DateOnly date, Guid? locationId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsView, ct);
         var location = locationId.HasValue
             ? await db.Locations.AsNoTracking().FirstOrDefaultAsync(l => l.Id == locationId, ct)
             : await db.Locations.AsNoTracking().OrderByDescending(l => l.IsPrimary).FirstOrDefaultAsync(ct);
@@ -99,9 +101,10 @@ public class AppointmentService(
         };
     }
 
-    public Task<List<Appointment>> GetRangeAsync(
+    public async Task<List<Appointment>> GetRangeAsync(
         DateOnly from, DateOnly to, Guid? locationId = null, Guid? providerId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsView, ct);
         var start = from.ToDateTime(TimeOnly.MinValue);
         var end = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
@@ -112,11 +115,13 @@ public class AppointmentService(
         if (locationId.HasValue) query = query.Where(a => a.LocationId == locationId);
         if (providerId.HasValue) query = query.Where(a => a.ProviderId == providerId);
 
-        return query.OrderBy(a => a.StartUtc).ToListAsync(ct);
+        return await query.OrderBy(a => a.StartUtc).ToListAsync(ct);
     }
 
-    public Task<Appointment?> GetAsync(Guid id, CancellationToken ct = default) =>
-        db.Appointments
+    public async Task<Appointment?> GetAsync(Guid id, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.AppointmentsView, ct);
+        return await db.Appointments
             .Include(a => a.Patient).ThenInclude(p => p!.Alerts)
             .Include(a => a.Provider).Include(a => a.Assistant)
             .Include(a => a.Operatory).Include(a => a.Location)
@@ -124,17 +129,19 @@ public class AppointmentService(
             .Include(a => a.PlannedProcedures).ThenInclude(p => p.Tooth)
             .Include(a => a.CompletedProcedures).ThenInclude(p => p.ProcedureCode)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
+    }
 
-    public Task<List<Appointment>> GetForPatientAsync(
+    public async Task<List<Appointment>> GetForPatientAsync(
         Guid patientId, bool futureOnly = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsView, ct);
         var query = db.Appointments.AsNoTracking()
             .Include(a => a.Provider).Include(a => a.Operatory).Include(a => a.Location)
             .Where(a => a.PatientId == patientId);
 
         if (futureOnly) query = query.Where(a => a.StartUtc >= clock.UtcNow);
 
-        return query.OrderByDescending(a => a.StartUtc).ToListAsync(ct);
+        return await query.OrderByDescending(a => a.StartUtc).ToListAsync(ct);
     }
 
     /// <summary>Free slots for a provider across a date range.</summary>
@@ -142,6 +149,7 @@ public class AppointmentService(
         Guid providerId, DateOnly from, DateOnly to, int durationMinutes,
         Guid? operatoryId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsView, ct);
         var provider = await db.Staff.AsNoTracking().FirstOrDefaultAsync(s => s.Id == providerId, ct);
         if (provider is null) return Array.Empty<AvailableSlot>();
 
@@ -180,6 +188,7 @@ public class AppointmentService(
     public async Task<Result<Appointment>> BookAsync(
         Appointment appointment, bool overrideConflicts = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsCreate, ct);
         var conflicts = await CheckConflictsAsync(appointment, ct);
         var blocking = conflicts.Where(c => c.Code != "OUTSIDE_HOURS").ToList();
 
@@ -232,6 +241,7 @@ public class AppointmentService(
     public async Task<IReadOnlyList<BookingConflict>> CheckConflictsAsync(
         Appointment appointment, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsView, ct);
         var dayStart = appointment.StartUtc.Date;
         var dayEnd = dayStart.AddDays(1);
 
@@ -264,6 +274,7 @@ public class AppointmentService(
         Guid? newOperatoryId = null, Guid? newProviderId = null,
         bool overrideConflicts = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsEdit, ct);
         var appointment = await db.Appointments
             .Include(a => a.Reminders)
             .FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
@@ -310,6 +321,7 @@ public class AppointmentService(
     public async Task<Result> CancelAsync(
         Guid appointmentId, string reason, bool isNoShow = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsCancel, ct);
         var appointment = await db.Appointments
             .Include(a => a.Reminders)
             .FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
@@ -346,6 +358,15 @@ public class AppointmentService(
     public async Task<Result> SetStatusAsync(
         Guid appointmentId, AppointmentStatus status, CancellationToken ct = default)
     {
+        // Moving a patient through the visit is a waiting-room action; marking
+        // one cancelled or absent is a scheduling decision with a financial and
+        // recall consequence, so it is held to the stricter permission.
+        await guard.DemandAsync(
+            status is AppointmentStatus.Cancelled or AppointmentStatus.NoShow or AppointmentStatus.Broken
+                ? Permissions.AppointmentsCancel
+                : Permissions.WaitingRoomManage,
+            ct);
+
         var appointment = await db.Appointments.FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
         if (appointment is null) return Result.Failure("Appointment not found.");
 
@@ -436,6 +457,7 @@ public class AppointmentService(
         ToothSurface surfaces = ToothSurface.None, Guid? treatmentPlanItemId = null,
         CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.AppointmentsEdit, ct);
         var appointment = await db.Appointments
             .Include(a => a.PlannedProcedures)
             .FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
@@ -464,8 +486,9 @@ public class AppointmentService(
     }
 
     /// <summary>Today's arrivals board, ordered so the longest wait is at the top.</summary>
-    public Task<List<Appointment>> GetWaitingRoomAsync(Guid? locationId = null, CancellationToken ct = default)
+    public async Task<List<Appointment>> GetWaitingRoomAsync(Guid? locationId = null, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.WaitingRoomView, ct);
         var today = clock.Today.ToDateTime(TimeOnly.MinValue);
         var tomorrow = today.AddDays(1);
 
@@ -478,6 +501,6 @@ public class AppointmentService(
 
         if (locationId.HasValue) query = query.Where(a => a.LocationId == locationId);
 
-        return query.OrderBy(a => a.ArrivedAtUtc).ToListAsync(ct);
+        return await query.OrderBy(a => a.ArrivedAtUtc).ToListAsync(ct);
     }
 }

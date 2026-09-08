@@ -1,25 +1,40 @@
-﻿@page "/Account/Manage/PersonalData"
+@page "/Account/Manage/PersonalData"
 
 @inject IdentityUserAccessor UserAccessor
 
-<PageTitle>Personal Data</PageTitle>
+<PageTitle>Personal data</PageTitle>
 
 <StatusMessage />
-<h3>Personal Data</h3>
+<h3>Personal data</h3>
 
 <div class="row">
-    <div class="col-md-6">
-        <p>Your account contains personal data that you have given us. This page allows you to download or delete that data.</p>
+    <div class="col-md-7">
         <p>
-            <strong>Deleting this data will permanently remove your account, and this cannot be recovered.</strong>
+            This account holds the personal data you gave the practice when it was
+            issued: your name, email address, contact number and job title. You can
+            download a copy of it at any time.
         </p>
+
+        @*
+            The scaffolded "delete my account" control has been removed rather
+            than hidden. A login here is the author of clinical notes,
+            prescriptions and financial entries, and deleting it would break the
+            attribution those records depend on — and the audit trail is
+            append-only by design. Withdrawing someone's access is a
+            deactivation, carried out by an administrator, which stops the
+            account working while leaving what it signed intact.
+        *@
         <form action="Account/Manage/DownloadPersonalData" method="post">
             <AntiforgeryToken />
-            <button class="btn btn-primary" type="submit">Download</button>
+            <button class="btn btn-primary" type="submit">Download my data</button>
         </form>
-        <p>
-            <a href="Account/Manage/DeletePersonalData" class="btn btn-danger">Delete</a>
-        </p>
+
+        <div class="alert alert-secondary mt-4" role="note">
+            <strong>Closing your account.</strong>
+            An account cannot be deleted from here. Records you have signed must keep
+            naming their author, so access is withdrawn by deactivation instead. Ask a
+            practice administrator to deactivate the account when you leave.
+        </div>
     </div>
 </div>
 

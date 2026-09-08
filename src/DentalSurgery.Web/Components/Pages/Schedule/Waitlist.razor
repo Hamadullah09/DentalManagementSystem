@@ -1,5 +1,5 @@
 @page "/waitlist"
-@attribute [Authorize(Policy = Policies.CanManageSchedule)]
+@attribute [Authorize(Policy = Permissions.AppointmentsView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 

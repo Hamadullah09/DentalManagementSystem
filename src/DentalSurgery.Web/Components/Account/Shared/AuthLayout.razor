@@ -1,0 +1,83 @@
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@inject IDbContextFactory<DentalSurgery.Infrastructure.Persistence.DentalDbContext> DbFactory
+
+@*
+    The identity pages used to render inside MainLayout. That put the full
+    application shell — navigation, global patient search, and live badge
+    counters for the waiting room and the task list — on screen for anyone who
+    could reach the sign-in page, signed in or not. This layout exists so the
+    unauthenticated surface contains nothing but the sign-in surface.
+*@
+
+<div class="auth-shell">
+
+    <section class="auth-brand" aria-hidden="true">
+        <div class="auth-brand-inner">
+            <span class="auth-mark">
+                <Icon Name="tooth" Size="26" CssClass="text-white" />
+            </span>
+            <h2 class="auth-brand-name">@_practiceName</h2>
+            <p class="auth-brand-line">Clinical and practice management</p>
+
+            <ul class="auth-brand-points">
+                <li><Icon Name="shield" Size="15" /> Access is recorded against your account</li>
+                <li><Icon Name="users" Size="15" /> Patient records are restricted by role</li>
+                <li><Icon Name="clock" Size="15" /> Sessions end automatically when idle</li>
+            </ul>
+        </div>
+
+        <p class="auth-brand-foot">
+            This system holds confidential patient information.
+            Use is limited to authorised staff.
+        </p>
+    </section>
+
+    <main class="auth-panel">
+        <header class="auth-panel-head">
+            <span class="auth-mark sm">
+                <Icon Name="tooth" Size="18" CssClass="text-white" />
+            </span>
+            <span class="auth-panel-name">@_practiceName</span>
+        </header>
+
+        @if (HttpContext is null)
+        {
+            <div class="auth-card">
+                <p class="text-muted">Loading…</p>
+            </div>
+        }
+        else
+        {
+            @Body
+        }
+
+        <footer class="auth-panel-foot">
+            <span>&copy; @DateTime.Now.Year @_practiceName</span>
+        </footer>
+    </main>
+</div>
+
+@code {
+    private string _practiceName = "Meridian Dental Surgery";
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _practiceName = await db.Practices.AsNoTracking()
+            .Select(p => p.Name).FirstOrDefaultAsync() ?? _practiceName;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (HttpContext is null)
+        {
+            // Rendering interactively means there is no HttpContext, and the
+            // identity pages must set cookies. Force a static render.
+            NavigationManager.Refresh(forceReload: true);
+        }
+    }
+}

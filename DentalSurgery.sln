@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DentalSurgery.Migrations.Sq
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DentalSurgery.Migrations.Sqlite", "src\DentalSurgery.Migrations.Sqlite\DentalSurgery.Migrations.Sqlite.csproj", "{719BD2F9-FBC8-4690-BE76-F546093A4460}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DentalSurgery.IntegrationTests", "tests\DentalSurgery.IntegrationTests\DentalSurgery.IntegrationTests.csproj", "{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -115,6 +117,18 @@ Global
 		{719BD2F9-FBC8-4690-BE76-F546093A4460}.Release|x64.Build.0 = Release|Any CPU
 		{719BD2F9-FBC8-4690-BE76-F546093A4460}.Release|x86.ActiveCfg = Release|Any CPU
 		{719BD2F9-FBC8-4690-BE76-F546093A4460}.Release|x86.Build.0 = Release|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Debug|x64.Build.0 = Debug|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Debug|x86.Build.0 = Debug|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Release|x64.ActiveCfg = Release|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Release|x64.Build.0 = Release|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Release|x86.ActiveCfg = Release|Any CPU
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -127,5 +141,6 @@ Global
 		{37B4F437-0574-400F-81CE-F79AFE57A63E} = {0B6563A7-1F70-4DC5-AC24-5363EA8FDF5A}
 		{6303D66B-524A-4862-B80D-42450BCD4167} = {C4D6665C-6968-4ACC-ACDC-9BA1B73B3B6F}
 		{719BD2F9-FBC8-4690-BE76-F546093A4460} = {C4D6665C-6968-4ACC-ACDC-9BA1B73B3B6F}
+		{9283681D-E40A-4BDC-B966-1CAC7FB0AC3E} = {0B6563A7-1F70-4DC5-AC24-5363EA8FDF5A}
 	EndGlobalSection
 EndGlobal

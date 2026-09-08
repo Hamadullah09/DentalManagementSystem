@@ -5,9 +5,26 @@
 
 <div class="app-shell">
 
-    <aside class="app-sidebar @(_sidebarOpen ? "open" : "")">
-        <NavMenu />
-    </aside>
+    @*
+        While an account owes a password change it can reach exactly one page,
+        so the navigation is not rendered at all. Showing a sidebar whose every
+        link bounces straight back here would look broken rather than deliberate.
+    *@
+    <AuthorizeView>
+        <Authorized>
+            @if (!MustChangePassword(context))
+            {
+                <aside class="app-sidebar @(_sidebarOpen ? "open" : "")">
+                    <NavMenu />
+                </aside>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <aside class="app-sidebar @(_sidebarOpen ? "open" : "")">
+                <NavMenu />
+            </aside>
+        </NotAuthorized>
+    </AuthorizeView>
 
     <div class="app-main">
         <header class="app-topbar">
@@ -15,12 +32,18 @@
                 <Icon Name="menu" Size="18" />
             </button>
 
-            <GlobalSearch />
+            <AuthorizeView>
+                <Authorized>
+                    <GlobalSearch />
+                </Authorized>
+            </AuthorizeView>
 
             <div class="ms-auto d-flex align-items-center gap-2">
-                <a href="/schedule" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex align-items-center gap-1">
-                    <Icon Name="calendar" Size="14" /> Today
-                </a>
+                <AuthorizeView Policy="@Permissions.AppointmentsView">
+                    <a href="/schedule" class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex align-items-center gap-1">
+                        <Icon Name="calendar" Size="14" /> Today
+                    </a>
+                </AuthorizeView>
 
                 <button class="btn-ghost" title="Switch between light and dark" @onclick="CycleTheme">
                     <Icon Name="@(_theme == "dark" ? "moon" : _theme == "light" ? "sun" : "monitor")" Size="17" />
@@ -81,15 +104,44 @@
                     @Body
                 </ChildContent>
                 <ErrorContent Context="exception">
-                    <div class="blazor-error-boundary">
-                        <h4 class="mb-2">This screen could not be displayed</h4>
-                        <p class="mb-2" style="font-size:.87rem;">@exception.Message</p>
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="RecoverFromError">Try again</button>
-                    </div>
+                    @if (exception is ForbiddenException forbidden)
+                    {
+                        @*
+                            A component asked a service to do something this
+                            account is not entitled to. That is an authorisation
+                            outcome, not a fault, so it is presented as one.
+                        *@
+                        <div class="card-ds">
+                            <EmptyState IconName="shield" Title="You cannot do that"
+                                        Message="Your role does not include the permission this action requires. Ask a practice administrator if you need it for your work.">
+                                <div class="text-muted" style="font-size:.8rem;">
+                                    Required permission: <code>@forbidden.Permission</code>
+                                </div>
+                                <a href="/" class="btn btn-sm btn-primary mt-2">Back to my dashboard</a>
+                            </EmptyState>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="blazor-error-boundary">
+                            <h4 class="mb-2">This screen could not be displayed</h4>
+                            <p class="mb-2" style="font-size:.87rem;">
+                                Something went wrong while loading this page. The problem has been
+                                logged. Try again, and tell your administrator if it keeps happening.
+                            </p>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="RecoverFromError">Try again</button>
+                        </div>
+                    }
                 </ErrorContent>
             </ErrorBoundary>
         </main>
     </div>
+
+    <AuthorizeView>
+        <Authorized>
+            <HelpPanel />
+        </Authorized>
+    </AuthorizeView>
 </div>
 
 @code {
@@ -146,6 +198,10 @@
 
         await JS.InvokeVoidAsync("dentalApp.setTheme", _theme);
     }
+
+    /// <summary>True while this account still has to set its own password.</summary>
+    private static bool MustChangePassword(AuthenticationState state) =>
+        state.User.HasClaim(DentalClaimTypes.MustChangePassword, "true");
 
     private static string DisplayName(AuthenticationState state) =>
         state.User.FindFirst(DentalClaimTypes.DisplayName)?.Value

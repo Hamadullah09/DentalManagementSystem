@@ -1,5 +1,5 @@
 @page "/staff"
-@attribute [Authorize(Policy = Policies.CanManageStaff)]
+@attribute [Authorize(Policy = Permissions.UsersView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 

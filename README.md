@@ -45,9 +45,16 @@ data is seeded, and cannot be created outside Development):
 | Practice manager | `b.nwosu@meridiandental.example` | `Dental#2026!` |
 | Receptionist | `j.barnes@meridiandental.example` | `Dental#2026!` |
 
-Each role sees a different navigation set and a different set of permissions, so
-signing in as the receptionist and then as the surgeon is the quickest way to see
-how authorisation is applied.
+The administrator is required to set its own password at first sign-in, so the
+password above works exactly once for that account; the other logins do not carry
+that flag. There is no self-registration — every other account is created by an
+administrator under **Administration → User accounts**.
+
+Each role sees a different home screen, a different navigation set and a
+different set of permissions, so signing in as the receptionist and then as the
+surgeon is the quickest way to see how authorisation is applied. What each role
+may do is shown, and can be changed, under **Administration → Roles and
+permissions**.
 
 Demonstration data is off by default and is ignored outside Development unless
 `Seed:AllowDemoDataOutsideDevelopment` is also set, because these logins share a
