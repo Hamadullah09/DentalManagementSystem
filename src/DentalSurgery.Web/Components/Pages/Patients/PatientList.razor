@@ -1,5 +1,5 @@
 @page "/patients"
-@attribute [Authorize]
+@attribute [Authorize(Policy = Permissions.PatientsView)]
 @inject PatientService Patients
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject NavigationManager Navigation

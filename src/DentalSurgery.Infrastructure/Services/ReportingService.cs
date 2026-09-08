@@ -9,13 +9,25 @@ using Microsoft.EntityFrameworkCore;
 namespace DentalSurgery.Infrastructure.Services;
 
 /// <summary>Builds the dashboard and the management reports.</summary>
-public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
+public class ReportingService(DentalDbContext db, IDateTimeProvider clock, IPermissionGuard guard)
 {
     private readonly LedgerCalculator _ledger = new();
     private readonly AvailabilityCalculator _availability = new();
 
     // ------------------------------------------------------------------ dashboard
 
+    /// <summary>
+    /// The whole-practice figures behind the home screen.
+    /// <para>
+    /// Deliberately not gated as a single permission. It is an aggregate of
+    /// clinical, operational and financial counts, and different roles are
+    /// entitled to different parts of it; demanding one permission would either
+    /// lock most staff out of their own home screen or grant everyone the
+    /// financial half. The home screen decides field by field what the signed-in
+    /// user may see, and the figures it withholds are never rendered, so they
+    /// never leave the server. Every narrower method below is gated.
+    /// </para>
+    /// </summary>
     public async Task<PracticeDashboard> GetDashboardAsync(
         DateOnly? forDate = null, Guid? locationId = null, CancellationToken ct = default)
     {
@@ -240,6 +252,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
     public async Task<FinancialSummary> GetFinancialSummaryAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ReportsFinancial, ct);
         var startUtc = from.ToDateTime(TimeOnly.MinValue);
         var endUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
@@ -333,6 +346,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
 
     public async Task<AgingReport> GetAgingAsync(CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ReportsFinancial, ct);
         var invoices = await db.Invoices.AsNoTracking()
             .Where(i => i.Status != InvoiceStatus.Void && i.Status != InvoiceStatus.Draft)
             .ToListAsync(ct);
@@ -342,6 +356,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
 
     public async Task<List<ReceivableRow>> GetReceivablesAsync(CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ReportsFinancial, ct);
         var patients = await db.Patients.AsNoTracking()
             .Where(p => p.AccountBalance > 0.005m)
             .Select(p => new
@@ -395,6 +410,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
     public async Task<ScheduleAnalytics> GetScheduleAnalyticsAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ReportsView, ct);
         var startUtc = from.ToDateTime(TimeOnly.MinValue);
         var endUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
@@ -472,6 +488,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
     public async Task<ClinicalAnalytics> GetClinicalAnalyticsAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ReportsView, ct);
         var startUtc = from.ToDateTime(TimeOnly.MinValue);
         var endUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
@@ -529,6 +546,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
     public async Task<List<TreatmentAcceptanceRow>> GetTreatmentAcceptanceAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansView, ct);
         var plans = await db.TreatmentPlans.AsNoTracking()
             .Include(p => p.Patient)
             .Include(p => p.Provider)
@@ -549,6 +567,7 @@ public class ReportingService(DentalDbContext db, IDateTimeProvider clock)
     public async Task<List<RecallDueRow>> GetRecallsDueAsync(
         DateOnly? dueBy = null, bool includeBooked = false, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.RecallsView, ct);
         var cutoff = dueBy ?? clock.Today.AddDays(30);
 
         var query = db.RecallSchedules.AsNoTracking()

@@ -1,29 +1,67 @@
 @page "/"
 @attribute [Authorize]
+@using DentalSurgery.Web.Components.Pages.Home
 @inject ReportingService Reporting
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 @inject NavigationManager Navigation
+@inject ICurrentUser CurrentUser
+@inject IPermissionGuard Guard
 
-<PageTitle>Dashboard - Meridian Dental Surgery</PageTitle>
+@*
+    One route, six home screens.
 
-<PageHeader Title="Practice dashboard"
-            Subtitle="@($"{Clock.LocalNow:dddd d MMMM yyyy}")">
+    The role decides the arrangement — what leads, which panels appear and in
+    what order — and the permission set decides what may be shown at all. Those
+    are separate questions and are answered separately: a practice manager who
+    is also a dentist gets the clinical layout, still without the financial
+    panels if their permissions do not cover them.
+
+    Nothing on this page renders from a figure the user is not permitted to see.
+    That matters more here than anywhere else, because a dashboard is where
+    numbers get shown without anyone asking for them: before this change the
+    same tiles rendered for everyone, so reception saw month-to-date production
+    and stock expiry without holding either permission.
+*@
+
+<PageTitle>@HomeFocusResolver.Title(_focus) - Meridian Dental Surgery</PageTitle>
+
+<PageHeader Title="@HomeFocusResolver.Title(_focus)" Subtitle="@Subtitle">
     <Actions>
-        <a href="/schedule" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
-            <Icon Name="calendar" Size="14" /> Appointment book
-        </a>
-        <a href="/patients/new" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
-            <Icon Name="user-plus" Size="14" /> Register patient
-        </a>
+        @if (_can(Permissions.AppointmentsView))
+        {
+            <a href="/schedule" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                <Icon Name="calendar" Size="14" /> Appointment book
+            </a>
+        }
+        @if (_can(Permissions.PatientsCreate))
+        {
+            <a href="/patients/new" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
+                <Icon Name="user-plus" Size="14" /> Register patient
+            </a>
+        }
     </Actions>
 </PageHeader>
 
-@if (_dashboard is null)
+@if (_focus == HomeFocus.None)
+{
+    @*
+        Signed in, no role. Reachable only through a provisioning mistake, and
+        the honest thing is to say so rather than render an empty dashboard that
+        looks broken.
+    *@
+    <div class="card-ds">
+        <EmptyState IconName="shield" Title="This account has no role yet"
+                    Message="You are signed in, but no role has been assigned, so there is nothing you can open. A practice administrator needs to assign one before you can work.">
+            <a href="/Account/Manage" class="btn btn-sm btn-outline-secondary">Account settings</a>
+        </EmptyState>
+    </div>
+}
+else if (_dashboard is null)
 {
     <div class="loading-bar mb-3"></div>
     <div class="stat-grid">
-        @for (var i = 0; i < 8; i++)
+        @for (var i = 0; i < 6; i++)
         {
             <div class="skeleton" style="height:88px;"></div>
         }
@@ -31,13 +69,17 @@
 }
 else
 {
+    <QuickActions Focus="_focus" Held="_permissions" />
+
     @* -------------------------------------------------- alerts *@
-    @if (_dashboard.Alerts.Count > 0)
+    var alerts = _dashboard.Alerts.Where(CanSeeAlert).ToList();
+
+    @if (alerts.Count > 0)
     {
         <div class="d-flex flex-column gap-2 mb-3">
-            @foreach (var alert in _dashboard.Alerts.Take(_showAllAlerts ? 99 : 3))
+            @foreach (var alert in alerts.Take(_showAllAlerts ? 99 : 3))
             {
-                <div class="alert-ds a-@alert.Severity">
+                <div class="alert-ds a-@alert.Severity" role="@(alert.Severity == "danger" ? "alert" : "status")">
                     <Icon Name="@(alert.Severity == "danger" ? "alert-triangle" : alert.Severity == "warning" ? "alert-circle" : "info")" Size="16" />
                     <div class="flex-grow-1">
                         <strong>@alert.Title.</strong> @alert.Detail
@@ -50,77 +92,39 @@ else
                     }
                 </div>
             }
-            @if (_dashboard.Alerts.Count > 3)
+            @if (alerts.Count > 3)
             {
                 <button class="btn-ghost align-self-start" @onclick="() => _showAllAlerts = !_showAllAlerts">
-                    @(_showAllAlerts ? "Show fewer" : $"Show {_dashboard.Alerts.Count - 3} more")
+                    @(_showAllAlerts ? "Show fewer" : $"Show {alerts.Count - 3} more")
                 </button>
             }
         </div>
     }
 
-    @*
-        Headline figures.
+    @* -------------------------------------------------- headline figures *@
+    var tiles = Tiles().ToList();
 
-        These lead with what someone can act on before the end of the day.
-        Money is shown month to date rather than today, because a day's figure
-        reads zero every morning and swings on a single large invoice; the
-        month is the number a practice manager decides against. Today's figure
-        stays as the caption. Counts lead with the overdue or unanswered half
-        of the pair for the same reason: "eleven recalls due" is a statistic,
-        "two of them overdue" is a task.
-    *@
-    <div class="stat-grid mb-3">
-        <StatTile Label="Appointments today" Value="@_dashboard.AppointmentsToday.ToString()"
-                  Icon="calendar" Accent="primary"
-                  Caption="@($"{_dashboard.PatientsSeenToday} seen · {_dashboard.WaitingNow} waiting · {_dashboard.InTreatmentNow} in treatment")" />
+    @if (tiles.Count > 0)
+    {
+        <div class="stat-grid mb-3">
+            @foreach (var tile in tiles)
+            {
+                <StatTile Label="@tile.Label" Value="@tile.Value" Icon="@tile.Icon"
+                          Accent="@tile.Accent" Caption="@tile.Caption" />
+            }
+        </div>
+    }
 
-        <StatTile Label="Unconfirmed tomorrow" Value="@_dashboard.UnconfirmedTomorrow.ToString()"
-                  Icon="phone" Accent="@(_dashboard.UnconfirmedTomorrow > 0 ? "warning" : "success")"
-                  Caption="@(_dashboard.UnconfirmedTomorrow > 0 ? "Call before the end of today" : "Tomorrow is fully confirmed")" />
+    @* -------------------------------------------------- standing exceptions *@
+    var attention = _attention.Where(a => _can(a.Permission)).ToList();
 
-        <StatTile Label="Production this month" Value="@Ui.Money(_dashboard.ProductionMonthToDate)"
-                  Icon="trending-up" Accent="success"
-                  Caption="@($"{Ui.Money(_dashboard.ProductionToday)} today")" />
-
-        <StatTile Label="Collections this month" Value="@Ui.Money(_dashboard.CollectionsMonthToDate)"
-                  Icon="credit-card" Accent="accent"
-                  Caption="@CollectionRateCaption()" />
-
-        <StatTile Label="Outstanding" Value="@Ui.Money(_dashboard.OutstandingReceivables)"
-                  Icon="receipt" Accent="warning"
-                  Caption="@($"{Ui.Money(_dashboard.InsurancePending)} pending with insurers")" />
-
-        <StatTile Label="Chair utilisation" Value="@($"{_dashboard.ChairUtilisationPercent:0.#}%")"
-                  Icon="clock" Accent="purple"
-                  Caption="Average across rostered providers" />
-
-        <StatTile Label="Recalls overdue" Value="@_dashboard.RecallsOverdue.ToString()"
-                  Icon="bell" Accent="@(_dashboard.RecallsOverdue > 0 ? "danger" : "success")"
-                  Caption="@($"{_dashboard.RecallsDue} due in total")" />
-
-        <StatTile Label="Plans awaiting decision" Value="@_dashboard.TreatmentPlansAwaitingDecision.ToString()"
-                  Icon="clipboard" Accent="@(_dashboard.TreatmentPlansAwaitingDecision > 0 ? "warning" : "success")"
-                  Caption="@($"{_dashboard.TreatmentAcceptanceRate:0.#}% accepted overall")" />
-    </div>
-
-    @*
-        Standing operational position.
-
-        Each of these was already computed and thrown away, or shown only as a
-        dismissible alert that disappears once someone scrolls past it. A failed
-        steriliser cycle or an overdue lab case is not a notification — it stays
-        true until it is dealt with — so it belongs somewhere permanent. Only
-        non-zero items render, so the row is empty on a clean day rather than a
-        wall of green zeroes.
-    *@
-    @if (_attention.Count > 0)
+    @if (attention.Count > 0)
     {
         <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
             <span class="text-muted" style="font-size:.78rem; font-weight:600; letter-spacing:.02em;">
                 NEEDS ATTENTION
             </span>
-            @foreach (var item in _attention)
+            @foreach (var item in attention)
             {
                 <a href="@item.Link" class="badge-ds b-@item.Severity text-decoration-none d-inline-flex align-items-center gap-1"
                    title="@item.Description">
@@ -131,219 +135,257 @@ else
         </div>
     }
 
+    @* -------------------------------------------------- role-led panels *@
+    @if (_focus == HomeFocus.FrontDesk)
+    {
+        <div class="mb-3">
+            <FrontDeskPanel />
+        </div>
+    }
+
+    @if (_focus is HomeFocus.Clinician or HomeFocus.Surgeon or HomeFocus.Hygiene)
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-xl-7">
+                <ClinicianDayPanel Heading="@ClinicalHeading"
+                                   SurgicalOnly="@(_focus == HomeFocus.Surgeon)"
+                                   OnOpenPatient="OpenPatient" />
+            </div>
+            <div class="col-12 col-xl-5">
+                <OpenRecordsPanel />
+            </div>
+        </div>
+    }
+
     <div class="row g-3">
 
-        @* -------------------------------------------------- today's list *@
-        <div class="col-12 col-xl-7">
-            <div class="card-ds h-100">
-                <div class="card-ds-header">
-                    <h3>Today&rsquo;s surgery list</h3>
-                    <span class="badge-ds b-neutral">@_todaysAppointments.Count booked</span>
-                    <a href="/schedule" class="ms-auto" style="font-size:.8rem;">Open the book &rarr;</a>
-                </div>
+        @* Practice-wide list. Shown to everyone who may see the book, and it is
+           the primary panel for management and administration, where there is no
+           personal list to lead with. *@
+        @if (_can(Permissions.AppointmentsView) && _focus is not (HomeFocus.Clinician or HomeFocus.Surgeon or HomeFocus.Hygiene))
+        {
+            <div class="col-12 @(ShowFinancialPanels ? "col-xl-7" : "")">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <h3>Today&rsquo;s surgery list</h3>
+                        <span class="badge-ds b-neutral">@_todaysAppointments.Count booked</span>
+                        <a href="/schedule" class="ms-auto" style="font-size:.8rem;">Open the book &rarr;</a>
+                    </div>
 
-                @if (_todaysAppointments.Count == 0)
-                {
-                    <EmptyState IconName="calendar" Title="Nothing booked today"
-                                Message="The appointment book is clear for today." />
-                }
-                else
-                {
-                    <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
-                        <table class="table-ds">
-                            <thead>
-                                <tr>
-                                    <th style="width:64px;">Time</th>
-                                    <th>Patient</th>
-                                    <th>Provider</th>
-                                    <th>Reason</th>
-                                    <th style="width:120px;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var appointment in _todaysAppointments)
-                                {
-                                    <tr class="row-clickable" @onclick="() => OpenPatient(appointment.PatientId)">
-                                        <td class="nowrap mono">@appointment.StartUtc.ToString("HH:mm")</td>
-                                        <td>
-                                            <div style="font-weight:600;">@(appointment.Patient?.Name.Display ?? "Unknown")</div>
-                                            <div class="text-faint" style="font-size:.72rem;">
-                                                @appointment.Patient?.PatientNumber
-                                            </div>
-                                        </td>
-                                        <td class="nowrap">
-                                            <span class="dot me-1" style="background:@(appointment.Provider?.ColourHex ?? "#6c757d")"></span>
-                                            @(appointment.Provider?.Name.Display ?? "-")
-                                        </td>
-                                        <td>@Ui.Truncate(appointment.Reason ?? Ui.Humanise(appointment.AppointmentType), 40)</td>
-                                        <td>
-                                            <span class="badge-ds @Ui.BadgeFor(appointment.Status)">
-                                                @Ui.Humanise(appointment.Status)
-                                            </span>
-                                        </td>
+                    @if (_todaysAppointments.Count == 0)
+                    {
+                        <EmptyState IconName="calendar" Title="Nothing booked today"
+                                    Message="The appointment book is clear for today." />
+                    }
+                    else
+                    {
+                        <div class="table-wrap" style="border:0; border-radius:0; max-height:420px; overflow-y:auto;">
+                            <table class="table-ds">
+                                <caption class="visually-hidden">Every appointment booked today</caption>
+                                <thead>
+                                    <tr>
+                                        <th scope="col" style="width:64px;">Time</th>
+                                        <th scope="col">Patient</th>
+                                        <th scope="col">Provider</th>
+                                        <th scope="col">Reason</th>
+                                        <th scope="col" style="width:120px;">Status</th>
                                     </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
-        </div>
-
-        @* -------------------------------------------------- production chart *@
-        <div class="col-12 col-xl-5">
-            <div class="card-ds mb-3">
-                <div class="card-ds-header">
-                    <h3>Production, last 30 days</h3>
-                    <span class="ms-auto text-muted" style="font-size:.8rem;">
-                        @Ui.Money(_dashboard.ProductionTrend.Sum(p => p.Value)) total
-                    </span>
+                                </thead>
+                                <tbody>
+                                    @foreach (var appointment in _todaysAppointments)
+                                    {
+                                        <tr class="row-clickable" @onclick="() => OpenPatient(appointment.PatientId)">
+                                            <td class="nowrap mono">@appointment.StartUtc.ToLocalTime().ToString("HH:mm")</td>
+                                            <td>
+                                                <div style="font-weight:600;">@(appointment.Patient?.Name.Display ?? "Unknown")</div>
+                                                <div class="text-faint" style="font-size:.72rem;">
+                                                    @appointment.Patient?.PatientNumber
+                                                </div>
+                                            </td>
+                                            <td class="nowrap">
+                                                <span class="dot me-1" style="background:@(appointment.Provider?.ColourHex ?? "#6c757d")"></span>
+                                                @(appointment.Provider?.Name.Display ?? "-")
+                                            </td>
+                                            <td>@Ui.Truncate(appointment.Reason ?? Ui.Humanise(appointment.AppointmentType), 40)</td>
+                                            <td>
+                                                <span class="badge-ds @Ui.BadgeFor(appointment.Status)">
+                                                    @Ui.Humanise(appointment.Status)
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
                 </div>
-                <div class="card-ds-body">
-                    <Sparkline Values="@_dashboard.ProductionTrend.Select(p => p.Value)"
-                               Width="420" Height="84" Colour="var(--ds-primary)"
-                               AriaLabel="Daily production over the last 30 days" />
-                    <div class="d-flex justify-content-between text-faint mt-1" style="font-size:.72rem;">
-                        <span>@_dashboard.ProductionTrend.FirstOrDefault()?.Date.ToString("d MMM")</span>
-                        <span>@_dashboard.ProductionTrend.LastOrDefault()?.Date.ToString("d MMM")</span>
+            </div>
+        }
+
+        @* Money. Gated on the financial reporting permission rather than on
+           Billing.View: a receptionist may take a payment without being shown
+           the practice's month-to-date production. *@
+        @if (ShowFinancialPanels)
+        {
+            <div class="col-12 col-xl-5">
+                <div class="card-ds mb-3">
+                    <div class="card-ds-header">
+                        <h3>Production, last 30 days</h3>
+                        <span class="ms-auto text-muted" style="font-size:.8rem;">
+                            @Ui.Money(_dashboard.ProductionTrend.Sum(p => p.Value)) total
+                        </span>
+                    </div>
+                    <div class="card-ds-body">
+                        <Sparkline Values="@_dashboard.ProductionTrend.Select(p => p.Value)"
+                                   Width="420" Height="84" Colour="var(--ds-primary)"
+                                   AriaLabel="Daily production over the last 30 days" />
+                        <div class="d-flex justify-content-between text-faint mt-1" style="font-size:.72rem;">
+                            <span>@_dashboard.ProductionTrend.FirstOrDefault()?.Date.ToString("d MMM")</span>
+                            <span>@_dashboard.ProductionTrend.LastOrDefault()?.Date.ToString("d MMM")</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="card-ds">
-                <div class="card-ds-header"><h3>Production by provider, today</h3></div>
-                @if (_dashboard.ProviderProduction.Count == 0)
-                {
-                    <div class="card-ds-body text-muted" style="font-size:.85rem;">
-                        No production recorded yet today.
-                    </div>
-                }
-                else
-                {
-                    <div class="card-ds-body d-flex flex-column gap-2">
-                        @{
-                            var maxProduction = _dashboard.ProviderProduction.Max(p => p.Production);
-                        }
-                        @foreach (var row in _dashboard.ProviderProduction.Take(8))
-                        {
-                            <div>
-                                <div class="d-flex justify-content-between" style="font-size:.82rem;">
-                                    <span>@row.ProviderName</span>
-                                    <span class="mono">@Ui.Money(row.Production)</span>
+                <div class="card-ds">
+                    <div class="card-ds-header"><h3>Production by provider, today</h3></div>
+                    @if (_dashboard.ProviderProduction.Count == 0)
+                    {
+                        <div class="card-ds-body text-muted" style="font-size:.85rem;">
+                            No production recorded yet today.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="card-ds-body d-flex flex-column gap-2">
+                            @{
+                                var maxProduction = _dashboard.ProviderProduction.Max(p => p.Production);
+                            }
+                            @foreach (var row in _dashboard.ProviderProduction.Take(8))
+                            {
+                                <div>
+                                    <div class="d-flex justify-content-between" style="font-size:.82rem;">
+                                        <span>@row.ProviderName</span>
+                                        <span class="mono">@Ui.Money(row.Production)</span>
+                                    </div>
+                                    <div class="bar-track mt-1">
+                                        <div class="bar-fill"
+                                             style="width:@(maxProduction == 0 ? 0 : (int)(row.Production / maxProduction * 100))%"></div>
+                                    </div>
+                                    <div class="text-faint" style="font-size:.72rem;">
+                                        @row.Appointments appointments &middot; @row.Procedures procedures
+                                        &middot; @row.UtilisationPercent.ToString("0.#")% utilised
+                                    </div>
                                 </div>
-                                <div class="bar-track mt-1">
-                                    <div class="bar-fill"
-                                         style="width:@(maxProduction == 0 ? 0 : (int)(row.Production / maxProduction * 100))%"></div>
-                                </div>
-                                <div class="text-faint" style="font-size:.72rem;">
-                                    @row.Appointments appointments &middot; @row.Procedures procedures
-                                    &middot; @row.UtilisationPercent.ToString("0.#")% utilised
-                                </div>
-                            </div>
-                        }
-                    </div>
-                }
+                            }
+                        </div>
+                    }
+                </div>
             </div>
-        </div>
+        }
     </div>
 
     <div class="row g-3 mt-0">
 
-        @* -------------------------------------------------- tasks *@
-        <div class="col-12 col-lg-6">
-            <div class="card-ds h-100">
-                <div class="card-ds-header">
-                    <h3>Open tasks</h3>
-                    <a href="/tasks" class="ms-auto" style="font-size:.8rem;">All tasks &rarr;</a>
-                </div>
-                @if (_tasks.Count == 0)
-                {
-                    <EmptyState IconName="check-circle" Title="Nothing outstanding"
-                                Message="Every task has been completed." />
-                }
-                else
-                {
-                    <div class="card-ds-body d-flex flex-column gap-2">
-                        @foreach (var task in _tasks)
-                        {
-                            <div class="d-flex align-items-start gap-2">
-                                <span class="badge-ds @Ui.BadgeFor(task.Priority)" style="margin-top:2px;">
-                                    @Ui.Humanise(task.Priority)
-                                </span>
-                                <div class="flex-grow-1" style="min-width:0;">
-                                    <div style="font-size:.85rem; font-weight:500;">@task.Title</div>
-                                    <div class="text-faint" style="font-size:.74rem;">
-                                        @task.Category
-                                        @if (task.DueDate.HasValue)
-                                        {
-                                            <span> &middot; due @Ui.Relative(task.DueDate, Clock.Today)</span>
-                                        }
-                                        @if (task.AssignedToStaff is not null)
-                                        {
-                                            <span> &middot; @task.AssignedToStaff.Name.Display</span>
-                                        }
-                                    </div>
-                                </div>
-                                @if (task.IsOverdue)
-                                {
-                                    <span class="badge-ds b-danger">Overdue</span>
-                                }
-                            </div>
-                        }
+        @if (_can(Permissions.TasksView))
+        {
+            <div class="col-12 col-lg-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <h3>Open tasks</h3>
+                        <a href="/tasks" class="ms-auto" style="font-size:.8rem;">All tasks &rarr;</a>
                     </div>
-                }
-            </div>
-        </div>
-
-        @* -------------------------------------------------- recalls *@
-        <div class="col-12 col-lg-6">
-            <div class="card-ds h-100">
-                <div class="card-ds-header">
-                    <h3>Recalls needing a call</h3>
-                    <a href="/recalls" class="ms-auto" style="font-size:.8rem;">Recall list &rarr;</a>
-                </div>
-                @if (_recalls.Count == 0)
-                {
-                    <EmptyState IconName="check-circle" Title="Recalls up to date"
-                                Message="Nobody is overdue for review." />
-                }
-                else
-                {
-                    <div class="table-wrap" style="border:0; border-radius:0;">
-                        <table class="table-ds">
-                            <thead>
-                                <tr>
-                                    <th>Patient</th>
-                                    <th>Type</th>
-                                    <th class="nowrap">Due</th>
-                                    <th>Contact</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var recall in _recalls)
-                                {
-                                    <tr class="row-clickable" @onclick="() => OpenPatient(recall.PatientId)">
-                                        <td>
-                                            <div style="font-weight:600;">@recall.PatientName</div>
-                                            <div class="text-faint" style="font-size:.72rem;">@recall.PatientNumber</div>
-                                        </td>
-                                        <td>@Ui.Humanise(recall.RecallType)</td>
-                                        <td class="nowrap @recall.UrgencyClass">
-                                            @Ui.DateShort(recall.DueDate)
-                                            @if (recall.DaysOverdue > 0)
+                    @if (_tasks.Count == 0)
+                    {
+                        <EmptyState IconName="check-circle" Title="Nothing outstanding"
+                                    Message="Every task has been completed." />
+                    }
+                    else
+                    {
+                        <div class="card-ds-body d-flex flex-column gap-2">
+                            @foreach (var task in _tasks)
+                            {
+                                <div class="d-flex align-items-start gap-2">
+                                    <span class="badge-ds @Ui.BadgeFor(task.Priority)" style="margin-top:2px;">
+                                        @Ui.Humanise(task.Priority)
+                                    </span>
+                                    <div class="flex-grow-1" style="min-width:0;">
+                                        <div style="font-size:.85rem; font-weight:500;">@task.Title</div>
+                                        <div class="text-faint" style="font-size:.74rem;">
+                                            @task.Category
+                                            @if (task.DueDate.HasValue)
                                             {
-                                                <div style="font-size:.7rem;">@recall.DaysOverdue days over</div>
+                                                <span> &middot; due @Ui.Relative(task.DueDate, Clock.Today)</span>
                                             }
-                                        </td>
-                                        <td class="text-muted" style="font-size:.78rem;">@(recall.Phone ?? recall.Email ?? "-")</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
+                                            @if (task.AssignedToStaff is not null)
+                                            {
+                                                <span> &middot; @task.AssignedToStaff.Name.Display</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    @if (task.IsOverdue)
+                                    {
+                                        <span class="badge-ds b-danger">Overdue</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             </div>
-        </div>
+        }
+
+        @if (_can(Permissions.RecallsView))
+        {
+            <div class="col-12 col-lg-6">
+                <div class="card-ds h-100">
+                    <div class="card-ds-header">
+                        <h3>Recalls needing a call</h3>
+                        <a href="/recalls" class="ms-auto" style="font-size:.8rem;">Recall list &rarr;</a>
+                    </div>
+                    @if (_recalls.Count == 0)
+                    {
+                        <EmptyState IconName="check-circle" Title="Recalls up to date"
+                                    Message="Nobody is overdue for review." />
+                    }
+                    else
+                    {
+                        <div class="table-wrap" style="border:0; border-radius:0;">
+                            <table class="table-ds">
+                                <caption class="visually-hidden">Patients overdue for recall, most overdue first</caption>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Patient</th>
+                                        <th scope="col">Type</th>
+                                        <th scope="col" class="nowrap">Due</th>
+                                        <th scope="col">Contact</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var recall in _recalls)
+                                    {
+                                        <tr class="row-clickable" @onclick="() => OpenPatient(recall.PatientId)">
+                                            <td>
+                                                <div style="font-weight:600;">@recall.PatientName</div>
+                                                <div class="text-faint" style="font-size:.72rem;">@recall.PatientNumber</div>
+                                            </td>
+                                            <td>@Ui.Humanise(recall.RecallType)</td>
+                                            <td class="nowrap @recall.UrgencyClass">
+                                                @Ui.DateShort(recall.DueDate)
+                                                @if (recall.DaysOverdue > 0)
+                                                {
+                                                    <div style="font-size:.7rem;">@recall.DaysOverdue days over</div>
+                                                }
+                                            </td>
+                                            <td class="text-muted" style="font-size:.78rem;">@(recall.Phone ?? recall.Email ?? "-")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
     </div>
 }
 
@@ -356,8 +398,34 @@ else
 
     private List<AttentionItem> _attention = new();
 
+    private IReadOnlySet<string> _permissions = new HashSet<string>();
+    private HomeFocus _focus = HomeFocus.None;
+
+    private bool _can(string permission) => _permissions.Contains(permission);
+
+    /// <summary>
+    /// Practice-wide money is shown to those who may run financial reports, not
+    /// to everyone who may raise an invoice.
+    /// </summary>
+    private bool ShowFinancialPanels => _can(Permissions.ReportsFinancial);
+
+    private string Subtitle =>
+        $"{Clock.LocalNow:dddd d MMMM yyyy} · {HomeFocusResolver.Purpose(_focus)}";
+
+    private string ClinicalHeading => _focus switch
+    {
+        HomeFocus.Surgeon => "My operating list today",
+        HomeFocus.Hygiene => "My hygiene list today",
+        _ => "My list today"
+    };
+
     protected override async Task OnInitializedAsync()
     {
+        _permissions = await Guard.CurrentAsync();
+        _focus = HomeFocusResolver.Resolve(CurrentUser.Roles);
+
+        if (_focus == HomeFocus.None) return;
+
         _dashboard = await Reporting.GetDashboardAsync();
         _attention = BuildAttentionItems();
 
@@ -366,27 +434,131 @@ else
         var dayStart = Clock.Today.ToDateTime(TimeOnly.MinValue);
         var dayEnd = dayStart.AddDays(1);
 
-        _todaysAppointments = await db.Appointments.AsNoTracking()
-            .Include(a => a.Patient)
-            .Include(a => a.Provider)
-            .Where(a => a.StartUtc >= dayStart && a.StartUtc < dayEnd)
-            .OrderBy(a => a.StartUtc)
-            .ToListAsync();
+        if (_can(Permissions.AppointmentsView))
+        {
+            _todaysAppointments = await db.Appointments.AsNoTracking()
+                .Include(a => a.Patient)
+                .Include(a => a.Provider)
+                .Where(a => a.StartUtc >= dayStart && a.StartUtc < dayEnd)
+                .OrderBy(a => a.StartUtc)
+                .ToListAsync();
+        }
 
-        _tasks = await db.WorkTasks.AsNoTracking()
-            .Include(t => t.AssignedToStaff)
-            .Where(t => !t.IsCompleted)
-            .OrderBy(t => t.Priority).ThenBy(t => t.DueDate)
-            .Take(7)
-            .ToListAsync();
+        if (_can(Permissions.TasksView))
+        {
+            _tasks = await db.WorkTasks.AsNoTracking()
+                .Include(t => t.AssignedToStaff)
+                .Where(t => !t.IsCompleted)
+                .OrderBy(t => t.Priority).ThenBy(t => t.DueDate)
+                .Take(7)
+                .ToListAsync();
+        }
 
-        _recalls = (await Reporting.GetRecallsDueAsync(Clock.Today))
-            .OrderByDescending(r => r.DaysOverdue)
-            .Take(8)
-            .ToList();
+        if (_can(Permissions.RecallsView))
+        {
+            _recalls = (await Reporting.GetRecallsDueAsync(Clock.Today))
+                .OrderByDescending(r => r.DaysOverdue)
+                .Take(8)
+                .ToList();
+        }
     }
 
     private void OpenPatient(Guid patientId) => Navigation.NavigateTo($"/patients/{patientId}");
+
+    /// <summary>
+    /// The tiles this role leads with, in the order they should be read, and
+    /// only those the permission set allows.
+    /// </summary>
+    private IEnumerable<Tile> Tiles()
+    {
+        if (_dashboard is null) yield break;
+        var d = _dashboard;
+
+        // Clinical roles lead with the chair; the office leads with the day's
+        // shape; management leads with the money.
+        if (_can(Permissions.AppointmentsView))
+        {
+            yield return new Tile("Appointments today", d.AppointmentsToday.ToString(), "calendar", "primary",
+                $"{d.PatientsSeenToday} seen · {d.WaitingNow} waiting · {d.InTreatmentNow} in treatment");
+        }
+
+        if (_focus == HomeFocus.FrontDesk && _can(Permissions.AppointmentsView))
+        {
+            yield return new Tile("Unconfirmed tomorrow", d.UnconfirmedTomorrow.ToString(), "phone",
+                d.UnconfirmedTomorrow > 0 ? "warning" : "success",
+                d.UnconfirmedTomorrow > 0 ? "Call before the end of today" : "Tomorrow is fully confirmed");
+        }
+
+        if (_can(Permissions.ReportsFinancial))
+        {
+            yield return new Tile("Production this month", Ui.Money(d.ProductionMonthToDate), "trending-up", "success",
+                $"{Ui.Money(d.ProductionToday)} today");
+
+            yield return new Tile("Collections this month", Ui.Money(d.CollectionsMonthToDate), "credit-card", "accent",
+                CollectionRateCaption());
+
+            yield return new Tile("Outstanding", Ui.Money(d.OutstandingReceivables), "receipt", "warning",
+                $"{Ui.Money(d.InsurancePending)} pending with insurers");
+        }
+        else if (_can(Permissions.BillingView) && _focus == HomeFocus.FrontDesk)
+        {
+            // Reception needs the debt they will be asked about at the desk,
+            // without the practice's revenue position.
+            yield return new Tile("Outstanding balances", Ui.Money(d.OutstandingReceivables), "receipt", "warning",
+                "Across all active patients");
+        }
+
+        if (_can(Permissions.ReportsView) && _focus is HomeFocus.Management or HomeFocus.Administration)
+        {
+            yield return new Tile("Chair utilisation", $"{d.ChairUtilisationPercent:0.#}%", "clock", "purple",
+                "Average across rostered providers");
+        }
+
+        if (_can(Permissions.RecallsView))
+        {
+            yield return new Tile("Recalls overdue", d.RecallsOverdue.ToString(), "bell",
+                d.RecallsOverdue > 0 ? "danger" : "success",
+                $"{d.RecallsDue} due in total");
+        }
+
+        if (_can(Permissions.TreatmentPlansView))
+        {
+            yield return new Tile("Plans awaiting decision", d.TreatmentPlansAwaitingDecision.ToString(), "clipboard",
+                d.TreatmentPlansAwaitingDecision > 0 ? "warning" : "success",
+                $"{d.TreatmentAcceptanceRate:0.#}% accepted overall");
+        }
+
+        if (_focus == HomeFocus.Administration && _can(Permissions.UsersView))
+        {
+            yield return new Tile("Active patients", d.ActivePatients.ToString(), "users", "primary",
+                $"{d.NewPatientsThisMonth} registered this month");
+        }
+    }
+
+    private record Tile(string Label, string Value, string Icon, string Accent, string Caption);
+
+    /// <summary>
+    /// Whether the signed-in user may be shown an alert produced by the
+    /// reporting service. The service builds the full set; this decides which
+    /// of them are this user's business.
+    /// </summary>
+    private bool CanSeeAlert(AlertRow alert)
+    {
+        var link = alert.Link ?? string.Empty;
+
+        return link switch
+        {
+            var l when l.StartsWith("/inventory") => _can(Permissions.InventoryView),
+            var l when l.StartsWith("/sterilisation") => _can(Permissions.SterilizationView),
+            var l when l.StartsWith("/lab-cases") => _can(Permissions.LaboratoryView),
+            var l when l.StartsWith("/billing") => _can(Permissions.BillingView),
+            var l when l.StartsWith("/schedule") => _can(Permissions.AppointmentsView),
+            var l when l.StartsWith("/recalls") => _can(Permissions.RecallsView),
+            var l when l.StartsWith("/treatment-plans") => _can(Permissions.TreatmentPlansView),
+            var l when l.StartsWith("/tasks") => _can(Permissions.TasksView),
+            _ => true
+        };
+    }
 
     /// <summary>
     /// Collections measured against production billed in the same month.
@@ -409,14 +581,15 @@ else
     }
 
     /// <summary>
-    /// One outstanding operational item. <paramref name="Singular"/> and
-    /// <paramref name="Plural"/> are both carried because these counts are
-    /// frequently one, and "1 lab cases overdue" undermines confidence in every
-    /// other number on the page.
+    /// One outstanding operational item. <c>Singular</c> and <c>Plural</c> are
+    /// both carried because these counts are frequently one, and "1 lab cases
+    /// overdue" undermines confidence in every other number on the page.
+    /// <c>Permission</c> is what keeps an exception off the screen of someone
+    /// who cannot open the page that resolves it.
     /// </summary>
     private record AttentionItem(
         int Count, string Singular, string Plural, string Severity,
-        string Icon, string Link, string Description)
+        string Icon, string Link, string Description, string Permission)
     {
         public string Label => Count == 1 ? Singular : Plural;
     }
@@ -438,7 +611,8 @@ else
             items.Add(new(_dashboard.SterilisationFailures,
                 "failed steriliser cycle", "failed steriliser cycles", "danger",
                 "alert-triangle", "/sterilisation",
-                "Every set in a failed load must be reprocessed, and instruments already used must be traced."));
+                "Every set in a failed load must be reprocessed, and instruments already used must be traced.",
+                Permissions.SterilizationView));
         }
 
         if (_dashboard.LabCasesOverdue > 0)
@@ -446,42 +620,48 @@ else
             items.Add(new(_dashboard.LabCasesOverdue,
                 "lab case overdue", "lab cases overdue", "danger",
                 "package", "/lab-cases",
-                "Past the due date. The appointment they were ordered for may need moving."));
+                "Past the due date. The appointment they were ordered for may need moving.",
+                Permissions.LaboratoryView));
         }
 
         if (_dashboard.LabCasesDue > 0)
         {
             items.Add(new(_dashboard.LabCasesDue,
                 "lab case due", "lab cases due", "warning",
-                "package", "/lab-cases", "Due back shortly."));
+                "package", "/lab-cases", "Due back shortly.",
+                Permissions.LaboratoryView));
         }
 
         if (_dashboard.LowStockItems > 0)
         {
             items.Add(new(_dashboard.LowStockItems,
                 "item below reorder level", "items below reorder level", "warning",
-                "truck", "/inventory", "At or under the reorder level."));
+                "truck", "/inventory", "At or under the reorder level.",
+                Permissions.InventoryView));
         }
 
         if (_dashboard.ExpiringStockItems > 0)
         {
             items.Add(new(_dashboard.ExpiringStockItems,
                 "lot expiring", "lots expiring", "warning",
-                "clock", "/inventory", "Expiring within 90 days."));
+                "clock", "/inventory", "Expiring within 90 days.",
+                Permissions.InventoryView));
         }
 
         if (_dashboard.NoShowsThisMonth > 0)
         {
             items.Add(new(_dashboard.NoShowsThisMonth,
                 "no-show this month", "no-shows this month", "neutral",
-                "user", "/schedule", "Failed appointments so far this month."));
+                "user", "/schedule", "Failed appointments so far this month.",
+                Permissions.AppointmentsView));
         }
 
         if (_dashboard.OpenTasks > 0)
         {
             items.Add(new(_dashboard.OpenTasks,
                 "open task", "open tasks", "neutral",
-                "list-checks", "/tasks", "Assigned and not yet completed."));
+                "list-checks", "/tasks", "Assigned and not yet completed.",
+                Permissions.TasksView));
         }
 
         return items;

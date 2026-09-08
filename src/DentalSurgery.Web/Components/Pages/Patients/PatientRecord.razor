@@ -1,9 +1,10 @@
 @page "/patients/{PatientId:guid}"
 @page "/patients/{PatientId:guid}/{Tab}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = Permissions.PatientsView)]
 @inject PatientService Patients
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject IPermissionGuard Guard
 
 <PageTitle>@(_summary?.Patient.Name.Display ?? "Patient") - Meridian Dental Surgery</PageTitle>
 
@@ -57,10 +58,12 @@ else
         </div>
     }
 
-    <div class="tabs-ds no-print">
-        @foreach (var tab in Tabs)
+    <div class="tabs-ds no-print" role="tablist" aria-label="Patient record sections">
+        @foreach (var tab in VisibleTabs)
         {
-            <button class="tab-ds @(CurrentTab == tab.Key ? "active" : "")" @onclick="() => Go(tab.Key)">
+            <button class="tab-ds @(CurrentTab == tab.Key ? "active" : "")" role="tab"
+                    aria-selected="@(CurrentTab == tab.Key ? "true" : "false")"
+                    @onclick="() => Go(tab.Key)">
                 @tab.Label
                 @if (tab.Count(_summary) is { } count and > 0)
                 {
@@ -70,6 +73,22 @@ else
         }
     </div>
 
+    @if (!CanOpen(CurrentTab))
+    {
+        @*
+            Reached by typing the URL, following a stale link or using the back
+            button after a permission change. The tab strip would not have
+            offered it, but the strip is not the control — this is.
+        *@
+        <div class="card-ds">
+            <EmptyState IconName="shield" Title="You cannot open this section"
+                        Message="Your role does not include access to this part of the patient record. The rest of the record is still available to you.">
+                <button class="btn btn-sm btn-primary" @@onclick="@(() => Go("overview"))">Back to the overview</button>
+            </EmptyState>
+        </div>
+    }
+    else
+    {
     @switch (CurrentTab)
     {
         case "overview":
@@ -115,6 +134,7 @@ else
             <PatientOverviewTab Summary="_summary" />
             break;
     }
+    }
 }
 
 @code {
@@ -127,24 +147,50 @@ else
 
     private string CurrentTab => string.IsNullOrWhiteSpace(Tab) ? "overview" : Tab.ToLowerInvariant();
 
-    private record TabDefinition(string Key, string Label, Func<PatientSummary, int?> Count);
+    private record TabDefinition(string Key, string Label, string Permission, Func<PatientSummary, int?> Count);
 
+    /// <summary>
+    /// Every section of the record, with the permission that opens it.
+    /// <para>
+    /// The separation the practice actually needs lives in this table: reception
+    /// can reach a patient and still not open the clinical notes, the medical
+    /// history or the periodontal record, because none of those are covered by
+    /// Patients.View.
+    /// </para>
+    /// </summary>
     private static readonly TabDefinition[] Tabs =
     {
-        new("overview", "Overview", _ => null),
-        new("medical", "Medical history", _ => null),
-        new("chart", "Dental chart", _ => null),
-        new("perio", "Periodontal", _ => null),
-        new("plans", "Treatment plans", s => s.OpenTreatmentItems == 0 ? null : s.OpenTreatmentItems),
-        new("appointments", "Appointments", _ => null),
-        new("treatment", "Procedures", s => s.ProcedureCount == 0 ? null : s.ProcedureCount),
-        new("notes", "Clinical notes", _ => null),
-        new("prescriptions", "Prescriptions", _ => null),
-        new("documents", "Documents", s => s.DocumentCount + s.RadiographCount == 0 ? null : s.DocumentCount + s.RadiographCount),
-        new("account", "Account", _ => null),
-        new("insurance", "Insurance", _ => null),
-        new("communications", "Communications", _ => null)
+        new("overview", "Overview", Permissions.PatientsView, _ => null),
+        new("medical", "Medical history", Permissions.MedicalHistoryView, _ => null),
+        new("chart", "Dental chart", Permissions.DentalChartView, _ => null),
+        new("perio", "Periodontal", Permissions.PeriodontalView, _ => null),
+        new("plans", "Treatment plans", Permissions.TreatmentPlansView, s => s.OpenTreatmentItems == 0 ? null : s.OpenTreatmentItems),
+        new("appointments", "Appointments", Permissions.AppointmentsView, _ => null),
+        new("treatment", "Procedures", Permissions.ProceduresView, s => s.ProcedureCount == 0 ? null : s.ProcedureCount),
+        new("notes", "Clinical notes", Permissions.ClinicalRecordsView, _ => null),
+        new("prescriptions", "Prescriptions", Permissions.PrescriptionsView, _ => null),
+        new("documents", "Documents", Permissions.DocumentsView, s => s.DocumentCount + s.RadiographCount == 0 ? null : s.DocumentCount + s.RadiographCount),
+        new("account", "Account", Permissions.BillingView, _ => null),
+        new("insurance", "Insurance", Permissions.InsuranceView, _ => null),
+        new("communications", "Communications", Permissions.CommunicationsView, _ => null)
     };
+
+    private IReadOnlySet<string> _permissions = new HashSet<string>();
+
+    private IEnumerable<TabDefinition> VisibleTabs =>
+        Tabs.Where(t => _permissions.Contains(t.Permission));
+
+    private bool CanOpen(string tabKey)
+    {
+        var tab = Tabs.FirstOrDefault(t => t.Key == tabKey);
+
+        // An unrecognised key falls through to the overview, which every user
+        // holding Patients.View may see.
+        return tab is null || _permissions.Contains(tab.Permission);
+    }
+
+    protected override async Task OnInitializedAsync() =>
+        _permissions = await Guard.CurrentAsync();
 
     protected override async Task OnParametersSetAsync()
     {

@@ -131,10 +131,24 @@ public static class ProductionHardening
     /// it spreads across.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Whether request throttling is switched on.
+    /// <para>
+    /// Read in two places — where the services are registered and where the
+    /// middleware is added — and it has to be the same answer in both. When it
+    /// was only consulted at registration, turning throttling off left
+    /// <c>UseRateLimiter</c> in the pipeline with nothing behind it and the
+    /// application refused to start at all. A switch that stops the system
+    /// booting is worse than the behaviour it was meant to disable.
+    /// </para>
+    /// </summary>
+    public static bool RateLimitingEnabled(this IConfiguration configuration) =>
+        configuration.GetValue("RateLimiting:Enabled", true);
+
     public static IServiceCollection AddRequestThrottling(
         this IServiceCollection services, IConfiguration configuration)
     {
-        if (!configuration.GetValue("RateLimiting:Enabled", true)) return services;
+        if (!configuration.RateLimitingEnabled()) return services;
 
         var signInPerMinute = configuration.GetValue("RateLimiting:SignInPermitPerMinute", 10);
         var apiPerMinute = configuration.GetValue("RateLimiting:ApiPermitPerMinute", 300);
@@ -216,9 +230,7 @@ public static class ProductionHardening
         "/Account/ForgotPassword",
         "/Account/ResetPassword",
         "/Account/LoginWith2fa",
-        "/Account/LoginWithRecoveryCode",
-        "/Account/Register",
-        "/Account/ResendEmailConfirmation"
+        "/Account/LoginWithRecoveryCode"
     ];
 
     /// <summary>

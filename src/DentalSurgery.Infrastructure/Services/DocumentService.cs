@@ -49,7 +49,8 @@ public class DocumentService(
     IFileStorage storage,
     ICurrentUser currentUser,
     IDateTimeProvider clock,
-    ILogger<DocumentService> logger)
+    ILogger<DocumentService> logger,
+    IPermissionGuard guard)
 {
     public const long MaxUploadBytes = 40 * 1024 * 1024;
 
@@ -71,6 +72,7 @@ public class DocumentService(
 
     public async Task<Result<PatientDocument>> UploadAsync(UploadRequest request, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DocumentsUpload, ct);
         if (request.Length <= 0)
             return Result<PatientDocument>.Failure("The file is empty.");
 
@@ -146,6 +148,7 @@ public class DocumentService(
     public async Task<Result<RadiographRecord>> UploadRadiographAsync(
         UploadRequest upload, RadiographUploadRequest details, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.ImagingCreate, ct);
         var stored = await UploadAsync(upload with { DocumentType = DocumentType.Radiograph }, ct);
         if (stored.Failed) return Result<RadiographRecord>.Failure(stored.Errors);
 
@@ -182,16 +185,51 @@ public class DocumentService(
         return Result<RadiographRecord>.Success(record);
     }
 
-    /// <summary>Opens a stored document for streaming, or null when it is missing.</summary>
+    /// <summary>
+    /// Opens a document belonging to a named patient, or null when there is no
+    /// such document on that patient.
+    /// <para>
+    /// The patient is a parameter rather than something read from the document,
+    /// so the caller has to say whose record it believes it is opening and the
+    /// two have to agree. That is what stops a guessed or copied document
+    /// identifier from yielding a different patient's file: the identifier
+    /// alone is not enough, and a mismatch is refused and recorded rather than
+    /// quietly served.
+    /// </para>
+    /// </summary>
     public async Task<(Stream Content, string ContentType, string FileName)?> OpenAsync(
-        Guid documentId, CancellationToken ct = default)
+        Guid patientId, Guid documentId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DocumentsView, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var document = await db.PatientDocuments.AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == documentId, ct);
 
         if (document is null) return null;
+
+        if (document.PatientId != patientId)
+        {
+            // Logged as a security event. A legitimate interface never produces
+            // this: it means an identifier arrived from somewhere other than the
+            // patient's own record.
+            logger.LogWarning(
+                "Refused document {DocumentId}: requested under patient {RequestedPatientId} " +
+                "but it belongs to {OwningPatientId}. Requested by {User}.",
+                documentId, patientId, document.PatientId, currentUser.UserName ?? "(unknown)");
+
+            // Answered as "not found" rather than "forbidden", so the response
+            // does not confirm that the identifier exists on some other patient.
+            return null;
+        }
+
+        // Every read of a patient document is recorded, not just every change.
+        // Who looked at what is the question an information-governance review
+        // actually asks, and it cannot be answered retrospectively.
+        logger.LogInformation(
+            "Document {DocumentId} for patient {PatientId} opened by {User}.",
+            documentId, document.PatientId, currentUser.UserName ?? "(unknown)");
 
         var stream = await storage.OpenAsync(document.StoragePath, ct);
         if (stream is null)
@@ -208,12 +246,24 @@ public class DocumentService(
     /// Removes a document. The record is soft-deleted so the audit trail keeps
     /// the fact it existed; the file itself is removed to honour erasure requests.
     /// </summary>
-    public async Task<Result> DeleteAsync(Guid documentId, string reason, CancellationToken ct = default)
+    public async Task<Result> DeleteAsync(
+        Guid patientId, Guid documentId, string reason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DocumentsDelete, ct);
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var document = await db.PatientDocuments.FirstOrDefaultAsync(d => d.Id == documentId, ct);
         if (document is null) return Result.Failure("Document not found.");
+
+        if (document.PatientId != patientId)
+        {
+            logger.LogWarning(
+                "Refused deletion of document {DocumentId}: requested under patient {RequestedPatientId} " +
+                "but it belongs to {OwningPatientId}. Requested by {User}.",
+                documentId, patientId, document.PatientId, currentUser.UserName ?? "(unknown)");
+
+            return Result.Failure("Document not found.");
+        }
 
         var linkedRadiograph = await db.RadiographRecords
             .AnyAsync(r => r.DocumentId == documentId, ct);
@@ -237,6 +287,7 @@ public class DocumentService(
 
     public async Task<List<PatientDocument>> ListAsync(Guid patientId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.DocumentsView, ct);
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         return await db.PatientDocuments.AsNoTracking()

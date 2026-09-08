@@ -15,6 +15,7 @@ COPY src/DentalSurgery.Migrations.SqlServer/*.csproj    src/DentalSurgery.Migrat
 COPY src/DentalSurgery.Migrations.Sqlite/*.csproj       src/DentalSurgery.Migrations.Sqlite/
 COPY src/DentalSurgery.Web/*.csproj                     src/DentalSurgery.Web/
 COPY tests/DentalSurgery.Tests/*.csproj                 tests/DentalSurgery.Tests/
+COPY tests/DentalSurgery.IntegrationTests/*.csproj      tests/DentalSurgery.IntegrationTests/
 RUN dotnet restore DentalSurgery.sln
 
 COPY . .

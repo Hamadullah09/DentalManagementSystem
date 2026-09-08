@@ -8,7 +8,7 @@ namespace DentalSurgery.Web.Api;
 /// <summary>Management reporting endpoints.</summary>
 [ApiController]
 [Route("api/reports")]
-[Authorize(Policy = Policies.CanViewReports)]
+[Authorize(Policy = Permissions.ReportsView)]
 [Produces("application/json")]
 public class ReportsController(ReportingService reporting, IDateTimeProvider clock) : ControllerBase
 {
@@ -22,6 +22,7 @@ public class ReportsController(ReportingService reporting, IDateTimeProvider clo
 
     /// <summary>Production, collections and receivables for a period.</summary>
     [HttpGet("financial")]
+    [Authorize(Policy = Permissions.ReportsFinancial)]
     public async Task<IActionResult> Financial(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
@@ -55,6 +56,7 @@ public class ReportsController(ReportingService reporting, IDateTimeProvider clo
 
     /// <summary>Accounts receivable, aged by invoice due date.</summary>
     [HttpGet("receivables")]
+    [Authorize(Policy = Permissions.ReportsFinancial)]
     public async Task<IActionResult> Receivables(CancellationToken ct)
     {
         var aging = await reporting.GetAgingAsync(ct);

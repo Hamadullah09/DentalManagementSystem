@@ -1,5 +1,5 @@
 @page "/billing/receivables"
-@attribute [Authorize(Policy = Policies.CanManageBilling)]
+@attribute [Authorize(Policy = Permissions.BillingView)]
 @inject ReportingService Reporting
 @inject IJSRuntime JS
 

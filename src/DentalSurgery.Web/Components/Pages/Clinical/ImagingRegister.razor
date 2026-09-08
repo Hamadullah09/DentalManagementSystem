@@ -1,5 +1,5 @@
 @page "/radiographs"
-@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@attribute [Authorize(Policy = Permissions.ImagingView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 

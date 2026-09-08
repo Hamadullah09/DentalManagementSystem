@@ -1,5 +1,5 @@
 @page "/reports"
-@attribute [Authorize(Policy = Policies.CanViewReports)]
+@attribute [Authorize(Policy = Permissions.ReportsView)]
 @inject ReportingService Reporting
 @inject IDateTimeProvider Clock
 @inject IJSRuntime JS

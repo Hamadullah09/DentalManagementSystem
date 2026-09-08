@@ -9,12 +9,12 @@ namespace DentalSurgery.Web.Api;
 /// <summary>Upload, download and removal of patient documents and images.</summary>
 [ApiController]
 [Route("api")]
-[Authorize]
+[Authorize(Policy = Permissions.DocumentsView)]
 public class DocumentsController(DocumentService documents, ILogger<DocumentsController> logger) : ControllerBase
 {
     /// <summary>Lists the documents held for a patient.</summary>
     [HttpGet("patients/{patientId:guid}/documents")]
-    [Authorize(Policy = Policies.CanViewClinical)]
+    [Authorize(Policy = Permissions.DocumentsView)]
     public async Task<IActionResult> List(Guid patientId, CancellationToken ct)
     {
         var files = await documents.ListAsync(patientId, ct);
@@ -37,7 +37,7 @@ public class DocumentsController(DocumentService documents, ILogger<DocumentsCon
 
     /// <summary>Attaches a file to the patient record.</summary>
     [HttpPost("patients/{patientId:guid}/documents")]
-    [Authorize(Policy = Policies.CanEditClinical)]
+    [Authorize(Policy = Permissions.DocumentsUpload)]
     [RequestSizeLimit(DocumentService.MaxUploadBytes + 1024 * 1024)]
     public async Task<IActionResult> Upload(
         Guid patientId,
@@ -70,7 +70,7 @@ public class DocumentsController(DocumentService documents, ILogger<DocumentsCon
 
     /// <summary>Attaches an image and records the radiographic exposure.</summary>
     [HttpPost("patients/{patientId:guid}/radiographs")]
-    [Authorize(Policy = Policies.CanEditClinical)]
+    [Authorize(Policy = Permissions.ImagingCreate)]
     [RequestSizeLimit(DocumentService.MaxUploadBytes + 1024 * 1024)]
     public async Task<IActionResult> UploadRadiograph(
         Guid patientId,
@@ -111,12 +111,21 @@ public class DocumentsController(DocumentService documents, ILogger<DocumentsCon
         return Ok(new { result.Value!.Id, result.Value.DocumentId, Type = radiographType.ToString() });
     }
 
-    /// <summary>Streams a stored document. Images and PDFs display inline.</summary>
-    [HttpGet("documents/{documentId:guid}")]
-    [Authorize(Policy = Policies.CanViewClinical)]
-    public async Task<IActionResult> Download(Guid documentId, [FromQuery] bool download = false, CancellationToken ct = default)
+    /// <summary>
+    /// Streams a stored document. Images and PDFs display inline.
+    /// <para>
+    /// Addressed under the patient rather than by document identifier alone.
+    /// A link carrying only the document id would open whatever that id names,
+    /// whoever it belongs to; this route makes the caller state the patient, and
+    /// the service refuses the pair if they do not match.
+    /// </para>
+    /// </summary>
+    [HttpGet("patients/{patientId:guid}/documents/{documentId:guid}")]
+    [Authorize(Policy = Permissions.DocumentsView)]
+    public async Task<IActionResult> Download(
+        Guid patientId, Guid documentId, [FromQuery] bool download = false, CancellationToken ct = default)
     {
-        var file = await documents.OpenAsync(documentId, ct);
+        var file = await documents.OpenAsync(patientId, documentId, ct);
         if (file is null)
             return NotFound(new ProblemDetails { Title = "Document not found.", Status = 404 });
 
@@ -128,12 +137,13 @@ public class DocumentsController(DocumentService documents, ILogger<DocumentsCon
             : File(content, contentType);
     }
 
-    [HttpDelete("documents/{documentId:guid}")]
-    [Authorize(Policy = Policies.CanEditClinical)]
-    public async Task<IActionResult> Delete(Guid documentId, [FromQuery] string reason = "Removed by staff",
+    [HttpDelete("patients/{patientId:guid}/documents/{documentId:guid}")]
+    [Authorize(Policy = Permissions.DocumentsDelete)]
+    public async Task<IActionResult> Delete(
+        Guid patientId, Guid documentId, [FromQuery] string reason = "Removed by staff",
         CancellationToken ct = default)
     {
-        var result = await documents.DeleteAsync(documentId, reason, ct);
+        var result = await documents.DeleteAsync(patientId, documentId, reason, ct);
 
         return result.Succeeded
             ? NoContent()

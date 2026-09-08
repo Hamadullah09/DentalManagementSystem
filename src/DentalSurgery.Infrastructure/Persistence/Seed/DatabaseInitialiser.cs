@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Claims;
 
 namespace DentalSurgery.Infrastructure.Persistence.Seed;
 
@@ -47,6 +48,7 @@ public class DatabaseInitialiser(
         var demo = ResolveDemoDataMode();
 
         await PrepareSchemaAsync(ct);
+        await LoadKnownPermissionsAsync(ct);
         await SeedRolesAsync(ct);
         await SeedReferenceDataAsync(ct);
         await SeedAdministratorAsync(ct);
@@ -142,6 +144,7 @@ public class DatabaseInitialiser(
             [Roles.Administrator] = "Unrestricted access, including system configuration and user management.",
             [Roles.PracticeManager] = "Operational management, reporting and staff administration.",
             [Roles.Dentist] = "Full clinical access including charting, prescribing and treatment planning.",
+            [Roles.OralSurgeon] = "Clinical access plus surgical records, anaesthesia and the implant registry.",
             [Roles.Hygienist] = "Charting, periodontal assessment and hygiene treatment.",
             [Roles.Nurse] = "Chairside support, stock and sterilisation records.",
             [Roles.Receptionist] = "Appointments, patient registration and payments.",
@@ -166,7 +169,105 @@ public class DatabaseInitialiser(
                 logger.LogError("Could not create role {Role}: {Errors}", name,
                     string.Join("; ", result.Errors.Select(e => e.Description)));
         }
+
+        await SeedRolePermissionsAsync(ct);
     }
+
+    /// <summary>
+    /// Writes the default permission grant for each role.
+    /// <para>
+    /// Grants are stored as role claims so an administrator can change them at
+    /// runtime. That makes this an initialiser, not a synchroniser: a role that
+    /// already has grants is left exactly as configured, because overwriting it
+    /// on every start would silently undo deliberate local policy. The one thing
+    /// that is reconciled is a permission this build has introduced and no role
+    /// yet mentions — without that, a new capability would ship with nobody,
+    /// including the administrator, able to use it.
+    /// </para>
+    /// </summary>
+    private async Task SeedRolePermissionsAsync(CancellationToken ct)
+    {
+        var granted = 0;
+
+        foreach (var name in Roles.All)
+        {
+            var role = await roleManager.FindByNameAsync(name);
+            if (role is null) continue;
+
+            var existing = (await roleManager.GetClaimsAsync(role))
+                .Where(c => c.Type == PermissionCatalogue.ClaimType)
+                .Select(c => c.Value)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var defaults = RolePermissions.For(name);
+
+            // Never configured: lay down the whole default grant.
+            // Already configured: only add permissions that did not exist when
+            // it was configured, so local edits survive an upgrade.
+            var wanted = existing.Count == 0
+                ? defaults
+                : defaults.Where(p => !KnownPermissions.Contains(p)).ToArray();
+
+            foreach (var permission in wanted.Where(p => !existing.Contains(p)))
+            {
+                var result = await roleManager.AddClaimAsync(
+                    role, new Claim(PermissionCatalogue.ClaimType, permission));
+
+                if (result.Succeeded) granted++;
+                else
+                    logger.LogError("Could not grant {Permission} to {Role}: {Errors}",
+                        permission, name, string.Join("; ", result.Errors.Select(e => e.Description)));
+            }
+        }
+
+        // Record what this build knows about, so the next start can tell a
+        // brand-new permission from one an administrator deliberately revoked.
+        await RecordKnownPermissionsAsync(ct);
+
+        if (granted > 0) logger.LogInformation("Applied {Count} role permission grant(s).", granted);
+    }
+
+    private HashSet<string> KnownPermissions { get; set; } = new(StringComparer.Ordinal);
+
+    private async Task LoadKnownPermissionsAsync(CancellationToken ct)
+    {
+        var record = await db.AppSettings
+            .FirstOrDefaultAsync(s => s.Key == KnownPermissionsSetting, ct);
+
+        KnownPermissions = string.IsNullOrWhiteSpace(record?.Value)
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : record.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private async Task RecordKnownPermissionsAsync(CancellationToken ct)
+    {
+        var value = string.Join(',', Permissions.All);
+
+        var record = await db.AppSettings
+            .FirstOrDefaultAsync(s => s.Key == KnownPermissionsSetting, ct);
+
+        if (record is null)
+        {
+            db.AppSettings.Add(new AppSetting
+            {
+                Key = KnownPermissionsSetting,
+                Value = value,
+                Category = "Security",
+                Description = "Permissions defined by the deployed build. Maintained automatically.",
+                IsSystem = true
+            });
+        }
+        else
+        {
+            record.Value = value;
+        }
+
+        await db.SaveChangesAsync(ct);
+        KnownPermissions = Permissions.All.ToHashSet(StringComparer.Ordinal);
+    }
+
+    private const string KnownPermissionsSetting = "Security.KnownPermissions";
 
     // ------------------------------------------------------------------ reference data
 
@@ -472,7 +573,7 @@ public class DatabaseInitialiser(
             ("S-0001", "Dr", "Amara", "Okonkwo", StaffRole.Dentist, "General and restorative dentistry",
                 true, true, true, false, "#0d6efd", "a.okonkwo@meridiandental.example", Roles.Dentist, "S1"),
             ("S-0002", "Dr", "Rhys", "Llewellyn", StaffRole.OralSurgeon, "Oral and maxillofacial surgery, implantology",
-                true, true, true, true, "#dc3545", "r.llewellyn@meridiandental.example", Roles.Dentist, "S5"),
+                true, true, true, true, "#dc3545", "r.llewellyn@meridiandental.example", Roles.OralSurgeon, "S5"),
             ("S-0003", "Dr", "Priya", "Raghunathan", StaffRole.Periodontist, "Periodontology and peri-implant care",
                 true, true, true, false, "#6f42c1", "p.raghunathan@meridiandental.example", Roles.Dentist, "S3"),
             ("S-0004", "Dr", "Tomas", "Bergqvist", StaffRole.Endodontist, "Endodontics and microsurgery",
@@ -601,9 +702,7 @@ public class DatabaseInitialiser(
         // password from configuration.
         foreach (var (definition, staff) in definitions.Zip(staffList))
         {
-            var roles = definition.AppRole == Roles.Dentist
-                ? new[] { Roles.Dentist }
-                : new[] { definition.AppRole };
+            var roles = new[] { definition.AppRole };
 
             var user = await EnsureUserAsync(definition.Email, DemoPassword,
                 definition.First, definition.Last, roles, staff.Id, ct);

@@ -1,5 +1,5 @@
 @page "/prescriptions"
-@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@attribute [Authorize(Policy = Permissions.PrescriptionsView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 

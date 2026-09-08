@@ -1,5 +1,5 @@
 @page "/treatment-plans"
-@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@attribute [Authorize(Policy = Permissions.TreatmentPlansView)]
 @inject ReportingService Reporting
 @inject IDateTimeProvider Clock
 @inject IJSRuntime JS

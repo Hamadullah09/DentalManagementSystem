@@ -1,0 +1,161 @@
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@*
+    Contextual help for the page currently open, reached with Ctrl+H or the
+    question mark in the sidebar.
+
+    The content comes from HelpContent, which describes pages that exist. Where
+    a page has no entry the panel says so plainly — a help system that
+    improvises is worse than one that admits a gap, because the reader cannot
+    tell which of the two they are reading.
+*@
+
+@if (_open)
+{
+    <div class="help-backdrop" @onclick="Close"></div>
+
+    <aside class="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <header class="help-head">
+            <div>
+                <div class="help-eyebrow">Help</div>
+                <h2 id="help-title">@(_topic?.Title ?? "This page")</h2>
+            </div>
+            <button class="btn-ghost" @onclick="Close" aria-label="Close help">
+                <Icon Name="x" Size="18" />
+            </button>
+        </header>
+
+        <div class="help-body">
+            @if (_topic is null)
+            {
+                <p class="help-purpose">
+                    There is no written help for this page yet. The sidebar shows where you
+                    are, and every screen names its primary action in the top right.
+                </p>
+            }
+            else
+            {
+                <p class="help-purpose">@_topic.Purpose</p>
+
+                @if (_topic.Fields.Count > 0)
+                {
+                    <section class="help-section">
+                        <h3>What the fields mean</h3>
+                        <ul>
+                            @foreach (var field in _topic.Fields)
+                            {
+                                <li>@field</li>
+                            }
+                        </ul>
+                    </section>
+                }
+
+                @if (_topic.Actions.Count > 0)
+                {
+                    <section class="help-section">
+                        <h3>What you can do here</h3>
+                        <ul>
+                            @foreach (var action in _topic.Actions)
+                            {
+                                <li>@action</li>
+                            }
+                        </ul>
+                    </section>
+                }
+            }
+
+            <section class="help-section">
+                <h3>Keyboard</h3>
+                <dl class="help-keys">
+                    @foreach (var (keys, does) in HelpContent.Global)
+                    {
+                        <dt><kbd>@keys</kbd></dt>
+                        <dd>@does</dd>
+                    }
+                    @if (_topic?.Shortcuts is { Count: > 0 })
+                    {
+                        @foreach (var (keys, does) in _topic.Shortcuts)
+                        {
+                            <dt><kbd>@keys</kbd></dt>
+                            <dd>@does</dd>
+                        }
+                    }
+                </dl>
+            </section>
+
+            <section class="help-section">
+                <h3>Access</h3>
+                <p style="font-size:.85rem; color:var(--ds-text-muted); line-height:1.6; margin:0;">
+                    What you can see and do is set by your role. If something you need for
+                    your work is missing, ask a practice administrator to review your role's
+                    permissions rather than working around it with another account.
+                </p>
+            </section>
+        </div>
+    </aside>
+}
+
+@code {
+    private bool _open;
+    private HelpTopic? _topic;
+    private DotNetObjectReference<HelpPanel>? _self;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _self = DotNetObjectReference.Create(this);
+
+        try
+        {
+            await JS.InvokeVoidAsync("dentalApp.registerHelp", _self);
+        }
+        catch (JSException)
+        {
+            // Scripting unavailable; the panel simply cannot be opened by
+            // keyboard shortcut. Every page still works without it.
+        }
+    }
+
+    /// <summary>Invoked from the Ctrl+H handler and the sidebar button.</summary>
+    [JSInvokable]
+    public async Task Toggle()
+    {
+        _open = !_open;
+
+        if (_open)
+        {
+            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+            _topic = HelpContent.For(path);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task CloseFromJs()
+    {
+        if (!_open) return;
+
+        _open = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Close() => _open = false;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalApp.unregisterHelp");
+        }
+        catch (Exception)
+        {
+            // The circuit is already gone; nothing to unregister.
+        }
+
+        _self?.Dispose();
+    }
+}

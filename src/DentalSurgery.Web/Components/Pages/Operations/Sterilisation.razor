@@ -1,5 +1,5 @@
 @page "/sterilisation"
-@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@attribute [Authorize(Policy = Permissions.SterilizationView)]
 @inject InventoryService Inventory
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock

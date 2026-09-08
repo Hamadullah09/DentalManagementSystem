@@ -1,0 +1,37 @@
+@*
+    A collapsible group in the sidebar.
+
+    The header is a real button with aria-expanded and aria-controls, so the
+    group can be operated and understood from the keyboard and by a screen
+    reader rather than only with a pointer.
+*@
+
+<div class="nav-group">
+    <button type="button"
+            class="nav-group-head @(_open ? "" : "collapsed")"
+            @onclick="Toggle"
+            aria-expanded="@_open.ToString().ToLowerInvariant()"
+            aria-controls="@_id">
+        <span>@Title</span>
+        <Icon Name="chevron-down" Size="13" CssClass="nav-group-chevron" />
+    </button>
+
+    <div id="@_id" class="nav-group-body" hidden="@(!_open)">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Groups start open; a rarely used one can start collapsed.</summary>
+    [Parameter] public bool InitiallyOpen { get; set; } = true;
+
+    private readonly string _id = $"nav-group-{Guid.NewGuid():N}";
+    private bool _open;
+
+    protected override void OnInitialized() => _open = InitiallyOpen;
+
+    private void Toggle() => _open = !_open;
+}

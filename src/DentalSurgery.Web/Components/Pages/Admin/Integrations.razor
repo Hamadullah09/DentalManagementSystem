@@ -1,5 +1,5 @@
 @page "/admin/integrations"
-@attribute [Authorize(Policy = Policies.CanAdminister)]
+@attribute [Authorize(Policy = Permissions.IntegrationsView)]
 @inject IOptions<NotificationOptions> NotificationSettings
 @inject IOptions<ClaimSubmissionOptions> ClaimSettings
 @inject INotificationSender Notifier

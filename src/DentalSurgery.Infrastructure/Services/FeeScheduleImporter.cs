@@ -1,3 +1,4 @@
+using DentalSurgery.Application.Abstractions;
 using DentalSurgery.Application.Common;
 using DentalSurgery.Domain.Entities;
 using DentalSurgery.Infrastructure.Persistence;
@@ -43,12 +44,18 @@ public record FeeImportPreview(
 /// </summary>
 public class FeeScheduleImporter(
     IDbContextFactory<DentalDbContext> dbFactory,
+    IPermissionGuard guard,
     ILogger<FeeScheduleImporter> logger)
 {
     /// <summary>Parses and validates the file without writing anything.</summary>
     public async Task<Result<FeeImportPreview>> PreviewAsync(
         Guid feeScheduleId, string csv, CancellationToken ct = default)
     {
+        // A preview reads the current price list and reports what a file would
+        // change it to, so it discloses the fee schedule and is gated on
+        // reading configuration.
+        await guard.DemandAsync(Permissions.SettingsView, ct);
+
         if (string.IsNullOrWhiteSpace(csv))
             return Result<FeeImportPreview>.Failure("The file is empty.");
 
@@ -166,6 +173,10 @@ public class FeeScheduleImporter(
     public async Task<Result<int>> ApplyAsync(
         Guid feeScheduleId, string csv, CancellationToken ct = default)
     {
+        // Applying it changes what every future treatment plan and invoice
+        // costs, which is a configuration change rather than a billing one.
+        await guard.DemandAsync(Permissions.SettingsEdit, ct);
+
         var preview = await PreviewAsync(feeScheduleId, csv, ct);
         if (preview.Failed) return Result<int>.Failure(preview.Errors);
         if (!preview.Value!.CanApply) return Result<int>.Failure("There are no valid rows to import.");
@@ -226,6 +237,8 @@ public class FeeScheduleImporter(
     /// <summary>Exports the current schedule in the format the importer accepts.</summary>
     public async Task<string> ExportTemplateAsync(Guid feeScheduleId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.SettingsView, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var items = await db.FeeScheduleItems.AsNoTracking()

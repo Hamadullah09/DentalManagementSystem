@@ -9,7 +9,7 @@ namespace DentalSurgery.Web.Api;
 /// <summary>Electronic claim generation and transmission.</summary>
 [ApiController]
 [Route("api/claims")]
-[Authorize(Policy = Policies.CanManageBilling)]
+[Authorize(Policy = Permissions.InsuranceView)]
 [Produces("application/json")]
 public class ClaimSubmissionController(
     ClaimSubmissionService submissions,
@@ -17,6 +17,7 @@ public class ClaimSubmissionController(
 {
     /// <summary>Validates the claim and shows what would be transmitted.</summary>
     [HttpGet("{id:guid}/preview")]
+    [Authorize(Policy = Permissions.InsuranceView)]
     public async Task<IActionResult> Preview(Guid id, CancellationToken ct)
     {
         var result = await submissions.PrepareAsync(id, ct);
@@ -40,6 +41,7 @@ public class ClaimSubmissionController(
 
     /// <summary>Downloads the 837D interchange without transmitting it.</summary>
     [HttpGet("{id:guid}/interchange")]
+    [Authorize(Policy = Permissions.InsuranceView)]
     [Produces("application/edi-x12")]
     public async Task<IActionResult> Interchange(Guid id, CancellationToken ct)
     {
@@ -58,6 +60,7 @@ public class ClaimSubmissionController(
 
     /// <summary>Transmits the claim through the configured gateway.</summary>
     [HttpPost("{id:guid}/submit")]
+    [Authorize(Policy = Permissions.InsuranceSubmitClaim)]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
         var result = await submissions.SubmitAsync(id, ct);
@@ -82,6 +85,7 @@ public class ClaimSubmissionController(
 
     /// <summary>Submits several claims, reporting each outcome separately.</summary>
     [HttpPost("submit-batch")]
+    [Authorize(Policy = Permissions.InsuranceSubmitClaim)]
     public async Task<IActionResult> SubmitBatch([FromBody] Guid[] claimIds, CancellationToken ct)
     {
         if (claimIds.Length == 0)

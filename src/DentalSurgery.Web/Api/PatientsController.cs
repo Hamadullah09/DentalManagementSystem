@@ -1,3 +1,4 @@
+using DentalSurgery.Application.Abstractions;
 using DentalSurgery.Application.Clinical;
 using DentalSurgery.Application.Common;
 using DentalSurgery.Domain.Common;
@@ -12,7 +13,7 @@ namespace DentalSurgery.Web.Api;
 /// <summary>Read and write access to patient records.</summary>
 [ApiController]
 [Route("api/patients")]
-[Authorize]
+[Authorize(Policy = Permissions.PatientsView)]
 [Produces("application/json")]
 public class PatientsController(
     PatientService patients,
@@ -21,6 +22,7 @@ public class PatientsController(
 {
     /// <summary>Searches the patient register.</summary>
     [HttpGet]
+    [Authorize(Policy = Permissions.PatientsView)]
     [ProducesResponseType(typeof(PagedResult<PatientListItem>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<PatientListItem>>> Search(
         [FromQuery] string? search,
@@ -46,6 +48,7 @@ public class PatientsController(
 
     /// <summary>Returns a single patient with the clinical summary shown on the record header.</summary>
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = Permissions.PatientsView)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
@@ -86,6 +89,7 @@ public class PatientsController(
 
     /// <summary>Registers a new patient.</summary>
     [HttpPost]
+    [Authorize(Policy = Permissions.PatientsCreate)]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreatePatientRequest request, CancellationToken ct)
@@ -126,6 +130,7 @@ public class PatientsController(
 
     /// <summary>Returns the patient's odontogram as tooth states.</summary>
     [HttpGet("{id:guid}/chart")]
+    [Authorize(Policy = Permissions.DentalChartView)]
     public async Task<IActionResult> Chart(Guid id, [FromQuery] Dentition dentition = Dentition.Permanent,
         CancellationToken ct = default)
     {
@@ -162,6 +167,7 @@ public class PatientsController(
 
     /// <summary>Returns the patient's ledger, invoices and ageing.</summary>
     [HttpGet("{id:guid}/account")]
+    [Authorize(Policy = Permissions.BillingView)]
     public async Task<IActionResult> Account(Guid id, CancellationToken ct)
     {
         var account = await billing.GetAccountAsync(id, ct);
@@ -191,6 +197,7 @@ public class PatientsController(
 
     /// <summary>Returns the pre-treatment risk assessment.</summary>
     [HttpGet("{id:guid}/risk")]
+    [Authorize(Policy = Permissions.MedicalHistoryView)]
     public async Task<ActionResult<MedicalRiskProfile>> Risk(Guid id, CancellationToken ct)
     {
         var profile = await patients.GetRiskProfileAsync(id, ct);

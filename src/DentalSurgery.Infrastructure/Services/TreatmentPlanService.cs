@@ -29,22 +29,28 @@ public class TreatmentPlanService(
     INumberSequenceService sequences,
     ICurrentUser currentUser,
     IDateTimeProvider clock,
-    ILogger<TreatmentPlanService> logger)
+    ILogger<TreatmentPlanService> logger,
+    IPermissionGuard guard)
 {
     private readonly FeeCalculator _fees = new();
     private readonly InsuranceEstimator _estimator = new();
 
-    public Task<List<TreatmentPlan>> GetForPatientAsync(Guid patientId, CancellationToken ct = default) =>
-        db.TreatmentPlans.AsNoTracking()
+    public async Task<List<TreatmentPlan>> GetForPatientAsync(Guid patientId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.TreatmentPlansView, ct);
+        return await db.TreatmentPlans.AsNoTracking()
             .Include(p => p.Provider)
             .Include(p => p.Phases).ThenInclude(ph => ph.Items).ThenInclude(i => i.ProcedureCode)
             .Include(p => p.Phases).ThenInclude(ph => ph.Items).ThenInclude(i => i.Tooth)
             .Where(p => p.PatientId == patientId)
             .OrderByDescending(p => p.CreatedOn)
             .ToListAsync(ct);
+    }
 
-    public Task<TreatmentPlan?> GetAsync(Guid planId, CancellationToken ct = default) =>
-        db.TreatmentPlans
+    public async Task<TreatmentPlan?> GetAsync(Guid planId, CancellationToken ct = default)
+    {
+        await guard.DemandAsync(Permissions.TreatmentPlansView, ct);
+        return await db.TreatmentPlans
             .Include(p => p.Patient)
             .Include(p => p.Provider)
             .Include(p => p.FeeSchedule)
@@ -54,10 +60,12 @@ public class TreatmentPlanService(
             .Include(p => p.Phases).ThenInclude(ph => ph.Items).ThenInclude(i => i.Tooth)
             .Include(p => p.Phases).ThenInclude(ph => ph.Items).ThenInclude(i => i.Provider)
             .FirstOrDefaultAsync(p => p.Id == planId, ct);
+    }
 
     public async Task<Result<TreatmentPlan>> CreateAsync(
         Guid patientId, string name, Guid? providerId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansCreate, ct);
         var patient = await db.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.Id == patientId, ct);
         if (patient is null) return Result<TreatmentPlan>.Failure("Patient not found.");
 
@@ -104,6 +112,7 @@ public class TreatmentPlanService(
     public async Task<Result<TreatmentPlanItem>> AddItemAsync(
         Guid phaseId, PlanItemRequest request, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansEdit, ct);
         var phase = await db.TreatmentPlanPhases
             .Include(p => p.Items)
             .Include(p => p.TreatmentPlan)
@@ -162,6 +171,7 @@ public class TreatmentPlanService(
 
     public async Task<Result> RemoveItemAsync(Guid itemId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansEdit, ct);
         var item = await db.TreatmentPlanItems
             .Include(i => i.TreatmentPlanPhase)
             .FirstOrDefaultAsync(i => i.Id == itemId, ct);
@@ -180,6 +190,7 @@ public class TreatmentPlanService(
     public async Task<Result> SetItemStatusAsync(
         Guid itemId, TreatmentPlanItemStatus status, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansEdit, ct);
         var item = await db.TreatmentPlanItems
             .Include(i => i.TreatmentPlanPhase)
             .FirstOrDefaultAsync(i => i.Id == itemId, ct);
@@ -197,6 +208,7 @@ public class TreatmentPlanService(
     /// <summary>Marks the plan as presented and starts the acceptance clock.</summary>
     public async Task<Result> PresentAsync(Guid planId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansEdit, ct);
         var plan = await db.TreatmentPlans.Include(p => p.Phases).ThenInclude(ph => ph.Items)
             .FirstOrDefaultAsync(p => p.Id == planId, ct);
 
@@ -217,6 +229,7 @@ public class TreatmentPlanService(
         Guid planId, IReadOnlyDictionary<Guid, bool> itemAcceptance,
         bool consentObtained, string? declineReason, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansApprove, ct);
         var plan = await db.TreatmentPlans
             .Include(p => p.Phases).ThenInclude(ph => ph.Items)
             .FirstOrDefaultAsync(p => p.Id == planId, ct);
@@ -256,6 +269,10 @@ public class TreatmentPlanService(
     }
 
     /// <summary>Recomputes the plan totals from its items.</summary>
+    /// <summary>
+    /// Re-totals a plan after its items change. Internal, and called only from
+    /// the plan operations that have already demanded their own permission.
+    /// </summary>
     public async Task RecalculateAsync(Guid planId, CancellationToken ct = default)
     {
         var plan = await db.TreatmentPlans
@@ -301,6 +318,7 @@ public class TreatmentPlanService(
     /// <summary>Creates a new version of a plan, leaving the original for the record.</summary>
     public async Task<Result<TreatmentPlan>> CreateRevisionAsync(Guid planId, CancellationToken ct = default)
     {
+        await guard.DemandAsync(Permissions.TreatmentPlansEdit, ct);
         var original = await GetAsync(planId, ct);
         if (original is null) return Result<TreatmentPlan>.Failure("Plan not found.");
 

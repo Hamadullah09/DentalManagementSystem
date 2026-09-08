@@ -35,11 +35,25 @@ jobs:
       # stricter bar rather than changing local development.
       - run: dotnet build DentalSurgery.sln -c Release --no-restore -warnaserror
 
-      - name: Test
+      # The unit suite first: it is fast, and a failure here explains an
+      # integration failure that would otherwise look mysterious.
+      - name: Unit and service tests
         run: >
-          dotnet test DentalSurgery.sln -c Release --no-build
-          --logger "trx;LogFileName=results.trx"
+          dotnet test tests/DentalSurgery.Tests -c Release --no-build
+          --logger "trx;LogFileName=unit.trx"
           --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      # The integration suite starts the real application and drives it over
+      # HTTP, so it needs the web project's build output on disk. Debug, because
+      # that is where the fixture looks for the entry point.
+      - name: Build the application for the integration suite
+        run: dotnet build src/DentalSurgery.Web -c Debug --no-restore
+
+      - name: Integration tests
+        run: >
+          dotnet test tests/DentalSurgery.IntegrationTests -c Debug
+          --logger "trx;LogFileName=integration.trx"
           --results-directory ./TestResults
 
       - name: Publish test results

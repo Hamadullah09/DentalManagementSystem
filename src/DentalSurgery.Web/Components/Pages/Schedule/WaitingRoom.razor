@@ -1,5 +1,5 @@
 @page "/waiting-room"
-@attribute [Authorize]
+@attribute [Authorize(Policy = Permissions.WaitingRoomView)]
 @implements IDisposable
 @inject AppointmentService Appointments
 @inject IDateTimeProvider Clock

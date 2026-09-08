@@ -1,6 +1,11 @@
 @page "/patients/new"
 @page "/patients/{PatientId:guid}/edit"
-@attribute [Authorize]
+@*
+    Serves both "new" and "edit". The route only asks for Patients.View; the
+    precise permission depends on which of the two this is, so it is demanded in
+    PatientService.CreateAsync / UpdateAsync where the mode is known for certain.
+*@
+@attribute [Authorize(Policy = Permissions.PatientsView)]
 @inject PatientService Patients
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock

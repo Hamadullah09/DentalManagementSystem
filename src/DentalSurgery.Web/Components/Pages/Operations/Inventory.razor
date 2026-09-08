@@ -1,6 +1,6 @@
 @page "/inventory"
 @page "/inventory/expiring"
-@attribute [Authorize(Policy = Policies.CanManageInventory)]
+@attribute [Authorize(Policy = Permissions.InventoryView)]
 @inject InventoryService Stock
 @inject IDateTimeProvider Clock
 @inject NavigationManager Navigation

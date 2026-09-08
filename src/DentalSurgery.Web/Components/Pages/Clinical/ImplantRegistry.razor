@@ -1,5 +1,5 @@
 @page "/implants"
-@attribute [Authorize(Policy = Policies.CanViewClinical)]
+@attribute [Authorize(Policy = Permissions.ImplantsView)]
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject IDateTimeProvider Clock
 @inject IJSRuntime JS
