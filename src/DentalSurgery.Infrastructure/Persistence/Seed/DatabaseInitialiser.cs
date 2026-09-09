@@ -752,7 +752,7 @@ public class DatabaseInitialiser(
             staffSequence.NextValue = staffList.Count + 1;
 
         await db.SaveChangesAsync(ct);
-        logger.LogInformation("Seeded {Count} staff records with logins.", staffList.Count);
+        logger.LogInformation("Seeded {Count} staff records, none of them with a login.", staffList.Count);
     }
 
     // ------------------------------------------------------------------ administrator
