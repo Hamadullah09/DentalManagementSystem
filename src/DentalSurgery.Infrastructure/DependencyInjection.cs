@@ -243,7 +243,7 @@ public static class DependencyInjection
     {
         options.SignIn.RequireConfirmedAccount = false;
 
-        options.Password.RequiredLength = 10;
+        options.Password.RequiredLength = PasswordPolicy.MinimumLength;
         options.Password.RequireDigit = true;
         options.Password.RequireUppercase = true;
         options.Password.RequireLowercase = true;

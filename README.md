@@ -33,22 +33,38 @@ That brings up SQL Server and the application together on
 <http://localhost:8080>. See [Deployment](#deployment) for what a real
 deployment additionally requires.
 
-**Sign in as** (development only — these accounts exist only when demonstration
-data is seeded, and cannot be created outside Development):
+### Signing in
 
-| Role | Email | Password |
-|---|---|---|
-| Administrator | `admin@dentalsurgery.local` | `Dental#2026!` |
-| Dentist | `a.okonkwo@meridiandental.example` | `Dental#2026!` |
-| Oral surgeon | `r.llewellyn@meridiandental.example` | `Dental#2026!` |
-| Hygienist | `f.kelleher@meridiandental.example` | `Dental#2026!` |
-| Practice manager | `b.nwosu@meridiandental.example` | `Dental#2026!` |
-| Receptionist | `j.barnes@meridiandental.example` | `Dental#2026!` |
+The application ships with **no accounts and no passwords**. There is nothing to
+find in this repository that would open an instance of it, which is the point.
 
-The administrator is required to set its own password at first sign-in, so the
-password above works exactly once for that account; the other logins do not carry
-that flag. There is no self-registration — every other account is created by an
-administrator under **Administration → User accounts**.
+Provision the logins you want through `Seed:Accounts`. In development that means
+user secrets, which live in your own profile and never in the working tree:
+
+```bash
+cd src/DentalSurgery.Web
+dotnet user-secrets set "Seed:Accounts:0:Email"       "you@practice.example"
+dotnet user-secrets set "Seed:Accounts:0:Password"    "<a password of your own>"
+dotnet user-secrets set "Seed:Accounts:0:Role"        "Administrator"
+```
+
+In a deployment the same values come from the environment, one variable per
+field: `Seed__Accounts__0__Email`, `Seed__Accounts__0__Password`, and so on.
+
+| Field | Notes |
+|---|---|
+| `Email` | The sign-in address. Unique within a tenant. |
+| `Password` | Nine characters, mixed case, a digit and a symbol. |
+| `Role` | `Administrator`, `PracticeManager`, `Dentist`, `OralSurgeon`, `Hygienist`, `Nurse`, `Receptionist`, `Accounts` or `ReadOnly`. |
+| `StaffNumber` | Optional. Attaches the login to a seeded staff record, so a clinician signs in to a diary with patients in it rather than an empty screen. `S-0001` is the dentist, `S-0002` the oral surgeon, `S-0005` the hygienist, `S-0009` the practice manager, `S-0010` reception. |
+| `MustChangePassword` | Defaults to true. Leave it on for a password someone else chose. |
+
+Accounts are created once and then left alone, so a password changed in the
+application is never reset back to the configured value on the next restart.
+
+If you configure nothing at all, the first start creates a single administrator
+with a **randomly generated** password, printed once to the log and requiring a
+change at first sign-in.
 
 Each role sees a different home screen, a different navigation set and a
 different set of permissions, so signing in as the receptionist and then as the
@@ -56,10 +72,11 @@ surgeon is the quickest way to see how authorisation is applied. What each role
 may do is shown, and can be changed, under **Administration → Roles and
 permissions**.
 
-Demonstration data is off by default and is ignored outside Development unless
-`Seed:AllowDemoDataOutsideDevelopment` is also set, because these logins share a
-password published in this file. Without it you get the reference catalogues and
-a single administrator.
+Demonstration data — the practice, its staff, and 46 fabricated patients with
+full histories — is off by default and ignored outside Development unless
+`Seed:AllowDemoDataOutsideDevelopment` is also set. The demonstration staff are
+clinical data only: they are the providers on appointments and the authors of
+notes, and they carry no logins.
 
 To run the tests:
 
@@ -437,7 +454,7 @@ the round trip is the normal way to reprice.
 
 ## Security posture
 
-Passwords require ten characters with mixed case, a digit and a symbol; accounts
+Passwords require nine characters with mixed case, a digit and a symbol; accounts
 lock for fifteen minutes after five failures. Eight roles map to nine
 authorisation policies applied at both the page and the API. Signed clinical notes
 cannot be edited — corrections are addenda, and a SHA-256 digest of the signed

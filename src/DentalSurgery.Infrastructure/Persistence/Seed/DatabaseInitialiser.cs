@@ -37,14 +37,6 @@ public class DatabaseInitialiser(
     ILogger<DatabaseInitialiser> logger)
 {
     /// <summary>
-    /// The password given to demonstration logins. It is deliberately public and
-    /// documented: it is only ever applied to fabricated staff in a demo build,
-    /// and <see cref="SeedOptions.DemoData"/> is off by default so it cannot
-    /// reach an instance holding real records.
-    /// </summary>
-    public const string DemoPassword = "Dental#2026!";
-
-    /// <summary>
     /// Where the practice logo lives, relative to the web root. Read by the PDF
     /// letterhead as well as the browser, so it is one value rather than two.
     /// </summary>
@@ -86,6 +78,10 @@ public class DatabaseInitialiser(
                 await SeedOperationalDataAsync(ct);
                 await new DemoDataBuilder(db, logger).BuildAsync(ct);
             }
+
+            // Last, so a configured account can attach itself to a staff record
+            // the demonstration data has just created.
+            await SeedConfiguredAccountsAsync(tenant.Id, ct);
         }
 
         logger.LogInformation(
@@ -742,24 +738,12 @@ public class DatabaseInitialiser(
 
         await db.SaveChangesAsync(ct);
 
-        // Demonstration logins. The administrator is created separately by
-        // SeedAdministratorAsync, which runs in every environment and takes its
-        // password from configuration.
-        foreach (var (definition, staff) in definitions.Zip(staffList))
-        {
-            var roles = new[] { definition.AppRole };
-
-            var user = await EnsureUserAsync(tenantId, definition.Email, DemoPassword,
-                definition.First, definition.Last, roles, staff.Id, ct);
-
-            if (user is not null)
-            {
-                staff.ApplicationUserId = user.Id;
-                user.JobTitle = definition.Specialty;
-                user.DefaultLocationId = main.Id;
-                await userManager.UpdateAsync(user);
-            }
-        }
+        // The demonstration staff are clinical data - the providers on
+        // appointments, the authors of notes - and they are created here. They
+        // are deliberately given no logins: a login needs a password, and the
+        // only passwords this application knows are the ones configured for it.
+        // Logins come from Seed:Accounts, which can attach itself to any of
+        // these staff records by number.
 
         // The staff numbers above are assigned directly, so the allocator must
         // start after them or the next hire would be given a duplicate.
@@ -794,6 +778,15 @@ public class DatabaseInitialiser(
 
         if (await userManager.FindByEmailAsync(email) is not null) return;
 
+        // An administrator listed in Seed:Accounts is the operator's own, with
+        // their own password and their own choice about forcing a change. This
+        // bootstrap account exists for the install that configured none.
+        if (_options.Accounts.Any(a =>
+                string.Equals(a.Role, Roles.Administrator, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
         // An instance that already has an administrator does not need another;
         // this keeps a rotated or renamed account from being silently re-created.
         if (await AnyAdministratorExistsAsync(ct))
@@ -815,10 +808,16 @@ public class DatabaseInitialiser(
                     "first start, and the account is created with a forced password change.");
             }
 
-            password = DemoPassword;
+            // Generated, never a value written down anywhere. Logged once so a
+            // clean checkout can still be signed into, and useless afterwards
+            // because the account is created with a forced password change.
+            password = GenerateBootstrapPassword();
+
             logger.LogWarning(
-                "Using the built-in development password for {Email}. This is permitted only in " +
-                "Development; other environments require Seed:AdminPassword.", email);
+                "No administrator password was configured. A one-time password has been generated " +
+                "for {Email}: {Password}  --  it must be changed at first sign-in. Set " +
+                "Seed:AdminPassword, or configure Seed:Accounts, to choose your own.",
+                email, password);
         }
 
         var user = await EnsureUserAsync(tenantId, email, password!, "System", "Administrator",
@@ -832,6 +831,105 @@ public class DatabaseInitialiser(
         logger.LogInformation(
             "Created the bootstrap administrator {Email}. The password must be changed at first sign-in.",
             email);
+    }
+
+    /// <summary>
+    /// Creates the logins listed in <c>Seed:Accounts</c>.
+    /// <para>
+    /// Idempotent by email: an account that already exists is left alone, so a
+    /// password an operator has since changed is never reset back to the
+    /// bootstrap value on the next restart.
+    /// </para>
+    /// </summary>
+    private async Task SeedConfiguredAccountsAsync(Guid tenantId, CancellationToken ct)
+    {
+        if (_options.Accounts.Count == 0)
+        {
+            // Said out loud. An install that meant to configure logins and got
+            // the key shape wrong would otherwise start silently with none, and
+            // the only symptom would be nobody being able to sign in.
+            logger.LogInformation(
+                "No logins are configured under Seed:Accounts. Only the bootstrap administrator exists.");
+            return;
+        }
+
+        var created = 0;
+
+        foreach (var account in _options.Accounts)
+        {
+            if (string.IsNullOrWhiteSpace(account.Email) || string.IsNullOrWhiteSpace(account.Password))
+            {
+                logger.LogError(
+                    "A Seed:Accounts entry is missing an email or a password and was skipped.");
+                continue;
+            }
+
+            if (!Roles.All.Contains(account.Role, StringComparer.OrdinalIgnoreCase))
+            {
+                logger.LogError(
+                    "Seed:Accounts entry {Email} names role '{Role}', which does not exist. " +
+                    "Valid roles: {Roles}.", account.Email, account.Role, string.Join(", ", Roles.All));
+                continue;
+            }
+
+            if (await userManager.FindByEmailAsync(account.Email) is not null) continue;
+
+            // Attaching to a staff record gives the login a diary, patients and
+            // history to sign in to, rather than a correct role over an empty
+            // screen.
+            Staff? staff = null;
+            if (!string.IsNullOrWhiteSpace(account.StaffNumber))
+            {
+                staff = await db.Staff.FirstOrDefaultAsync(s => s.StaffNumber == account.StaffNumber, ct);
+
+                if (staff is null)
+                    logger.LogWarning(
+                        "Seed:Accounts entry {Email} names staff {Staff}, which does not exist. " +
+                        "The account is created without a staff link.", account.Email, account.StaffNumber);
+            }
+
+            var user = await EnsureUserAsync(
+                tenantId, account.Email, account.Password,
+                account.FirstName ?? staff?.Name.FirstName ?? "New",
+                account.LastName ?? staff?.Name.LastName ?? "User",
+                [account.Role], staff?.Id, ct);
+
+            if (user is null) continue;
+
+            user.MustChangePassword = account.MustChangePassword;
+            if (staff is not null) user.JobTitle = staff.Specialty;
+            await userManager.UpdateAsync(user);
+
+            if (staff is not null)
+            {
+                staff.ApplicationUserId = user.Id;
+                await db.SaveChangesAsync(ct);
+            }
+
+            created++;
+
+            // The address and the role, never the password.
+            logger.LogInformation(
+                "Provisioned the {Role} login {Email}.", account.Role, account.Email);
+        }
+
+        if (created > 0)
+            logger.LogInformation("Provisioned {Count} configured login(s).", created);
+    }
+
+    /// <summary>
+    /// A random password for the first administrator of an install that
+    /// configured none. Long, mixed, and printed once to the log.
+    /// </summary>
+    private static string GenerateBootstrapPassword()
+    {
+        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(18);
+        var body = new string(bytes.Select(b => alphabet[b % alphabet.Length]).ToArray());
+
+        // Satisfies the practice policy - length, both cases, a digit, a symbol -
+        // without depending on the random draw happening to include them.
+        return $"{body}7!Aa";
     }
 
     private async Task<bool> AnyAdministratorExistsAsync(CancellationToken ct)

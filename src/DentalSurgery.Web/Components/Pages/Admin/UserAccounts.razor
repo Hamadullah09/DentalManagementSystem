@@ -390,7 +390,7 @@ else
         public string? JobTitle { get; set; }
         public bool IsActive { get; set; } = true;
 
-        [MinLength(10, ErrorMessage = "Use at least 10 characters.")]
+        [MinLength(PasswordPolicy.MinimumLength, ErrorMessage = "Use at least 9 characters.")]
         public string? Password { get; set; }
     }
 

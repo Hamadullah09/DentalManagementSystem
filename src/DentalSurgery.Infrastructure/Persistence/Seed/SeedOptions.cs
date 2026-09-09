@@ -61,9 +61,60 @@ public class SeedOptions
     public bool MigrateOnStartup { get; set; }
 
     /// <summary>
+    /// The logins to provision, and the only place account passwords come from.
+    /// <para>
+    /// Supplied through user secrets in development
+    /// (<c>dotnet user-secrets set "Seed:Accounts:0:Password" "..."</c>) or the
+    /// environment in a deployment
+    /// (<c>Seed__Accounts__0__Password</c>). Never in appsettings.json, and
+    /// never in source: a password written into a file inside the repository is
+    /// a password published the moment anyone pushes.
+    /// </para>
+    /// <para>
+    /// Empty by default. A build with no accounts configured creates the
+    /// bootstrap administrator only, and the demonstration staff get no logins
+    /// at all rather than a shared one everybody knows.
+    /// </para>
+    /// </summary>
+    public List<SeedAccount> Accounts { get; set; } = [];
+
+    /// <summary>
     /// Refuses to start when the schema is behind the code. The alternative is
     /// serving requests against a database missing columns the queries expect,
     /// which surfaces as scattered runtime failures instead of one clear one.
     /// </summary>
     public bool VerifySchemaOnStartup { get; set; } = true;
+}
+
+
+/// <summary>
+/// One login to provision. Passwords are supplied at deployment time, so this
+/// carries no defaults.
+/// </summary>
+public class SeedAccount
+{
+    public string Email { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>A role name from <c>Roles</c>, for example "Dentist".</summary>
+    public string Role { get; set; } = string.Empty;
+
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+
+    /// <summary>
+    /// Links the login to a seeded staff record, so the account signs in as a
+    /// clinician who already has a diary, patients and history rather than as a
+    /// stranger with the right role and nothing to look at. Ignored when the
+    /// staff record does not exist.
+    /// </summary>
+    public string? StaffNumber { get; set; }
+
+    /// <summary>
+    /// Forces a password change at first sign-in. On by default: a password
+    /// someone else chose and typed into a configuration file is a bootstrap
+    /// value, not a standing credential.
+    /// </summary>
+    public bool MustChangePassword { get; set; } = true;
 }

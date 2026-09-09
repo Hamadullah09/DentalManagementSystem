@@ -1,6 +1,28 @@
 namespace DentalSurgery.Application.Abstractions;
 
 /// <summary>
+/// The practice's password rules, in one place.
+/// <para>
+/// The minimum length was previously written out in five: the Identity options
+/// that enforce it, two forms that validate against it, the seed validator, and
+/// the README that described it. Changing the policy meant finding all five,
+/// and a form that disagreed with the server would accept a password the server
+/// then rejected - telling the user their password was too short only after
+/// they had submitted a form that said it was long enough.
+/// </para>
+/// </summary>
+public static class PasswordPolicy
+{
+    /// <summary>Minimum characters. Mixed case, a digit and a symbol are also required.</summary>
+    public const int MinimumLength = 9;
+
+    /// <summary>The rule as a sentence, for a form hint or an error message.</summary>
+    public const string Description =
+        "At least 9 characters, including an upper-case letter, a lower-case letter, " +
+        "a digit and a symbol.";
+}
+
+/// <summary>
 /// The complete catalogue of things a user may be permitted to do.
 /// <para>
 /// Authorisation is expressed as <c>User → Role → Permission → Resource/Action</c>.

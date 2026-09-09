@@ -39,16 +39,39 @@ public class DentalAppFixture : IAsyncLifetime
 
     public Uri BaseAddress { get; private set; } = new("http://127.0.0.1/");
 
-    /// <summary>The password every seeded demonstration login uses.</summary>
-    public const string DemoPassword = "Dental#2026!";
+    /// <summary>
+    /// The password the suite provisions its own logins with.
+    /// <para>
+    /// The application no longer ships a password of any kind, so the fixture
+    /// supplies the accounts it needs through <c>Seed:Accounts</c>, exactly as
+    /// a deployment does. This value opens nothing but a throwaway SQLite file
+    /// created for one test run.
+    /// </para>
+    /// </summary>
+    public const string DemoPassword = "IntegrationTest#2026!";
 
-    public const string Administrator = "admin@dentalsurgery.local";
-    public const string Dentist = "a.okonkwo@meridiandental.example";
-    public const string OralSurgeon = "r.llewellyn@meridiandental.example";
-    public const string Hygienist = "f.kelleher@meridiandental.example";
-    public const string PracticeManager = "b.nwosu@meridiandental.example";
-    public const string Receptionist = "j.barnes@meridiandental.example";
-    public const string Nurse = "h.sato@meridiandental.example";
+    public const string Administrator = "admin@test.invalid";
+    public const string Dentist = "dentist@test.invalid";
+    public const string OralSurgeon = "surgeon@test.invalid";
+    public const string Hygienist = "hygienist@test.invalid";
+    public const string PracticeManager = "manager@test.invalid";
+    public const string Receptionist = "reception@test.invalid";
+    public const string Nurse = "nurse@test.invalid";
+
+    /// <summary>
+    /// The logins the suite signs in as, attached to the demonstration staff so
+    /// a clinician's screens have something on them.
+    /// </summary>
+    private static readonly (string Email, string Role, string? Staff)[] TestAccounts =
+    [
+        (Administrator, "Administrator", null),
+        (Dentist, "Dentist", "S-0001"),
+        (OralSurgeon, "OralSurgeon", "S-0002"),
+        (Hygienist, "Hygienist", "S-0005"),
+        (Nurse, "Nurse", "S-0007"),
+        (PracticeManager, "PracticeManager", "S-0009"),
+        (Receptionist, "Receptionist", "S-0010")
+    ];
 
     // ------------------------------------------------------------------ lifetime
 
@@ -92,6 +115,7 @@ public class DentalAppFixture : IAsyncLifetime
             ["Seed__DemoData"] = "true",
             ["Seed__MigrateOnStartup"] = "true",
             ["Seed__AdminEmail"] = Administrator,
+            ["Seed__AdminPassword"] = DemoPassword,
 
             // The suite signs in far more often than a person would. The one
             // test that asserts lockout does not depend on the rate limiter.
@@ -100,6 +124,18 @@ public class DentalAppFixture : IAsyncLifetime
             ["Storage__DocumentRoot"] = _documentRoot,
             ["Notifications__SuppressOutbound"] = "true"
         };
+
+        // The suite provisions its own logins the way a deployment does. Nothing
+        // is assumed about accounts the application might create on its own.
+        for (var i = 0; i < TestAccounts.Length; i++)
+        {
+            var (email, role, staff) = TestAccounts[i];
+            environment[$"Seed__Accounts__{i}__Email"] = email;
+            environment[$"Seed__Accounts__{i}__Password"] = DemoPassword;
+            environment[$"Seed__Accounts__{i}__Role"] = role;
+            environment[$"Seed__Accounts__{i}__MustChangePassword"] = "false";
+            if (staff is not null) environment[$"Seed__Accounts__{i}__StaffNumber"] = staff;
+        }
 
         foreach (var (key, value) in environment) start.Environment[key] = value;
 

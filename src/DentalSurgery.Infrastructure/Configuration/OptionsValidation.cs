@@ -1,3 +1,4 @@
+using DentalSurgery.Application.Abstractions;
 using DentalSurgery.Infrastructure.Notifications;
 using DentalSurgery.Infrastructure.Persistence.Seed;
 using Microsoft.Extensions.Hosting;
@@ -224,10 +225,11 @@ public class SeedOptionsValidator(IHostEnvironment environment) : IValidateOptio
         // place that knows whether an administrator already exists. What is
         // worth refusing here is a password weak enough that Identity would
         // reject it, discovered at start-up rather than mid-seed.
-        if (!string.IsNullOrWhiteSpace(options.AdminPassword) && options.AdminPassword.Length < 10)
+        if (!string.IsNullOrWhiteSpace(options.AdminPassword)
+            && options.AdminPassword.Length < PasswordPolicy.MinimumLength)
         {
-            failures.Add("Seed:AdminPassword must be at least 10 characters, matching the practice " +
-                         "password policy.");
+            failures.Add($"Seed:AdminPassword must be at least {PasswordPolicy.MinimumLength} characters, " +
+                         "matching the practice password policy.");
         }
 
         if (options.AllowDemoDataOutsideDevelopment && environment.IsProduction())
