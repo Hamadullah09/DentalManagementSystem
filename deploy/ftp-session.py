@@ -27,13 +27,17 @@ Stages, in the order a deployment uses them:
            never deleted.
 
   online   removes app_offline.htm, which starts the new version.
+
+  logs     downloads the module's stdout capture. When the application fails
+           before its own logging exists, IIS answers the browser with a bare
+           500 and that file is the only account of why.
 """
 from __future__ import annotations
 
 import os
 import sys
 
-STAGES = ("probe", "offline", "mirror", "online")
+STAGES = ("probe", "offline", "mirror", "online", "logs")
 
 
 def require(name: str) -> str:
@@ -107,6 +111,15 @@ def main() -> int:
             "cls -l --sort=name",
         ]
     elif stage == "offline":
+        # The module will not create this, and the mirror deliberately excludes
+        # App_Data, so nothing else ever would. Without it stdout logging is
+        # configured and silently writes nowhere - which is the worst outcome,
+        # because it looks like the application produced no output at all.
+        #
+        # -f keeps an existing directory from being an error. This runs in the
+        # same session as the put below, so a genuinely broken connection still
+        # fails the step.
+        out.append(f"mkdir -p -f {quote(remote + '/App_Data/logs')}")
         out.append(f"put app_offline.htm -o {quote(remote + '/app_offline.htm')}")
     elif stage == "mirror":
         publish = require("PUBLISH_DIR")
@@ -124,6 +137,11 @@ def main() -> int:
         if prune:
             flags.insert(1, "--delete")
         out.append(f"mirror {' '.join(flags)} {quote(publish)} {quote(remote + '/')}")
+    elif stage == "logs":
+        # When the application fails before its own logging is running, the
+        # module's stdout capture is the only account of why, and it is on the
+        # server rather than anywhere a CI run can see.
+        out.append(f"mirror --verbose=1 {quote(remote + '/App_Data/logs')} logs")
     else:
         # -f so an already-absent file is not an error: a previous run may have
         # removed it, or this deployment may never have taken the site offline.

@@ -11,6 +11,7 @@ on:
         default: probe
         options:
           - probe          # connect, list the deployment directory, change nothing
+          - logs           # fetch the server's start-up log and print it
           - build-only     # build, test and configure, upload nothing
           - deploy         # the real thing
       apply_migrations:
@@ -68,9 +69,49 @@ jobs:
           echo "If the listing shows other site folders instead, this is the account root:"
           echo "point FTP_REMOTE_DIR one level deeper and probe again."
 
+  # Reads the ASP.NET Core Module's stdout capture off the server and prints it.
+  # When the application fails before its own logging is running - a bad
+  # connection string, a missing runtime, a configuration the host rejects - that
+  # file is the only account of why, and IIS answers the browser with a bare 500
+  # that says nothing at all.
+  logs:
+    name: Fetch the start-up log
+    if: ${{ inputs.mode == 'logs' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Download App_Data/logs
+        env:
+          FTP_HOST: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+          FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
+        run: |
+          set -o pipefail
+          mkdir -p logs
+          python3 deploy/ftp-session.py logs | lftp
+
+      - name: Print them
+        run: |
+          if [ -z "$(ls -A logs 2>/dev/null)" ]; then
+            echo "::warning::No log files on the server. Set the STDOUT_LOG variable to true, deploy again, request the site once, then run this."
+            exit 0
+          fi
+          for file in logs/*; do
+            echo "===================================================================="
+            echo "$file"
+            echo "===================================================================="
+            cat "$file"
+            echo
+          done
+
   deploy:
     name: Publish to myASP
-    if: ${{ inputs.mode != 'probe' }}
+    if: ${{ inputs.mode == 'build-only' || inputs.mode == 'deploy' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -195,12 +236,19 @@ jobs:
           MUST_CHANGE: ${{ vars.SEED_MUST_CHANGE_PASSWORD || 'true' }}
           SITE_HOST: ${{ vars.SITE_HOST || 'dental.sma-techno.net' }}
           MIGRATE_ON_STARTUP: ${{ vars.MIGRATE_ON_STARTUP || 'false' }}
+          STDOUT_LOG: ${{ vars.STDOUT_LOG || 'false' }}
           PRACTICE_NAME: ${{ vars.PRACTICE_NAME }}
           PRACTICE_SLUG: ${{ vars.PRACTICE_SLUG }}
         run: |
           set -o pipefail
           # Assembled with jq and piped on stdin, so no secret is ever a shell
           # word, a command argument or a line in the run log.
+          #
+          # STDOUT_LOG drives two things at once, because they answer the same
+          # question: @stdoutLogEnabled captures what the process writes before
+          # its own logging exists, and ASPNETCORE_DETAILEDERRORS puts the
+          # start-up exception into the module's error page. Without either, a
+          # failure to start is a bare IIS 500 that says nothing.
           jq -n \
             --arg conn "$CONNECTION" \
             --arg admin "$ADMIN_EMAIL" \
@@ -209,7 +257,7 @@ jobs:
             --arg host "$SITE_HOST" \
             --arg migrate "$MIGRATE_ON_STARTUP" \
             --arg practice "$PRACTICE_NAME" \
-            --arg slug "$PRACTICE_SLUG" \
+            --arg slug "$PRACTICE_SLUG"             --arg stdout "$STDOUT_LOG" \
             '{
                "ConnectionStrings__DefaultConnection": $conn,
                "Database__Provider": "SqlServer",
@@ -222,7 +270,10 @@ jobs:
                "Seed__TenantName": $practice,
                "Seed__TenantSlug": $slug,
                "SEED_ACCOUNTS_JSON": $accounts,
-               "SEED_MUST_CHANGE_PASSWORD": $mustChange
+               "SEED_MUST_CHANGE_PASSWORD": $mustChange,
+
+               "@stdoutLogEnabled": $stdout,
+               "ASPNETCORE_DETAILEDERRORS": $stdout
              }' | python3 deploy/inject-config.py "$PUBLISH_DIR/web.config"
 
       - name: Check the build before uploading it

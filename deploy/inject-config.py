@@ -6,10 +6,17 @@ The settings arrive as a JSON object on stdin, never as command-line arguments:
 an argument list is readable by any other process on the machine and is echoed
 into CI logs on failure. Nothing is printed but the names.
 
-One key is treated specially. "SEED_ACCOUNTS_JSON" holds an array of accounts
-and is expanded into the indexed keys the configuration binder expects
-(Seed__Accounts__0__Email and so on), so a deployment carries a single secret
-rather than six passwords spread across six.
+Two kinds of key are treated specially.
+
+"SEED_ACCOUNTS_JSON" holds an array of accounts and is expanded into the indexed
+keys the configuration binder expects (Seed__Accounts__0__Email and so on), so a
+deployment carries a single secret rather than six passwords spread across six.
+
+A key beginning "@" sets an attribute on the <aspNetCore> element rather than an
+environment variable - "@stdoutLogEnabled" being the one that matters, because
+when the application fails before logging is running, that file is the only
+account of why. It is off by default: it records every line the process writes,
+and grows without bound on a host nobody is watching.
 """
 from __future__ import annotations
 
@@ -83,6 +90,13 @@ def main() -> int:
     if node is None:
         raise SystemExit(f"{path} has no <aspNetCore> element to configure.")
 
+    # Attributes on <aspNetCore> itself, before the environment variables.
+    attributes = {k[1:]: v for k, v in settings.items() if k.startswith("@")}
+    settings = {k: v for k, v in settings.items() if not k.startswith("@")}
+
+    for name, value in sorted(attributes.items()):
+        node.set(name, str(value))
+
     variables = node.find("environmentVariables")
     if variables is None:
         variables = ET.SubElement(node, "environmentVariables")
@@ -102,6 +116,13 @@ def main() -> int:
     print(f"Configured {len(settings)} environment variable(s) in {path}:")
     for name in sorted(settings):
         print(f"  {name}")
+
+    if attributes:
+        # Attribute values are switches, not secrets, so they are worth showing.
+        print("aspNetCore attributes:")
+        for name, value in sorted(attributes.items()):
+            print(f"  {name} = {value}")
+
     return 0
 
 
