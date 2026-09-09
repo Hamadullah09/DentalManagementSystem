@@ -85,6 +85,11 @@ def main() -> int:
         # rather than for the FTP hostname, which fails verification. Encrypting
         # anyway is worth far more than refusing to encrypt at all.
         "set ssl:verify-certificate no",
+        # The target is IIS on Windows, which has no Unix permission bits and
+        # answers "MFF and SITE CHMOD are not supported by this site". lftp
+        # otherwise attempts one per file, and returns a failure at the end of
+        # an upload that in fact transferred everything.
+        "set ftp:use-site-chmod false",
     ]
 
     out += (
@@ -109,6 +114,10 @@ def main() -> int:
             "--reverse",
             "--parallel=4",
             "--verbose=1",
+            # Belt and braces with ftp:use-site-chmod above: there are no
+            # permissions to carry from a Linux runner to IIS, and attempting it
+            # is what turns a complete upload into a failed step.
+            "--no-perms",
             "--exclude-glob app_offline.htm",
             "--exclude App_Data/",
         ]
