@@ -105,6 +105,14 @@ jobs:
           fi
           echo "Configuration is complete."
 
+      # Before the build, not after it. The driver's own complaint about a
+      # malformed connection string names neither the setting nor the fix, and
+      # arrives once the build and the whole test suite have already run.
+      - name: Check the connection string
+        env:
+          CONNECTION_STRING: ${{ secrets.DATABASE_CONNECTION_STRING }}
+        run: python3 deploy/check-connection-string.py
+
       - run: dotnet restore DentalSurgery.sln
 
       - name: Build
