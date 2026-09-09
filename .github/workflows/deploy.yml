@@ -97,11 +97,13 @@ jobs:
 
       - name: Print them
         run: |
-          if [ -z "$(ls -A logs 2>/dev/null)" ]; then
-            echo "::warning::No log files on the server. Set the STDOUT_LOG variable to true, deploy again, request the site once, then run this."
+          found=$(find logs -type f 2>/dev/null | wc -l)
+          if [ "$found" = "0" ]; then
+            echo "::warning::No log files in either location. Set STDOUT_LOG=true and redeploy, or turn on Detail Error in the hosting control panel, then request the site once and run this again."
             exit 0
           fi
-          for file in logs/*; do
+          echo "Found $found log file(s)."
+          for file in $(find logs -type f | sort); do
             echo "===================================================================="
             echo "$file"
             echo "===================================================================="

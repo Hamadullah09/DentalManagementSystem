@@ -138,10 +138,20 @@ def main() -> int:
             flags.insert(1, "--delete")
         out.append(f"mirror {' '.join(flags)} {quote(publish)} {quote(remote + '/')}")
     elif stage == "logs":
-        # When the application fails before its own logging is running, the
-        # module's stdout capture is the only account of why, and it is on the
-        # server rather than anywhere a CI run can see.
-        out.append(f"mirror --verbose=1 {quote(remote + '/App_Data/logs')} logs")
+        # When the application fails before its own logging is running, these
+        # files are the only account of why, and they are on the server rather
+        # than anywhere a CI run can see.
+        #
+        # Two places, because two different things write them. App_Data/logs is
+        # the module's stdout capture, configured by this repository. /logs at
+        # the site root is where myASP's own "Detail Error" setting puts .NET
+        # Core output, and it is not something this deployment controls.
+        #
+        # Each is optional: a missing directory is an ordinary state, not a
+        # failure, so neither aborts the other.
+        out.append("set cmd:fail-exit false")
+        out.append(f"mirror --verbose=1 {quote(remote + '/App_Data/logs')} logs/app_data")
+        out.append(f"mirror --verbose=1 {quote(remote + '/logs')} logs/site_root")
     else:
         # -f so an already-absent file is not an error: a previous run may have
         # removed it, or this deployment may never have taken the site offline.
