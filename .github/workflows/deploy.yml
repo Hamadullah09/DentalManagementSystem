@@ -204,31 +204,43 @@ jobs:
             --context DentalDbContext
 
       # --------------------------------------------------------------- publish
-      - name: Publish
-        run: dotnet publish src/DentalSurgery.Web -c Release --no-build -o "$PUBLISH_DIR"
-
-      # A portable publish carries native libraries for every platform its
-      # dependencies support - Linux, macOS, WebAssembly, s390x. The target is
-      # IIS on Windows, which will never load any of them, and they are two
-      # thirds of the upload: 174 MB becomes 94 MB.
+      # Published for win-x64, and that matters more than it looks.
       #
-      # Every Windows architecture is kept rather than just the expected one.
-      # Shared hosting decides the app pool's bitness, not this repository, and
-      # a 32-bit pool with only 64-bit natives loses PDF rendering and the SQL
-      # Server driver at runtime rather than at deploy time.
-      - name: Drop native libraries for platforms this host will never be
+      # A portable publish builds its apphost for the machine doing the
+      # publishing. This runs on Linux, so it produced "DentalSurgery.Web" - an
+      # ELF binary - and no DentalSurgery.Web.exe at all. The module was pointed
+      # at a file that did not exist, started nothing, wrote an empty stdout log
+      # every ten seconds, and answered 502.
+      #
+      # win-x64 because the application pool is 64-bit. self-contained false
+      # because the host supplies the runtime.
+      - name: Publish
         run: |
-          before=$(du -sm "$PUBLISH_DIR" | cut -f1)
-          find "$PUBLISH_DIR/runtimes" -maxdepth 1 -mindepth 1 -type d ! -name 'win*' -exec rm -rf {} +
-          after=$(du -sm "$PUBLISH_DIR" | cut -f1)
-          echo "Publish trimmed from ${before} MB to ${after} MB; kept: $(ls "$PUBLISH_DIR/runtimes" | tr '\n' ' ')"
+          dotnet publish src/DentalSurgery.Web -c Release \
+            --runtime win-x64 --self-contained false \
+            -o "$PUBLISH_DIR"
+          if [ ! -f "$PUBLISH_DIR/DentalSurgery.Web.exe" ]; then
+            echo "::error::No Windows apphost in the publish output. IIS would have nothing to start."
+            exit 1
+          fi
+          echo "Windows apphost present."
+
+      # A RID-specific publish has already narrowed the native assets to one
+      # platform, so there is nothing left to trim. What is worth checking is
+      # that the two libraries with no managed fallback actually shipped: without
+      # them the failure is at runtime, in whichever screen touches SQL Server or
+      # renders a PDF, rather than here.
+      - name: Check the native libraries shipped
+        run: |
+          echo "Publish size: $(du -sh "$PUBLISH_DIR" | cut -f1)"
           for native in Microsoft.Data.SqlClient.SNI.dll QuestPdfSkia.dll; do
-            for arch in win-x86 win-x64; do
-              test -f "$PUBLISH_DIR/runtimes/$arch/native/$native" \
-                || { echo "::error::$arch/$native was removed by the trim. SQL Server or PDF rendering would fail at runtime."; exit 1; }
-            done
+            found=$(find "$PUBLISH_DIR" -name "$native" | head -1)
+            if [ -z "$found" ]; then
+              echo "::error::$native is missing. SQL Server or PDF rendering would fail at runtime."
+              exit 1
+            fi
+            echo "  $native -> ${found#$PUBLISH_DIR/}"
           done
-          echo "Windows 32- and 64-bit natives are intact."
 
       - name: Write the deployment settings into web.config
         env:
