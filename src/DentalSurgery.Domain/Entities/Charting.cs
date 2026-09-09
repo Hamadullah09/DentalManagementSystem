@@ -7,7 +7,7 @@ namespace DentalSurgery.Domain.Entities;
 /// Reference row for one tooth position. Seeded once with the 32 permanent and
 /// 20 primary teeth, keyed by FDI two-digit notation.
 /// </summary>
-public class Tooth : BaseEntity
+public class Tooth : BaseEntity, IGlobalEntity
 {
     /// <summary>FDI / ISO 3950 notation, e.g. 11, 26, 48, 55.</summary>
     public int FdiNumber { get; set; }
@@ -50,7 +50,7 @@ public class Tooth : BaseEntity
 /// One finding or restoration on a tooth. The odontogram is the union of these
 /// records; historic entries are kept so the chart can be replayed over time.
 /// </summary>
-public class ToothConditionRecord : BaseEntity
+public class ToothConditionRecord : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -131,7 +131,7 @@ public static class SurfaceNotation
 }
 
 /// <summary>A full-mouth periodontal examination.</summary>
-public class PeriodontalChart : BaseEntity
+public class PeriodontalChart : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -180,7 +180,7 @@ public class PeriodontalChart : BaseEntity
 }
 
 /// <summary>One probing site. Six per tooth in a standard full-mouth chart.</summary>
-public class PeriodontalMeasurement : BaseEntity
+public class PeriodontalMeasurement : TenantEntity
 {
     public Guid PeriodontalChartId { get; set; }
     public PeriodontalChart? PeriodontalChart { get; set; }

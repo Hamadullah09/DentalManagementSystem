@@ -11,6 +11,7 @@ using DentalSurgery.Infrastructure.Persistence;
 using DentalSurgery.Infrastructure.Persistence.Interceptors;
 using DentalSurgery.Infrastructure.Persistence.Seed;
 using DentalSurgery.Infrastructure.Services;
+using DentalSurgery.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -86,7 +87,17 @@ public static class DependencyInjection
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.TryAddCurrentUserFallback();
 
+        // ---- tenancy ---------------------------------------------------------
+        // One instance per scope, serving both interfaces: reading the current
+        // tenant and entering a different one are the same object, so a scope
+        // cannot be handed a reader that disagrees with its writer.
+        services.AddScoped<TenantContext>();
+        services.AddScoped<ITenantContext>(p => p.GetRequiredService<TenantContext>());
+        services.AddScoped<ITenantScopeFactory>(p => p.GetRequiredService<TenantContext>());
+        services.AddScoped<TenantProvisioningService>();
+
         services.AddScoped<AuditingInterceptor>();
+        services.AddScoped<TenantGuardInterceptor>();
 
         // A scoped factory, because Blazor Server components can start
         // overlapping queries within one circuit and a DbContext is not
@@ -119,7 +130,12 @@ public static class DependencyInjection
                 });
             }
 
-            options.AddInterceptors(provider.GetRequiredService<AuditingInterceptor>());
+            // The tenant guard runs first: a write that crosses a boundary must
+            // be refused before the audit interceptor records it as having
+            // happened.
+            options.AddInterceptors(
+                provider.GetRequiredService<TenantGuardInterceptor>(),
+                provider.GetRequiredService<AuditingInterceptor>());
 
             // Query filters on soft-deleted entities interact with required
             // navigations; the warning is expected and would otherwise be noise.

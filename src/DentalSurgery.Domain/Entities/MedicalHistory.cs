@@ -4,7 +4,7 @@ using DentalSurgery.Domain.Enums;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>Catalogue of systemic conditions relevant to dental care.</summary>
-public class MedicalCondition : LookupEntity
+public class MedicalCondition : LookupEntity, IGlobalEntity
 {
     public string? Icd10Code { get; set; }
     public string Category { get; set; } = "General";
@@ -23,7 +23,7 @@ public class MedicalCondition : LookupEntity
 }
 
 /// <summary>A condition recorded against a specific patient.</summary>
-public class PatientMedicalCondition : BaseEntity
+public class PatientMedicalCondition : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -45,7 +45,7 @@ public class PatientMedicalCondition : BaseEntity
 }
 
 /// <summary>Catalogue of allergens.</summary>
-public class Allergen : LookupEntity
+public class Allergen : LookupEntity, IGlobalEntity
 {
     public AllergyType AllergyType { get; set; } = AllergyType.Drug;
     public string? CrossReactants { get; set; }
@@ -53,7 +53,7 @@ public class Allergen : LookupEntity
 }
 
 /// <summary>An allergy recorded against a patient.</summary>
-public class PatientAllergy : BaseEntity
+public class PatientAllergy : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -75,7 +75,7 @@ public class PatientAllergy : BaseEntity
 }
 
 /// <summary>Drug catalogue used for prescribing and for recording current medication.</summary>
-public class Medication : LookupEntity
+public class Medication : LookupEntity, IGlobalEntity
 {
     public string? GenericName { get; set; }
     public string? BrandNames { get; set; }
@@ -105,7 +105,7 @@ public class Medication : LookupEntity
 }
 
 /// <summary>A drug the patient is currently or was previously taking.</summary>
-public class PatientMedication : BaseEntity
+public class PatientMedication : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -128,7 +128,7 @@ public class PatientMedication : BaseEntity
 }
 
 /// <summary>A point-in-time confirmation that the medical history was reviewed with the patient.</summary>
-public class MedicalHistoryReview : BaseEntity
+public class MedicalHistoryReview : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -162,7 +162,7 @@ public class MedicalHistoryReview : BaseEntity
 }
 
 /// <summary>Observations taken before treatment, especially before sedation or surgery.</summary>
-public class VitalSignRecord : BaseEntity
+public class VitalSignRecord : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }

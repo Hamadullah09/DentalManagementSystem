@@ -140,12 +140,36 @@ Documents are written to `App_Data` on local disk. That is correct for a single
 instance; for more than one, mount shared storage or replace `IFileStorage`
 with an object-storage implementation.
 
-### What is still outstanding
+### Tenancy
 
-**Tenant isolation is not implemented.** The domain model has no tenant concept,
-so a multi-tenant deployment would not keep one practice's records away from
-another's. This is the blocking item for multi-tenant SaaS and is tracked
-separately; single-tenant deployments are unaffected.
+Every record belongs to a tenant — one dental business — and the boundary is
+enforced in the persistence layer rather than by callers remembering to filter.
+
+- **Reads.** A global query filter on all 80 tenant-owned entities. A query that
+  forgets about tenancy returns nothing rather than everything, and a scope with
+  no tenant sees nothing at all.
+- **Writes.** A save interceptor stamps the tenant on insert and refuses any
+  update or delete of a row belonging to another. Moving a record between
+  tenants is refused outright.
+- **Shape.** A model guard fails start-up if any entity is neither
+  `ITenantScoped` nor explicitly `IGlobalEntity`, so an entity nobody classified
+  cannot ship unfiltered.
+- **Uniqueness.** Unique indexes are rewritten by convention to lead with
+  `TenantId`. Without that, "patient number P-000001 is unique" would mean unique
+  across the whole platform.
+- **Roles.** Roles and their permission grants are per-tenant, so a practice
+  editing what its receptionists may do cannot widen it for anyone else.
+- **Shared.** Tooth anatomy and the procedure, allergen, condition and drug
+  catalogues are the same for every practice and are shared. Practice pricing
+  lives in the tenant's own fee schedule.
+
+The tenant is resolved from a claim on the sign-in cookie — never from a header,
+route or query parameter, so it cannot be asked for. Background work that has no
+signed-in user enters each tenant in turn through an explicit platform scope,
+which is logged every time it is entered.
+
+Provisioning a tenant is `TenantProvisioningService.EnsureTenantAsync`. The
+seeder creates the first one from `Seed:TenantName` and `Seed:TenantSlug`.
 
 ---
 

@@ -16,7 +16,10 @@ namespace DentalSurgery.Infrastructure.Persistence.Interceptors;
 /// The audit rows join the same SaveChanges call, so the trail and the change it
 /// describes commit or roll back together.
 /// </summary>
-public class AuditingInterceptor(ICurrentUser currentUser, IDateTimeProvider clock) : SaveChangesInterceptor
+public class AuditingInterceptor(
+    ICurrentUser currentUser,
+    IDateTimeProvider clock,
+    ITenantContext tenant) : SaveChangesInterceptor
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
@@ -173,6 +176,12 @@ public class AuditingInterceptor(ICurrentUser currentUser, IDateTimeProvider clo
 
         return new AuditLog
         {
+            // The audit row inherits the tenant of the row it describes, not the
+            // tenant of the scope writing it. During a platform operation these
+            // differ, and the trail belongs with the data it is about.
+            TenantId = entry.Entity is ITenantScoped owned && owned.TenantId != Guid.Empty
+                ? owned.TenantId
+                : tenant.TenantId ?? Guid.Empty,
             TimestampUtc = now,
             Action = action,
             EntityName = entityName,

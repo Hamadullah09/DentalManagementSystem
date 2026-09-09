@@ -30,15 +30,23 @@ public class PermissionCatalogue(
     /// <summary>The claim type a role's permission grants are stored under.</summary>
     public const string ClaimType = "dental:permission";
 
-    private const string CacheKey = "dental:role-permissions";
+    /// <summary>
+    /// Cached per tenant. Roles belong to a practice and each may edit its own
+    /// grants, so one shared map would hand the first tenant's permissions to
+    /// every other tenant on the host — a privilege escalation nobody would
+    /// see, because each request would look perfectly normal.
+    /// </summary>
+    private static string CacheKeyFor(Guid tenantId) => $"dental:role-permissions:{tenantId}";
 
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
-    /// <summary>The permissions granted by each role, keyed by role name.</summary>
+    /// <summary>The permissions granted by each role in one tenant, keyed by role name.</summary>
     public async Task<IReadOnlyDictionary<string, IReadOnlySet<string>>> MapAsync(
-        CancellationToken ct = default)
+        Guid tenantId, CancellationToken ct = default)
     {
-        if (cache.TryGetValue(CacheKey, out IReadOnlyDictionary<string, IReadOnlySet<string>>? cached)
+        var cacheKey = CacheKeyFor(tenantId);
+
+        if (cache.TryGetValue(cacheKey, out IReadOnlyDictionary<string, IReadOnlySet<string>>? cached)
             && cached is not null)
         {
             return cached;
@@ -48,14 +56,14 @@ public class PermissionCatalogue(
         try
         {
             // A second caller may have populated it while this one queued.
-            if (cache.TryGetValue(CacheKey, out cached) && cached is not null) return cached;
+            if (cache.TryGetValue(cacheKey, out cached) && cached is not null) return cached;
 
-            var map = await BuildAsync(ct);
+            var map = await BuildAsync(tenantId, ct);
 
             // No expiry: the only thing that changes this map is a write through
             // Invalidate below, and an entry that silently expired would put a
             // query back in front of every request for no benefit.
-            cache.Set(CacheKey, map, new MemoryCacheEntryOptions { Priority = CacheItemPriority.NeverRemove });
+            cache.Set(cacheKey, map, new MemoryCacheEntryOptions { Priority = CacheItemPriority.NeverRemove });
             return map;
         }
         finally
@@ -64,13 +72,21 @@ public class PermissionCatalogue(
         }
     }
 
-    private async Task<IReadOnlyDictionary<string, IReadOnlySet<string>>> BuildAsync(CancellationToken ct)
+    private async Task<IReadOnlyDictionary<string, IReadOnlySet<string>>> BuildAsync(
+        Guid tenantId, CancellationToken ct)
     {
         // The catalogue is a singleton so the map is shared and built once; the
         // database context it reads from is scoped. Opening a scope here is what
         // reconciles the two, rather than lengthening the context's lifetime to
         // match the cache's.
         using var scope = scopeFactory.CreateScope();
+
+        // The new scope starts with no tenant, and Roles is tenant-filtered, so
+        // without this the query matches nothing and every permission check
+        // fails closed for everyone.
+        using var _ = scope.ServiceProvider
+            .GetRequiredService<ITenantScopeFactory>()
+            .EnterTenant(tenantId);
 
         var dbFactory = scope.ServiceProvider
             .GetRequiredService<IDbContextFactory<DentalDbContext>>();
@@ -93,17 +109,17 @@ public class PermissionCatalogue(
                 StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation(
-            "Loaded the permission map: {RoleCount} role(s), {GrantCount} grant(s).",
-            map.Count, rows.Count);
+            "Loaded the permission map for tenant {Tenant}: {RoleCount} role(s), {GrantCount} grant(s).",
+            tenantId, map.Count, rows.Count);
 
         return map;
     }
 
     /// <summary>The union of everything a set of roles grants.</summary>
     public async Task<IReadOnlySet<string>> ForRolesAsync(
-        IEnumerable<string> roles, CancellationToken ct = default)
+        Guid tenantId, IEnumerable<string> roles, CancellationToken ct = default)
     {
-        var map = await MapAsync(ct);
+        var map = await MapAsync(tenantId, ct);
         var held = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var role in roles)
@@ -114,11 +130,17 @@ public class PermissionCatalogue(
         return held;
     }
 
-    /// <summary>Drops the cached map so the next check reads the database again.</summary>
-    public void Invalidate()
+    /// <summary>
+    /// Drops one tenant's cached map so its next check reads the database again.
+    /// Scoped to the tenant whose grants changed; another practice's map is
+    /// untouched.
+    /// </summary>
+    public void Invalidate(Guid tenantId)
     {
-        cache.Remove(CacheKey);
-        logger.LogInformation("The permission map was invalidated and will be rebuilt on the next check.");
+        cache.Remove(CacheKeyFor(tenantId));
+        logger.LogInformation(
+            "The permission map for tenant {Tenant} was invalidated and will be rebuilt on the next check.",
+            tenantId);
     }
 }
 
@@ -128,6 +150,7 @@ public class PermissionCatalogue(
 /// </summary>
 public class PermissionGuard(
     ICurrentUser currentUser,
+    ITenantContext tenant,
     PermissionCatalogue catalogue,
     ILogger<PermissionGuard> logger) : IPermissionGuard
 {
@@ -145,7 +168,16 @@ public class PermissionGuard(
             return _cached;
         }
 
-        _cached = await catalogue.ForRolesAsync(currentUser.Roles, ct);
+        if (tenant.TenantId is not { } tenantId)
+        {
+            // No tenant means no roles that could apply. Failing closed here is
+            // what keeps a request that slipped past tenant resolution from
+            // inheriting anyone's permissions.
+            _cached = new HashSet<string>(StringComparer.Ordinal);
+            return _cached;
+        }
+
+        _cached = await catalogue.ForRolesAsync(tenantId, currentUser.Roles, ct);
         return _cached;
     }
 

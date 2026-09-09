@@ -3,7 +3,7 @@ using DentalSurgery.Domain.Common;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>The dental business itself. A single row in most deployments.</summary>
-public class Practice : BaseEntity
+public class Practice : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? LegalName { get; set; }
@@ -32,7 +32,7 @@ public class Practice : BaseEntity
 }
 
 /// <summary>A physical site/clinic belonging to the practice.</summary>
-public class Location : BaseEntity
+public class Location : TenantEntity
 {
     public Guid PracticeId { get; set; }
     public Practice? Practice { get; set; }
@@ -52,7 +52,7 @@ public class Location : BaseEntity
 }
 
 /// <summary>A treatment room / surgery / chair that appointments are booked into.</summary>
-public class Operatory : BaseEntity
+public class Operatory : TenantEntity
 {
     public Guid LocationId { get; set; }
     public Location? Location { get; set; }
@@ -73,7 +73,7 @@ public class Operatory : BaseEntity
 }
 
 /// <summary>Regular opening hours for a location, one row per weekday.</summary>
-public class BusinessHours : BaseEntity
+public class BusinessHours : TenantEntity
 {
     public Guid LocationId { get; set; }
     public Location? Location { get; set; }
@@ -87,7 +87,7 @@ public class BusinessHours : BaseEntity
 }
 
 /// <summary>A dated exception to the regular opening hours (bank holiday, training day).</summary>
-public class ClinicClosure : BaseEntity
+public class ClinicClosure : TenantEntity
 {
     public Guid LocationId { get; set; }
     public Location? Location { get; set; }

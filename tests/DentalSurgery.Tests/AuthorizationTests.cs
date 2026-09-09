@@ -4,6 +4,7 @@ using DentalSurgery.Domain.Entities;
 using DentalSurgery.Domain.Enums;
 using DentalSurgery.Infrastructure.Identity;
 using DentalSurgery.Infrastructure.Persistence;
+using DentalSurgery.Infrastructure.Tenancy;
 using DentalSurgery.Infrastructure.Persistence.Interceptors;
 using DentalSurgery.Infrastructure.Services;
 using Microsoft.Data.Sqlite;
@@ -229,6 +230,7 @@ public class RolePermissionMatrixTests
 
 public class ServiceAuthorizationTests : IDisposable
 {
+    private readonly TenantContext _tenancy = TestTenancy.Bound();
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<DentalDbContext> _options;
     private readonly ServiceProvider _provider;
@@ -242,7 +244,12 @@ public class ServiceAuthorizationTests : IDisposable
 
         _options = new DbContextOptionsBuilder<DentalDbContext>()
             .UseSqlite(_connection)
-            .AddInterceptors(new AuditingInterceptor(new TestUser(), new TestClock()))
+            .AddInterceptors(
+                // The guard stamps TenantId on insert. Without it the fixture
+                // would write rows belonging to no tenant, which the filters
+                // then hide - so the suite would be testing an empty database.
+                new TenantGuardInterceptor(_tenancy, NullLogger<TenantGuardInterceptor>.Instance),
+                new AuditingInterceptor(new TestUser(), new TestClock(), _tenancy))
             .ConfigureWarnings(w => w.Ignore(
                 Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId
                     .PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning))
@@ -250,6 +257,7 @@ public class ServiceAuthorizationTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton<IDbContextFactory<DentalDbContext>>(new TestContextFactory(_options));
+        services.AddTestTenancy();
         _provider = services.BuildServiceProvider();
 
         Seed();
@@ -257,7 +265,7 @@ public class ServiceAuthorizationTests : IDisposable
 
     private void Seed()
     {
-        using var db = new DentalDbContext(_options);
+        using var db = new DentalDbContext(_options, _tenancy);
         db.Database.EnsureCreated();
 
         // The grant lives in the database as role claims, exactly as it does in
@@ -299,20 +307,19 @@ public class ServiceAuthorizationTests : IDisposable
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<PermissionCatalogue>.Instance);
 
-        return new PermissionGuard(
-            new RoleUser(roles), catalogue, NullLogger<PermissionGuard>.Instance);
+        return new PermissionGuard(new RoleUser(roles), _tenancy, catalogue, NullLogger<PermissionGuard>.Instance);
     }
 
     private PatientService PatientsAs(params string[] roles) =>
-        new(new DentalDbContext(_options), new StubSequences(), new TestClock(),
+        new(new DentalDbContext(_options, _tenancy), new StubSequences(), new TestClock(),
             NullLogger<PatientService>.Instance, GuardFor(roles));
 
     private ClinicalService ClinicalAs(params string[] roles) =>
-        new(new DentalDbContext(_options), new StubSequences(), new TestUser(), new TestClock(),
+        new(new DentalDbContext(_options, _tenancy), new StubSequences(), new TestUser(), new TestClock(),
             NullLogger<ClinicalService>.Instance, GuardFor(roles));
 
     private BillingService BillingAs(params string[] roles) =>
-        new(new DentalDbContext(_options), new StubSequences(), new TestUser(), new TestClock(),
+        new(new DentalDbContext(_options, _tenancy), new StubSequences(), new TestUser(), new TestClock(),
             NullLogger<BillingService>.Instance, GuardFor(roles));
 
     // ---------------------------------------------------------------- reception

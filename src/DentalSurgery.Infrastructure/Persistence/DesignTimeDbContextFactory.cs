@@ -1,3 +1,4 @@
+using DentalSurgery.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
@@ -52,6 +53,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<DentalDbCo
                 sql => sql.MigrationsAssembly(DependencyInjection.SqlServerMigrationsAssembly));
         }
 
-        return new DentalDbContext(builder.Options);
+        // Design time has no request and therefore no tenant; scaffolding the
+        // model must see every entity.
+        return new DentalDbContext(builder.Options, PlatformTenantContext.Instance);
     }
 }

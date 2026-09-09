@@ -5,7 +5,7 @@ namespace DentalSurgery.Domain.Entities;
 
 // ------------------------------------------------------------------ Inventory
 
-public class Supplier : BaseEntity
+public class Supplier : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? AccountNumber { get; set; }
@@ -24,7 +24,7 @@ public class Supplier : BaseEntity
     public ICollection<PurchaseOrder> PurchaseOrders { get; set; } = new List<PurchaseOrder>();
 }
 
-public class InventoryItem : BaseEntity
+public class InventoryItem : TenantEntity
 {
     public string Sku { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
@@ -71,7 +71,7 @@ public class InventoryItem : BaseEntity
     public decimal StockValue => CurrentStock * UnitCost;
 }
 
-public class InventoryLot : BaseEntity
+public class InventoryLot : TenantEntity
 {
     public Guid InventoryItemId { get; set; }
     public InventoryItem? InventoryItem { get; set; }
@@ -104,7 +104,7 @@ public class InventoryLot : BaseEntity
             : null;
 }
 
-public class StockMovement : BaseEntity
+public class StockMovement : TenantEntity
 {
     public Guid InventoryItemId { get; set; }
     public InventoryItem? InventoryItem { get; set; }
@@ -131,7 +131,7 @@ public class StockMovement : BaseEntity
     public decimal Value => Math.Abs(Quantity) * (UnitCost ?? 0m);
 }
 
-public class PurchaseOrder : BaseEntity
+public class PurchaseOrder : TenantEntity
 {
     public string OrderNumber { get; set; } = string.Empty;
 
@@ -164,7 +164,7 @@ public class PurchaseOrder : BaseEntity
         ExpectedDate.HasValue && ExpectedDate.Value < DateOnly.FromDateTime(DateTime.Today);
 }
 
-public class PurchaseOrderLine : BaseEntity
+public class PurchaseOrderLine : TenantEntity
 {
     public Guid PurchaseOrderId { get; set; }
     public PurchaseOrder? PurchaseOrder { get; set; }
@@ -187,7 +187,7 @@ public class PurchaseOrderLine : BaseEntity
 
 // ------------------------------------------------------------------ Sterilisation
 
-public class Steriliser : BaseEntity
+public class Steriliser : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? Manufacturer { get; set; }
@@ -213,7 +213,7 @@ public class Steriliser : BaseEntity
         NextServiceDue.HasValue && NextServiceDue.Value < DateOnly.FromDateTime(DateTime.Today);
 }
 
-public class SterilisationCycle : BaseEntity
+public class SterilisationCycle : TenantEntity
 {
     public Guid SteriliserId { get; set; }
     public Steriliser? Steriliser { get; set; }
@@ -249,7 +249,7 @@ public class SterilisationCycle : BaseEntity
         CompletedAtUtc.HasValue ? (int)(CompletedAtUtc.Value - StartedAtUtc).TotalMinutes : null;
 }
 
-public class InstrumentSet : BaseEntity
+public class InstrumentSet : TenantEntity
 {
     public string SetCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
@@ -276,7 +276,7 @@ public class InstrumentSet : BaseEntity
     public bool IsAvailable => Status == InstrumentSetStatus.Sterile && !IsExpired;
 }
 
-public class InstrumentSetUsage : BaseEntity
+public class InstrumentSetUsage : TenantEntity
 {
     public Guid InstrumentSetId { get; set; }
     public InstrumentSet? InstrumentSet { get; set; }
@@ -292,7 +292,7 @@ public class InstrumentSetUsage : BaseEntity
 
 // ------------------------------------------------------------------ Laboratory
 
-public class DentalLaboratory : BaseEntity
+public class DentalLaboratory : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? AccountNumber { get; set; }
@@ -309,7 +309,7 @@ public class DentalLaboratory : BaseEntity
     public ICollection<LabCase> Cases { get; set; } = new List<LabCase>();
 }
 
-public class LabCase : BaseEntity
+public class LabCase : TenantEntity
 {
     public string CaseNumber { get; set; } = string.Empty;
 
@@ -374,7 +374,7 @@ public class LabCase : BaseEntity
 
 // ------------------------------------------------------------------ Communications
 
-public class CommunicationLog : BaseEntity
+public class CommunicationLog : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -402,7 +402,7 @@ public class CommunicationLog : BaseEntity
     public string? FailureReason { get; set; }
 }
 
-public class MessageTemplate : LookupEntity
+public class MessageTemplate : TenantLookupEntity
 {
     public CommunicationChannel Channel { get; set; } = CommunicationChannel.Email;
     public string? Subject { get; set; }

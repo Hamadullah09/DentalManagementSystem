@@ -4,7 +4,7 @@ using DentalSurgery.Domain.Enums;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>Root record for a person receiving care at the practice.</summary>
-public class Patient : BaseEntity
+public class Patient : TenantEntity
 {
     /// <summary>Human-facing sequential identifier, e.g. "P-001042".</summary>
     public string PatientNumber { get; set; } = string.Empty;
@@ -115,7 +115,7 @@ public class Patient : BaseEntity
 }
 
 /// <summary>Someone connected to the patient: emergency contact, guardian, guarantor.</summary>
-public class PatientContact : BaseEntity
+public class PatientContact : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -132,7 +132,7 @@ public class PatientContact : BaseEntity
 }
 
 /// <summary>A banner shown prominently whenever the patient record is opened.</summary>
-public class PatientAlert : BaseEntity
+public class PatientAlert : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -148,7 +148,7 @@ public class PatientAlert : BaseEntity
 }
 
 /// <summary>A file attached to the patient record.</summary>
-public class PatientDocument : BaseEntity
+public class PatientDocument : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -172,7 +172,7 @@ public class PatientDocument : BaseEntity
 }
 
 /// <summary>Lifestyle and habit history that informs risk assessment.</summary>
-public class SocialHistory : BaseEntity
+public class SocialHistory : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }

@@ -4,7 +4,7 @@ using DentalSurgery.Domain.Enums;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>A clinical entry in the patient journal. Signed notes become immutable.</summary>
-public class ClinicalNote : BaseEntity
+public class ClinicalNote : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -62,7 +62,7 @@ public class ClinicalNote : BaseEntity
 }
 
 /// <summary>A correction or addition appended to an already-signed note.</summary>
-public class ClinicalNoteAddendum : BaseEntity
+public class ClinicalNoteAddendum : TenantEntity
 {
     public Guid ClinicalNoteId { get; set; }
     public ClinicalNote? ClinicalNote { get; set; }
@@ -75,7 +75,7 @@ public class ClinicalNoteAddendum : BaseEntity
 }
 
 /// <summary>A coded diagnosis attached to the patient, optionally tooth-specific.</summary>
-public class PatientDiagnosis : BaseEntity
+public class PatientDiagnosis : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -100,7 +100,7 @@ public class PatientDiagnosis : BaseEntity
 }
 
 /// <summary>Dispensing location a prescription can be sent to.</summary>
-public class Pharmacy : BaseEntity
+public class Pharmacy : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public Address Address { get; set; } = new();
@@ -113,7 +113,7 @@ public class Pharmacy : BaseEntity
 }
 
 /// <summary>A prescription issued by a clinician.</summary>
-public class Prescription : BaseEntity
+public class Prescription : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -144,7 +144,7 @@ public class Prescription : BaseEntity
     public ICollection<PrescriptionItem> Items { get; set; } = new List<PrescriptionItem>();
 }
 
-public class PrescriptionItem : BaseEntity
+public class PrescriptionItem : TenantEntity
 {
     public Guid PrescriptionId { get; set; }
     public Prescription? Prescription { get; set; }
@@ -177,7 +177,7 @@ public class PrescriptionItem : BaseEntity
 }
 
 /// <summary>Metadata for a radiographic or photographic image.</summary>
-public class RadiographRecord : BaseEntity
+public class RadiographRecord : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -217,7 +217,7 @@ public class RadiographRecord : BaseEntity
 }
 
 /// <summary>Template text for a consent form.</summary>
-public class ConsentFormTemplate : LookupEntity
+public class ConsentFormTemplate : TenantLookupEntity
 {
     public string Body { get; set; } = string.Empty;
     public string? Risks { get; set; }
@@ -230,7 +230,7 @@ public class ConsentFormTemplate : LookupEntity
 }
 
 /// <summary>A signed instance of a consent form.</summary>
-public class PatientConsent : BaseEntity
+public class PatientConsent : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -266,7 +266,7 @@ public class PatientConsent : BaseEntity
 }
 
 /// <summary>An inbound or outbound referral.</summary>
-public class Referral : BaseEntity
+public class Referral : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }

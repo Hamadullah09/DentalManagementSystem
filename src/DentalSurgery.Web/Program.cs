@@ -9,6 +9,7 @@ using DentalSurgery.Infrastructure.Services;
 using DentalSurgery.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi.Models;
@@ -92,6 +93,10 @@ builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 builder.Services.AddScoped<ICurrentUser, WebCurrentUser>();
+
+// A Blazor circuit has its own scope and never re-enters the middleware
+// pipeline, so it needs its tenant bound separately from the HTTP request.
+builder.Services.AddScoped<CircuitHandler, TenantCircuitHandler>();
 
 // Registered before AddDentalInfrastructure, whose TryAdd fallback would
 // otherwise install the permissive system guard used by the seeder.
@@ -271,6 +276,12 @@ app.UseStaticFiles();
 if (rateLimitingEnabled) app.UseRateLimiter();
 
 app.UseAuthentication();
+
+// Immediately after authentication and before anything that queries: until the
+// scope is bound to a tenant the query filters match nothing, so this must run
+// ahead of authorisation, the endpoints and the Blazor circuit.
+app.UseTenantResolution();
+
 app.UseAuthorization();
 
 // After authentication, and it must stay there.

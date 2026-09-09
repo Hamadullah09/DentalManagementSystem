@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @inject RoleManager<ApplicationRole> RoleManager
 @inject PermissionCatalogue Catalogue
+@inject ITenantContext Tenant
 @inject IPermissionGuard Guard
 @inject IDbContextFactory<DentalDbContext> DbFactory
 @inject ILogger<RolePermissionsPage> Logger
@@ -327,7 +328,7 @@ else
 
             // The map is cached for the life of the process, so it has to be
             // dropped explicitly or the change would not be seen until a restart.
-            Catalogue.Invalidate();
+            Catalogue.Invalidate(Tenant.RequireTenantId());
 
             await Reload();
 

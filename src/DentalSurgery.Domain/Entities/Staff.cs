@@ -4,7 +4,7 @@ using DentalSurgery.Domain.Enums;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>A member of the practice team. Providers can be booked and can bill.</summary>
-public class Staff : BaseEntity
+public class Staff : TenantEntity
 {
     public string StaffNumber { get; set; } = string.Empty;
 
@@ -87,7 +87,7 @@ public class Staff : BaseEntity
 }
 
 /// <summary>A recurring working window for a provider at a location.</summary>
-public class StaffScheduleSlot : BaseEntity
+public class StaffScheduleSlot : TenantEntity
 {
     public Guid StaffId { get; set; }
     public Staff? Staff { get; set; }
@@ -116,7 +116,7 @@ public class StaffScheduleSlot : BaseEntity
 }
 
 /// <summary>Leave, training or any other absence that blocks the diary.</summary>
-public class StaffTimeOff : BaseEntity
+public class StaffTimeOff : TenantEntity
 {
     public Guid StaffId { get; set; }
     public Staff? Staff { get; set; }

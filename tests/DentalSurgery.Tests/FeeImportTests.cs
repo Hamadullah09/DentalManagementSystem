@@ -3,6 +3,7 @@ using DentalSurgery.Domain.Entities;
 using DentalSurgery.Domain.Enums;
 using DentalSurgery.Infrastructure.Identity;
 using DentalSurgery.Infrastructure.Persistence;
+using DentalSurgery.Infrastructure.Tenancy;
 using DentalSurgery.Infrastructure.Persistence.Interceptors;
 using DentalSurgery.Infrastructure.Services;
 using Microsoft.Data.Sqlite;
@@ -35,7 +36,7 @@ public class FeeImportTests : IDisposable
         // so a context without it cannot update its own rows. Register it here too.
         var options = new DbContextOptionsBuilder<DentalDbContext>()
             .UseSqlite(_connection)
-            .AddInterceptors(new AuditingInterceptor(new TestUser(), new TestClock()))
+            .AddInterceptors(new AuditingInterceptor(new TestUser(), new TestClock(), PlatformTenantContext.Instance))
             .ConfigureWarnings(w => w.Ignore(
                 Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId
                     .PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning))
@@ -353,7 +354,7 @@ public class FeeImportTests : IDisposable
 internal sealed class TestContextFactory(DbContextOptions<DentalDbContext> options)
     : IDbContextFactory<DentalDbContext>
 {
-    public DentalDbContext CreateDbContext() => new(options);
+    public DentalDbContext CreateDbContext() => new(options, PlatformTenantContext.Instance);
 }
 
 /// <summary>A signed-in user for the audit trail; the tests do not assert on it.</summary>

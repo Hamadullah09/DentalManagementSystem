@@ -5,7 +5,7 @@ namespace DentalSurgery.Domain.Entities;
 
 // ------------------------------------------------------------------ Insurance
 
-public class InsuranceCarrier : BaseEntity
+public class InsuranceCarrier : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? PayerId { get; set; }
@@ -23,7 +23,7 @@ public class InsuranceCarrier : BaseEntity
     public ICollection<InsurancePlan> Plans { get; set; } = new List<InsurancePlan>();
 }
 
-public class InsurancePlan : BaseEntity
+public class InsurancePlan : TenantEntity
 {
     public Guid InsuranceCarrierId { get; set; }
     public InsuranceCarrier? InsuranceCarrier { get; set; }
@@ -82,7 +82,7 @@ public class InsurancePlan : BaseEntity
 }
 
 /// <summary>A patient's enrolment in an insurance plan.</summary>
-public class PatientInsurance : BaseEntity
+public class PatientInsurance : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -122,7 +122,7 @@ public class PatientInsurance : BaseEntity
 
 // ------------------------------------------------------------------ Invoicing
 
-public class Invoice : BaseEntity
+public class Invoice : TenantEntity
 {
     public string InvoiceNumber { get; set; } = string.Empty;
 
@@ -168,7 +168,7 @@ public class Invoice : BaseEntity
         IsOverdue ? DateOnly.FromDateTime(DateTime.Today).DayNumber - DueDate.DayNumber : 0;
 }
 
-public class InvoiceLine : BaseEntity
+public class InvoiceLine : TenantEntity
 {
     public Guid InvoiceId { get; set; }
     public Invoice? Invoice { get; set; }
@@ -196,7 +196,7 @@ public class InvoiceLine : BaseEntity
     public decimal LineTotal => NetBeforeTax + TaxAmount;
 }
 
-public class Payment : BaseEntity
+public class Payment : TenantEntity
 {
     public string PaymentNumber { get; set; } = string.Empty;
 
@@ -235,7 +235,7 @@ public class Payment : BaseEntity
 }
 
 /// <summary>Applies part of a payment to a specific invoice.</summary>
-public class PaymentAllocation : BaseEntity
+public class PaymentAllocation : TenantEntity
 {
     public Guid PaymentId { get; set; }
     public Payment? Payment { get; set; }
@@ -250,7 +250,7 @@ public class PaymentAllocation : BaseEntity
 }
 
 /// <summary>Append-only account history for a patient.</summary>
-public class LedgerEntry : BaseEntity
+public class LedgerEntry : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -278,7 +278,7 @@ public class LedgerEntry : BaseEntity
     public decimal SignedAmount => Debit - Credit;
 }
 
-public class AccountAdjustment : BaseEntity
+public class AccountAdjustment : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -296,7 +296,7 @@ public class AccountAdjustment : BaseEntity
     public string? Notes { get; set; }
 }
 
-public class PaymentPlan : BaseEntity
+public class PaymentPlan : TenantEntity
 {
     public string PlanNumber { get; set; } = string.Empty;
 
@@ -329,7 +329,7 @@ public class PaymentPlan : BaseEntity
     public bool IsInArrears => Installments.Any(i => i.Status == InstallmentStatus.Overdue);
 }
 
-public class PaymentPlanInstallment : BaseEntity
+public class PaymentPlanInstallment : TenantEntity
 {
     public Guid PaymentPlanId { get; set; }
     public PaymentPlan? PaymentPlan { get; set; }
@@ -349,7 +349,7 @@ public class PaymentPlanInstallment : BaseEntity
 
 // ------------------------------------------------------------------ Claims
 
-public class InsuranceClaim : BaseEntity
+public class InsuranceClaim : TenantEntity
 {
     public string ClaimNumber { get; set; } = string.Empty;
 
@@ -402,7 +402,7 @@ public class InsuranceClaim : BaseEntity
             : DateOnly.FromDateTime(DateTime.Today).DayNumber - SubmittedOn.Value.DayNumber;
 }
 
-public class InsuranceClaimLine : BaseEntity
+public class InsuranceClaimLine : TenantEntity
 {
     public Guid InsuranceClaimId { get; set; }
     public InsuranceClaim? InsuranceClaim { get; set; }

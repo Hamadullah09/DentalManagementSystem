@@ -29,6 +29,18 @@ public class SeedOptions
     /// </summary>
     public bool AllowDemoDataOutsideDevelopment { get; set; }
 
+    /// <summary>
+    /// The first tenant's display name. Every install has at least one tenant,
+    /// because all practice data belongs to one.
+    /// </summary>
+    public string TenantName { get; set; } = "Meridian Dental Surgery";
+
+    /// <summary>
+    /// The first tenant's slug, used to resolve it from a host name. Must be
+    /// unique across the platform.
+    /// </summary>
+    public string TenantSlug { get; set; } = "meridian";
+
     /// <summary>The first administrator's sign-in address.</summary>
     public string AdminEmail { get; set; } = "admin@dentalsurgery.local";
 

@@ -57,7 +57,16 @@ public class PermissionAuthorizationHandler(PermissionCatalogue catalogue)
         var roles = context.User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
         if (roles.Length == 0) return;
 
-        var held = await catalogue.ForRolesAsync(roles);
+        // Roles are per-tenant, so a role name alone does not identify a grant.
+        // The tenant comes from the principal's own claim: the same signed value
+        // the request's scope is bound to.
+        if (!Guid.TryParse(context.User.FindFirstValue(DentalClaimTypes.TenantId), out var tenantId)
+            || tenantId == Guid.Empty)
+        {
+            return;
+        }
+
+        var held = await catalogue.ForRolesAsync(tenantId, roles);
 
         if (held.Contains(requirement.Permission)) context.Succeed(requirement);
     }
@@ -86,7 +95,13 @@ public class StaffMemberHandler(PermissionCatalogue catalogue)
         var roles = context.User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
         if (roles.Length == 0) return;
 
-        var held = await catalogue.ForRolesAsync(roles);
+        if (!Guid.TryParse(context.User.FindFirstValue(DentalClaimTypes.TenantId), out var tenantId)
+            || tenantId == Guid.Empty)
+        {
+            return;
+        }
+
+        var held = await catalogue.ForRolesAsync(tenantId, roles);
 
         if (held.Count > 0) context.Succeed(requirement);
     }

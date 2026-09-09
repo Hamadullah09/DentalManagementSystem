@@ -7,9 +7,17 @@ namespace DentalSurgery.Domain.Entities;
 /// Immutable trail of data changes. Written automatically by the persistence
 /// layer, never edited, and required for clinical-record governance.
 /// </summary>
-public class AuditLog
+public class AuditLog : ITenantScoped
 {
     public long Id { get; set; }
+
+    /// <summary>
+    /// The tenant whose record was changed. The audit trail is as confidential
+    /// as the data it describes - it carries before-and-after values of patient
+    /// records - so it is filtered like everything else rather than being
+    /// treated as infrastructure.
+    /// </summary>
+    public Guid TenantId { get; set; }
 
     public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
     public AuditAction Action { get; set; }
@@ -35,7 +43,7 @@ public class AuditLog
 }
 
 /// <summary>Key/value application configuration held in the database.</summary>
-public class AppSetting : BaseEntity
+public class AppSetting : TenantEntity
 {
     public string Key { get; set; } = string.Empty;
     public string? Value { get; set; }
@@ -50,7 +58,7 @@ public class AppSetting : BaseEntity
 /// Allocates human-readable document numbers (patients, invoices, claims).
 /// Incremented under a transaction so numbers are gap-free and unique.
 /// </summary>
-public class NumberSequence : BaseEntity
+public class NumberSequence : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string Prefix { get; set; } = string.Empty;
@@ -69,7 +77,7 @@ public class NumberSequence : BaseEntity
 }
 
 /// <summary>A saved, named search or worklist filter.</summary>
-public class SavedView : BaseEntity
+public class SavedView : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string Module { get; set; } = string.Empty;
@@ -81,7 +89,7 @@ public class SavedView : BaseEntity
 }
 
 /// <summary>An in-app task assigned to a staff member.</summary>
-public class WorkTask : BaseEntity
+public class WorkTask : TenantEntity
 {
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }

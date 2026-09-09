@@ -1,10 +1,18 @@
+using DentalSurgery.Domain.Common;
 using Microsoft.AspNetCore.Identity;
 
 namespace DentalSurgery.Infrastructure.Identity;
 
 /// <summary>A login account. Linked to a <c>Staff</c> record for clinical attribution.</summary>
-public class ApplicationUser : IdentityUser
+public class ApplicationUser : IdentityUser, ITenantScoped
 {
+    /// <summary>
+    /// The practice this login belongs to. Every account is owned by exactly one
+    /// tenant, and it is this value - carried into the sign-in cookie as a claim
+    /// - that decides what the whole session can see.
+    /// </summary>
+    public Guid TenantId { get; set; }
+
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
 
@@ -40,12 +48,23 @@ public class ApplicationUser : IdentityUser
     }
 }
 
-/// <summary>A role, extended with a description shown in the admin screens.</summary>
-public class ApplicationRole : IdentityRole
+/// <summary>
+/// A role, extended with a description shown in the admin screens.
+/// <para>
+/// Tenant-scoped, because a role carries its permission grants as claims and
+/// the administration screens let a practice edit them. Were roles shared, one
+/// practice widening what its receptionists may do would widen it for every
+/// practice on the platform — a privilege escalation reachable from an ordinary
+/// admin screen. Each tenant therefore owns its own copy of the standard roles.
+/// </para>
+/// </summary>
+public class ApplicationRole : IdentityRole, ITenantScoped
 {
     public ApplicationRole() { }
 
     public ApplicationRole(string roleName) : base(roleName) { }
+
+    public Guid TenantId { get; set; }
 
     public string? Description { get; set; }
     public bool IsSystemRole { get; set; }

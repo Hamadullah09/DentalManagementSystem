@@ -4,7 +4,7 @@ using DentalSurgery.Domain.Enums;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>Billable procedure catalogue entry (CDT/OPCS style code plus defaults).</summary>
-public class ProcedureCode : BaseEntity
+public class ProcedureCode : BaseEntity, IGlobalEntity
 {
     public string Code { get; set; } = string.Empty;
     public string ShortDescription { get; set; } = string.Empty;
@@ -49,7 +49,7 @@ public class ProcedureCode : BaseEntity
 }
 
 /// <summary>A named price list. Practice, insurer-specific or discount.</summary>
-public class FeeSchedule : BaseEntity
+public class FeeSchedule : TenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -68,7 +68,7 @@ public class FeeSchedule : BaseEntity
     public ICollection<FeeScheduleItem> Items { get; set; } = new List<FeeScheduleItem>();
 }
 
-public class FeeScheduleItem : BaseEntity
+public class FeeScheduleItem : TenantEntity
 {
     public Guid FeeScheduleId { get; set; }
     public FeeSchedule? FeeSchedule { get; set; }
@@ -83,7 +83,7 @@ public class FeeScheduleItem : BaseEntity
 }
 
 /// <summary>A proposed course of treatment, organised into phases.</summary>
-public class TreatmentPlan : BaseEntity
+public class TreatmentPlan : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -140,7 +140,7 @@ public class TreatmentPlan : BaseEntity
 }
 
 /// <summary>A sequenced stage within a plan, e.g. "Phase 1 - Stabilisation".</summary>
-public class TreatmentPlanPhase : BaseEntity
+public class TreatmentPlanPhase : TenantEntity
 {
     public Guid TreatmentPlanId { get; set; }
     public TreatmentPlan? TreatmentPlan { get; set; }
@@ -159,7 +159,7 @@ public class TreatmentPlanPhase : BaseEntity
 }
 
 /// <summary>One proposed procedure inside a plan phase.</summary>
-public class TreatmentPlanItem : BaseEntity
+public class TreatmentPlanItem : TenantEntity
 {
     public Guid TreatmentPlanPhaseId { get; set; }
     public TreatmentPlanPhase? TreatmentPlanPhase { get; set; }
@@ -203,7 +203,7 @@ public class TreatmentPlanItem : BaseEntity
 }
 
 /// <summary>A procedure that has actually been carried out (or is in progress).</summary>
-public class Procedure : BaseEntity
+public class Procedure : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -277,7 +277,7 @@ public class Procedure : BaseEntity
 }
 
 /// <summary>Stock consumed by a procedure, used for costing and inventory depletion.</summary>
-public class ProcedureMaterialUsage : BaseEntity
+public class ProcedureMaterialUsage : TenantEntity
 {
     public Guid ProcedureId { get; set; }
     public Procedure? Procedure { get; set; }
@@ -296,7 +296,7 @@ public class ProcedureMaterialUsage : BaseEntity
 }
 
 /// <summary>Operative detail for a surgical procedure.</summary>
-public class SurgicalRecord : BaseEntity
+public class SurgicalRecord : TenantEntity
 {
     public Guid ProcedureId { get; set; }
     public Procedure? Procedure { get; set; }
@@ -347,7 +347,7 @@ public class SurgicalRecord : BaseEntity
 }
 
 /// <summary>Anaesthesia given for a procedure, including a sedation monitoring record.</summary>
-public class AnaesthesiaRecord : BaseEntity
+public class AnaesthesiaRecord : TenantEntity
 {
     public Guid ProcedureId { get; set; }
     public Procedure? Procedure { get; set; }
@@ -392,7 +392,7 @@ public class AnaesthesiaRecord : BaseEntity
 }
 
 /// <summary>One cartridge/dose of an anaesthetic agent.</summary>
-public class AnaesthesiaAgentDose : BaseEntity
+public class AnaesthesiaAgentDose : TenantEntity
 {
     public Guid AnaesthesiaRecordId { get; set; }
     public AnaesthesiaRecord? AnaesthesiaRecord { get; set; }
@@ -418,7 +418,7 @@ public class AnaesthesiaAgentDose : BaseEntity
 }
 
 /// <summary>Registry entry for a placed dental implant, tracked for its lifetime.</summary>
-public class DentalImplant : BaseEntity
+public class DentalImplant : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -473,7 +473,7 @@ public class DentalImplant : BaseEntity
 }
 
 /// <summary>Reusable aftercare text issued to patients.</summary>
-public class PostOperativeInstruction : LookupEntity
+public class PostOperativeInstruction : TenantLookupEntity
 {
     public string Body { get; set; } = string.Empty;
     public string? AppliesToProcedureCodes { get; set; }

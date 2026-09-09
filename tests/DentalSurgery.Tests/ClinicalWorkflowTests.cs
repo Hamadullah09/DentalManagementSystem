@@ -6,6 +6,7 @@ using DentalSurgery.Domain.Entities;
 using DentalSurgery.Domain.Enums;
 using DentalSurgery.Infrastructure.Identity;
 using DentalSurgery.Infrastructure.Persistence;
+using DentalSurgery.Infrastructure.Tenancy;
 using DentalSurgery.Infrastructure.Persistence.Interceptors;
 using DentalSurgery.Infrastructure.Persistence.Seed;
 using DentalSurgery.Infrastructure.Services;
@@ -32,6 +33,7 @@ namespace DentalSurgery.Tests;
 /// </summary>
 public class PatientJourneyTests : IDisposable
 {
+    private readonly TenantContext _tenancy = TestTenancy.Bound();
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<DentalDbContext> _options;
     private readonly ServiceProvider _provider;
@@ -47,7 +49,12 @@ public class PatientJourneyTests : IDisposable
 
         _options = new DbContextOptionsBuilder<DentalDbContext>()
             .UseSqlite(_connection)
-            .AddInterceptors(new AuditingInterceptor(new TestUser(), new TestClock()))
+            .AddInterceptors(
+                // The guard stamps TenantId on insert. Without it the fixture
+                // would write rows belonging to no tenant, which the filters
+                // then hide - so the suite would be testing an empty database.
+                new TenantGuardInterceptor(_tenancy, NullLogger<TenantGuardInterceptor>.Instance),
+                new AuditingInterceptor(new TestUser(), new TestClock(), _tenancy))
             .ConfigureWarnings(w => w.Ignore(
                 Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId
                     .PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning))
@@ -55,9 +62,10 @@ public class PatientJourneyTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton<IDbContextFactory<DentalDbContext>>(new TestContextFactory(_options));
+        services.AddTestTenancy();
         _provider = services.BuildServiceProvider();
 
-        using var db = new DentalDbContext(_options);
+        using var db = new DentalDbContext(_options, _tenancy);
         db.Database.EnsureCreated();
 
         // The grant is written as role claims, exactly as the running system
@@ -145,6 +153,7 @@ public class PatientJourneyTests : IDisposable
     private IPermissionGuard GuardFor(params string[] roles) =>
         new PermissionGuard(
             new RoleUser(roles),
+            _tenancy,
             new PermissionCatalogue(
                 _provider.GetRequiredService<IServiceScopeFactory>(),
                 new MemoryCache(new MemoryCacheOptions()),
@@ -165,7 +174,7 @@ public class PatientJourneyTests : IDisposable
     /// <summary>Builds the service set as it would be resolved for one role.</summary>
     private Actor As(params string[] roles)
     {
-        var db = new DentalDbContext(_options);
+        var db = new DentalDbContext(_options, _tenancy);
         var guard = GuardFor(roles);
         var sequences = new StubSequences();
         var clock = new TestClock();
@@ -318,7 +327,7 @@ public class PatientJourneyTests : IDisposable
         }
 
         // ---------------------------------------------------------- audited
-        using (var db = new DentalDbContext(_options))
+        using (var db = new DentalDbContext(_options, _tenancy))
         {
             var trail = await db.AuditLogs.AsNoTracking()
                 .Where(a => a.EntityId == patientId.ToString()

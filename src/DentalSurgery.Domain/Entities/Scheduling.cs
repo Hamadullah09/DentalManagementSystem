@@ -4,7 +4,7 @@ using DentalSurgery.Domain.Enums;
 namespace DentalSurgery.Domain.Entities;
 
 /// <summary>A booking in the appointment book, tied to a provider and an operatory.</summary>
-public class Appointment : BaseEntity
+public class Appointment : TenantEntity
 {
     public string AppointmentNumber { get; set; } = string.Empty;
 
@@ -86,7 +86,7 @@ public class Appointment : BaseEntity
 }
 
 /// <summary>A procedure intended for an appointment, used for time and fee estimates.</summary>
-public class AppointmentProcedure : BaseEntity
+public class AppointmentProcedure : TenantEntity
 {
     public Guid AppointmentId { get; set; }
     public Appointment? Appointment { get; set; }
@@ -110,7 +110,7 @@ public class AppointmentProcedure : BaseEntity
 }
 
 /// <summary>A scheduled reminder message for an appointment.</summary>
-public class AppointmentReminder : BaseEntity
+public class AppointmentReminder : TenantEntity
 {
     public Guid AppointmentId { get; set; }
     public Appointment? Appointment { get; set; }
@@ -131,7 +131,7 @@ public class AppointmentReminder : BaseEntity
 }
 
 /// <summary>A recurring clinical review the patient is due for.</summary>
-public class RecallSchedule : BaseEntity
+public class RecallSchedule : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -169,7 +169,7 @@ public class RecallSchedule : BaseEntity
 }
 
 /// <summary>A patient wanting an earlier slot if one becomes free.</summary>
-public class WaitlistEntry : BaseEntity
+public class WaitlistEntry : TenantEntity
 {
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }

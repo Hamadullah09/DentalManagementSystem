@@ -17,6 +17,59 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.10");
 
+            modelBuilder.Entity("DentalSurgery.Domain.Common.Tenant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ModifiedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SuspendedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SuspendedReason")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Tenants");
+                });
+
             modelBuilder.Entity("DentalSurgery.Domain.Entities.AccountAdjustment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -78,9 +131,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("AccountAdjustments", (string)null);
                 });
@@ -230,6 +288,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Technique")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -239,6 +300,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AnaesthesiaRecordId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("AnaesthesiaAgentDoses", (string)null);
                 });
@@ -349,6 +412,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateTime>("StartedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TopicalAgent")
                         .HasColumnType("TEXT");
 
@@ -360,7 +426,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("AdministeredByStaffId");
 
                     b.HasIndex("ProcedureId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_AnaesthesiaRecords_ProcedureId1");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "ProcedureId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AnaesthesiaRecords_ProcedureId");
 
                     b.ToTable("AnaesthesiaRecords", (string)null);
                 });
@@ -418,13 +491,19 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Value")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Key")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AppSettings_Key");
 
                     b.ToTable("AppSettings", (string)null);
                 });
@@ -575,6 +654,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("TreatmentPlanId")
                         .HasColumnType("TEXT");
 
@@ -582,9 +664,6 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AppointmentNumber")
-                        .IsUnique();
 
                     b.HasIndex("AssistantId");
 
@@ -594,11 +673,17 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("Status");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("OperatoryId", "StartUtc");
 
                     b.HasIndex("PatientId", "StartUtc");
 
                     b.HasIndex("ProviderId", "StartUtc");
+
+                    b.HasIndex("TenantId", "AppointmentNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Appointments_AppointmentNumber");
 
                     b.ToTable("Appointments", (string)null);
                 });
@@ -662,6 +747,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Surfaces")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -673,6 +761,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("AppointmentId");
 
                     b.HasIndex("ProcedureCodeId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -751,9 +841,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AppointmentId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("Status", "ScheduledForUtc");
 
@@ -797,6 +892,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("PatientId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("TimestampUtc")
                         .HasColumnType("TEXT");
 
@@ -814,6 +912,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TimestampUtc");
 
@@ -874,9 +974,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("BusinessHours");
                 });
@@ -928,9 +1033,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("ClinicClosures");
                 });
@@ -1041,6 +1151,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("Subjective")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
@@ -1053,6 +1166,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("AppointmentId");
 
                     b.HasIndex("ProviderId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "NoteDateUtc");
 
@@ -1109,9 +1224,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClinicalNoteId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("ClinicalNoteAddenda");
                 });
@@ -1202,9 +1322,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("StaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "OccurredAtUtc");
 
@@ -1283,6 +1408,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("ValidForDays")
                         .HasColumnType("INTEGER");
 
@@ -1292,8 +1420,11 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ConsentFormTemplates_Code");
 
                     b.ToTable("ConsentFormTemplates", (string)null);
                 });
@@ -1438,6 +1569,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -1451,6 +1585,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("PlacementProcedureId");
 
                     b.HasIndex("SurgeonStaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -1519,7 +1655,12 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("StandardTurnaroundDays")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("DentalLaboratories", (string)null);
                 });
@@ -1585,9 +1726,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("ScheduleType")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InsuranceCarrierId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("FeeSchedules", (string)null);
                 });
@@ -1644,12 +1790,20 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FeeScheduleId");
 
                     b.HasIndex("ProcedureCodeId");
 
-                    b.HasIndex("FeeScheduleId", "ProcedureCodeId")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "FeeScheduleId", "ProcedureCodeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_FeeScheduleItems_FeeScheduleId_ProcedureCodeId");
 
                     b.ToTable("FeeScheduleItems", (string)null);
                 });
@@ -1725,6 +1879,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateOnly?>("SterilityExpiryDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TrayType")
                         .HasColumnType("TEXT");
 
@@ -1735,8 +1892,11 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("LastCycleId");
 
-                    b.HasIndex("SetCode")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "SetCode")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InstrumentSets_SetCode");
 
                     b.ToTable("InstrumentSets", (string)null);
                 });
@@ -1790,6 +1950,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UsedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -1799,6 +1962,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InstrumentSetId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("UsedAtUtc");
 
@@ -1859,6 +2024,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("TypicalPaymentDays")
                         .HasColumnType("INTEGER");
 
@@ -1866,6 +2034,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("InsuranceCarriers", (string)null);
                 });
@@ -1983,6 +2153,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateOnly?>("SubmittedOn")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("TotalAllowed")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -2001,9 +2174,6 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClaimNumber")
-                        .IsUnique();
-
                     b.HasIndex("InvoiceId");
 
                     b.HasIndex("PatientId");
@@ -2012,7 +2182,13 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("ProviderId");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("Status", "SubmittedOn");
+
+                    b.HasIndex("TenantId", "ClaimNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InsuranceClaims_ClaimNumber");
 
                     b.ToTable("InsuranceClaims", (string)null);
                 });
@@ -2095,6 +2271,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("SurfaceCode")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -2109,6 +2288,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("ProcedureCodeId");
 
                     b.HasIndex("ProcedureId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -2244,6 +2425,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("WaitingPeriodBasicMonths")
                         .HasColumnType("INTEGER");
 
@@ -2258,6 +2442,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("FeeScheduleId");
 
                     b.HasIndex("InsuranceCarrierId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("InsurancePlans", (string)null);
                 });
@@ -2384,6 +2570,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("SubCategory")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("UnitCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -2399,10 +2588,13 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("PreferredSupplierId");
 
-                    b.HasIndex("Sku")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("Category", "IsActive");
+
+                    b.HasIndex("TenantId", "Sku")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryItems_Sku");
 
                     b.ToTable("InventoryItems", (string)null);
                 });
@@ -2472,6 +2664,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("SupplierId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("UnitCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -2481,6 +2676,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("ExpiryDate");
 
                     b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("InventoryItemId", "LotNumber");
 
@@ -2579,6 +2776,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TermsText")
                         .HasColumnType("TEXT");
 
@@ -2600,16 +2800,19 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("GuarantorPatientId");
 
-                    b.HasIndex("InvoiceNumber")
-                        .IsUnique();
-
                     b.HasIndex("LocationId");
 
                     b.HasIndex("ProviderId");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("PatientId", "IssueDate");
 
                     b.HasIndex("Status", "DueDate");
+
+                    b.HasIndex("TenantId", "InvoiceNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Invoices_InvoiceNumber");
 
                     b.ToTable("Invoices", (string)null);
                 });
@@ -2688,6 +2891,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -2700,6 +2906,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("InvoiceId");
 
                     b.HasIndex("ProcedureCodeId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -2843,6 +3051,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ToothNumbers")
                         .HasColumnType("TEXT");
 
@@ -2857,16 +3068,19 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CaseNumber")
-                        .IsUnique();
-
                     b.HasIndex("DentalLaboratoryId");
 
                     b.HasIndex("PatientId");
 
                     b.HasIndex("ProviderId");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("Status", "DueDate");
+
+                    b.HasIndex("TenantId", "CaseNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LabCases_CaseNumber");
 
                     b.ToTable("LabCases", (string)null);
                 });
@@ -2949,7 +3163,12 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "EntryDate");
 
@@ -3012,12 +3231,18 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique();
-
                     b.HasIndex("PracticeId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Locations_Code");
 
                     b.ToTable("Locations", (string)null);
                 });
@@ -3212,12 +3437,17 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<bool>("TakingImmunosuppressants")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("WeeksPregnant")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ReviewedByStaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "ReviewDate");
 
@@ -3431,10 +3661,16 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("Subject")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MessageTemplates_Code");
 
                     b.ToTable("MessageTemplates", (string)null);
                 });
@@ -3495,10 +3731,16 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("Suffix")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_NumberSequences_Name");
 
                     b.ToTable("NumberSequences", (string)null);
                 });
@@ -3574,10 +3816,18 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("LocationId", "Code")
-                        .IsUnique();
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "LocationId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Operatories_LocationId_Code");
 
                     b.ToTable("Operatories", (string)null);
                 });
@@ -3744,6 +3994,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DateOfBirth");
@@ -3751,9 +4004,6 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("GuarantorPatientId");
 
                     b.HasIndex("NextRecallDue");
-
-                    b.HasIndex("PatientNumber")
-                        .IsUnique();
 
                     b.HasIndex("PreferredLocationId");
 
@@ -3764,6 +4014,12 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("ReferredByPatientId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "PatientNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Patients_PatientNumber");
 
                     b.ToTable("Patients", (string)null);
                 });
@@ -3824,12 +4080,17 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Severity")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "IsActive");
 
@@ -3896,12 +4157,17 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Severity")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("VerifiedBy")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AllergenId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "IsActive");
 
@@ -3981,6 +4247,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("TreatmentPlanId")
                         .HasColumnType("TEXT");
 
@@ -3998,6 +4267,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("ClinicianStaffId");
 
                     b.HasIndex("ConsentFormTemplateId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("WitnessStaffId");
 
@@ -4055,9 +4326,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("PatientContacts", (string)null);
                 });
@@ -4135,12 +4411,17 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("DiagnosedByStaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -4227,6 +4508,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -4239,6 +4523,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "DocumentType");
 
@@ -4330,6 +4616,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<bool>("SubscriberIsPatient")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateOnly?>("TerminatedOn")
                         .HasColumnType("TEXT");
 
@@ -4339,6 +4628,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InsurancePlanId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "Priority");
 
@@ -4404,9 +4695,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MedicalConditionId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "Status");
 
@@ -4481,9 +4777,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MedicationId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "IsCurrent");
 
@@ -4585,14 +4886,20 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InsuranceClaimId");
 
-                    b.HasIndex("PaymentNumber")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "PaymentDate");
+
+                    b.HasIndex("TenantId", "PaymentNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Payments_PaymentNumber");
 
                     b.ToTable("Payments", (string)null);
                 });
@@ -4647,9 +4954,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InvoiceId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PaymentId", "InvoiceId");
 
@@ -4738,6 +5050,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("TotalAmount")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -4749,8 +5064,11 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("PatientId");
 
-                    b.HasIndex("PlanNumber")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "PlanNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentPlans_PlanNumber");
 
                     b.ToTable("PaymentPlans", (string)null);
                 });
@@ -4818,12 +5136,20 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("PaymentPlanId", "InstallmentNumber")
-                        .IsUnique();
+                    b.HasIndex("PaymentPlanId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("Status", "DueDate");
+
+                    b.HasIndex("TenantId", "PaymentPlanId", "InstallmentNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentPlanInstallments_PaymentPlanId_InstallmentNumber");
 
                     b.ToTable("PaymentPlanInstallments", (string)null);
                 });
@@ -4922,12 +5248,17 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TreatmentRecommendation")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ExaminerStaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "ExamDate");
 
@@ -5004,15 +5335,23 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<bool>("Suppuration")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ToothId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PeriodontalChartId");
+
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("ToothId");
 
-                    b.HasIndex("PeriodontalChartId", "ToothId", "Site")
-                        .IsUnique();
+                    b.HasIndex("TenantId", "PeriodontalChartId", "ToothId", "Site")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PeriodontalMeasurements_PeriodontalChartId_ToothId_Site");
 
                     b.ToTable("PeriodontalMeasurements", (string)null);
                 });
@@ -5068,7 +5407,12 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("Pharmacies", (string)null);
                 });
@@ -5139,13 +5483,19 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("WarningSigns")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PostOperativeInstructions_Code");
 
                     b.ToTable("PostOperativeInstructions", (string)null);
                 });
@@ -5234,6 +5584,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("TaxNumber")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -5242,6 +5595,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("Practices", (string)null);
                 });
@@ -5327,6 +5682,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateOnly?>("ValidUntil")
                         .HasColumnType("TEXT");
 
@@ -5336,10 +5694,13 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("PrescriberStaffId");
 
-                    b.HasIndex("PrescriptionNumber")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "IssueDate");
+
+                    b.HasIndex("TenantId", "PrescriptionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Prescriptions_PrescriptionNumber");
 
                     b.ToTable("Prescriptions", (string)null);
                 });
@@ -5417,6 +5778,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Unit")
                         .HasColumnType("TEXT");
 
@@ -5425,6 +5789,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("MedicationId");
 
                     b.HasIndex("PrescriptionId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("PrescriptionItems", (string)null);
                 });
@@ -5545,6 +5911,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -5564,6 +5933,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("ProcedureCodeId");
 
                     b.HasIndex("ProviderId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -5761,6 +6132,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double?>("UnitCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -5772,6 +6146,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("InventoryLotId");
 
                     b.HasIndex("ProcedureId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("ProcedureMaterialUsages", (string)null);
                 });
@@ -5857,6 +6233,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("Total")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -5866,10 +6245,13 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrderNumber")
-                        .IsUnique();
-
                     b.HasIndex("SupplierId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "OrderNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PurchaseOrders_OrderNumber");
 
                     b.ToTable("PurchaseOrders", (string)null);
                 });
@@ -5933,6 +6315,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("UnitCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -5942,6 +6327,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("InventoryItemId");
 
                     b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("PurchaseOrderLines", (string)null);
                 });
@@ -6054,6 +6441,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("TakenByStaffId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ThumbnailPath")
                         .HasColumnType("TEXT");
 
@@ -6066,6 +6456,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("DocumentId");
 
                     b.HasIndex("TakenByStaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "TakenAtUtc");
 
@@ -6145,9 +6537,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateOnly?>("SuspendedUntil")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PreferredProviderId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "RecallType");
 
@@ -6245,6 +6642,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ToothNumbers")
                         .HasColumnType("TEXT");
 
@@ -6254,8 +6654,11 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("PatientId");
 
-                    b.HasIndex("ReferralNumber")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "ReferralNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Referrals_ReferralNumber");
 
                     b.ToTable("Referrals", (string)null);
                 });
@@ -6317,7 +6720,12 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("Module", "OwnerUserId");
 
@@ -6418,6 +6826,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int?>("SugarIntakeEpisodesPerDay")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("UsesElectricToothbrush")
                         .HasColumnType("INTEGER");
 
@@ -6434,6 +6845,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "RecordedOn");
 
@@ -6582,6 +6995,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateOnly?>("TerminationDate")
                         .HasColumnType("TEXT");
 
@@ -6591,10 +7007,13 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("DefaultLocationId");
 
-                    b.HasIndex("StaffNumber")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("IsActive", "IsProvider");
+
+                    b.HasIndex("TenantId", "StaffNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Staff_StaffNumber");
 
                     b.ToTable("Staff", (string)null);
                 });
@@ -6663,11 +7082,16 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<TimeSpan>("StartTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DefaultOperatoryId");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("StaffId", "DayOfWeek");
 
@@ -6737,7 +7161,12 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<DateTime>("StartUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("StaffId", "StartUtc");
 
@@ -6837,6 +7266,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SteriliserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("VacuumLeakTestPass")
                         .HasColumnType("INTEGER");
 
@@ -6846,8 +7278,13 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("StartedAtUtc");
 
-                    b.HasIndex("SteriliserId", "CycleNumber")
-                        .IsUnique();
+                    b.HasIndex("SteriliserId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "SteriliserId", "CycleNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SterilisationCycles_SteriliserId_CycleNumber");
 
                     b.ToTable("SterilisationCycles", (string)null);
                 });
@@ -6927,9 +7364,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<string>("SerialNumber")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("Sterilisers", (string)null);
                 });
@@ -7006,6 +7448,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double?>("UnitCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -7013,6 +7458,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InventoryLotId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("InventoryItemId", "MovementDateUtc");
 
@@ -7080,10 +7527,15 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Website")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("Suppliers", (string)null);
                 });
@@ -7225,6 +7677,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<bool>("SutureRequired")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("ToothSectioned")
                         .HasColumnType("INTEGER");
 
@@ -7233,7 +7688,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("InstrumentSetId");
 
                     b.HasIndex("ProcedureId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_SurgicalRecords_ProcedureId1");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "ProcedureId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SurgicalRecords_ProcedureId");
 
                     b.ToTable("SurgicalRecords", (string)null);
                 });
@@ -7412,6 +7874,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Surfaces")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -7425,6 +7890,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("RecordedByStaffId");
 
                     b.HasIndex("SupersedesId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -7538,6 +8005,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("SupersedesPlanId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("TotalDiscount")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -7556,12 +8026,15 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("FeeScheduleId");
 
-                    b.HasIndex("PlanNumber")
-                        .IsUnique();
-
                     b.HasIndex("ProviderId");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("PatientId", "Status");
+
+                    b.HasIndex("TenantId", "PlanNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TreatmentPlans_PlanNumber");
 
                     b.ToTable("TreatmentPlans", (string)null);
                 });
@@ -7654,6 +8127,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("Surfaces")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ToothId")
                         .HasColumnType("TEXT");
 
@@ -7671,6 +8147,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("ProviderId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ToothId");
 
@@ -7733,10 +8211,15 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("TreatmentPlanId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TreatmentPlanId");
 
@@ -7819,6 +8302,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<double?>("WeightKg")
                         .HasPrecision(18, 4)
                         .HasColumnType("REAL");
@@ -7826,6 +8312,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("RecordedByStaffId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("PatientId", "RecordedAtUtc");
 
@@ -7926,6 +8414,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<bool>("SundayOk")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("ThursdayOk")
                         .HasColumnType("INTEGER");
 
@@ -7942,6 +8433,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("PatientId");
 
                     b.HasIndex("PreferredProviderId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("Status", "Priority");
 
@@ -8019,6 +8512,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("BLOB");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -8029,6 +8525,8 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("AssignedToStaffId");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("IsCompleted", "DueDate");
 
@@ -8061,9 +8559,14 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("NormalizedName")
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "NormalizedName")
                         .IsUnique()
                         .HasDatabaseName("RoleNameIndex");
 
@@ -8148,6 +8651,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("StaffId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ThemePreference")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -8164,7 +8670,9 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
 
-                    b.HasIndex("NormalizedUserName")
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
@@ -8208,7 +8716,7 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("RoleClaims", (string)null);
+                    b.ToTable("AspNetRoleClaims", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<string>", b =>
@@ -8231,7 +8739,7 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserClaims", (string)null);
+                    b.ToTable("AspNetUserClaims", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<string>", b =>
@@ -8253,7 +8761,7 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserLogins", (string)null);
+                    b.ToTable("AspNetUserLogins", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
@@ -8268,7 +8776,7 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("UserRoles", (string)null);
+                    b.ToTable("AspNetUserRoles", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
@@ -8287,7 +8795,7 @@ namespace DentalSurgery.Migrations.Sqlite.Migrations
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 
-                    b.ToTable("UserTokens", (string)null);
+                    b.ToTable("AspNetUserTokens", (string)null);
                 });
 
             modelBuilder.Entity("DentalSurgery.Domain.Entities.AccountAdjustment", b =>

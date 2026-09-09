@@ -10,6 +10,12 @@ namespace DentalSurgery.Web.Services;
 /// <summary>Extra claims stamped onto the sign-in cookie.</summary>
 public static class DentalClaimTypes
 {
+    /// <summary>
+    /// The tenant this session is confined to. Stamped at sign-in and read on
+    /// every request; it is the single value the whole isolation model turns on.
+    /// </summary>
+    public const string TenantId = "dental:tenant_id";
+
     public const string StaffId = "dental:staff_id";
     public const string DisplayName = "dental:display_name";
     public const string LocationId = "dental:location_id";
@@ -39,6 +45,11 @@ public class DentalClaimsPrincipalFactory(
         var identity = await base.GenerateClaimsAsync(user);
 
         identity.AddClaim(new Claim(DentalClaimTypes.DisplayName, user.DisplayName));
+
+        // Written even when empty, so a malformed account produces a claim that
+        // resolves to no tenant - and therefore sees nothing - rather than no
+        // claim at all, which is harder to reason about downstream.
+        identity.AddClaim(new Claim(DentalClaimTypes.TenantId, user.TenantId.ToString()));
 
         if (user.StaffId is { } staffId)
             identity.AddClaim(new Claim(DentalClaimTypes.StaffId, staffId.ToString()));

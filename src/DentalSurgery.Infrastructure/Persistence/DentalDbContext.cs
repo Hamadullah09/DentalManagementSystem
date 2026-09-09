@@ -1,9 +1,11 @@
+using DentalSurgery.Application.Abstractions;
 using DentalSurgery.Domain.Common;
 using DentalSurgery.Domain.Entities;
 using DentalSurgery.Infrastructure.Identity;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -15,9 +17,23 @@ namespace DentalSurgery.Infrastructure.Persistence;
 /// clinical/operational model so that staff logins and clinical attribution
 /// share one transactional boundary.
 /// </summary>
-public class DentalDbContext(DbContextOptions<DentalDbContext> options)
+public class DentalDbContext(
+    DbContextOptions<DentalDbContext> options,
+    ITenantContext tenantContext)
     : IdentityDbContext<ApplicationUser, ApplicationRole, string>(options), IDataProtectionKeyContext
 {
+    /// <summary>
+    /// Read by the global query filters. EF re-evaluates these on every query
+    /// rather than baking them into the compiled plan, so one context can serve
+    /// a request whose tenant is resolved after the context was created.
+    /// </summary>
+    private Guid? CurrentTenantId => tenantContext.TenantId;
+
+    private bool IsPlatformScope => tenantContext.IsPlatformScope;
+
+    /// <summary>The tenant registry. Global: it is the list of tenants.</summary>
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
     // -------------------------------------------------------- organisation
     public DbSet<Practice> Practices => Set<Practice>();
     public DbSet<Location> Locations => Set<Location>();
@@ -150,7 +166,9 @@ public class DentalDbContext(DbContextOptions<DentalDbContext> options)
         ApplyIdentityTableNames(builder);
         ApplyDecimalPrecision(builder, IsSqlite);
         ApplyEnumConversions(builder);
-        ApplySoftDeleteFilters(builder);
+        GuardEveryEntityIsClassified(builder);
+        ApplyQueryFilters(builder);
+        ApplyTenantIndexes(builder);
         ApplyConcurrencyTokens(builder, IsSqlite);
         RestrictCascadeDeletes(builder);
     }
@@ -160,11 +178,7 @@ public class DentalDbContext(DbContextOptions<DentalDbContext> options)
     {
         builder.Entity<ApplicationUser>().ToTable("Users");
         builder.Entity<ApplicationRole>().ToTable("Roles");
-        builder.Entity<Microsoft.AspNetCore.Identity.IdentityUserRole<string>>().ToTable("UserRoles");
-        builder.Entity<Microsoft.AspNetCore.Identity.IdentityUserClaim<string>>().ToTable("UserClaims");
-        builder.Entity<Microsoft.AspNetCore.Identity.IdentityUserLogin<string>>().ToTable("UserLogins");
-        builder.Entity<Microsoft.AspNetCore.Identity.IdentityUserToken<string>>().ToTable("UserTokens");
-        builder.Entity<Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>>().ToTable("RoleClaims");
+
     }
 
     /// <summary>
@@ -222,18 +236,168 @@ public class DentalDbContext(DbContextOptions<DentalDbContext> options)
         }
     }
 
-    /// <summary>Hides soft-deleted rows from every query by default.</summary>
-    private static void ApplySoftDeleteFilters(ModelBuilder builder)
+    /// <summary>
+    /// Refuses to build a model containing an entity nobody classified.
+    /// <para>
+    /// An entity that is neither tenant-scoped nor explicitly global would be
+    /// unfiltered, and therefore readable by every tenant. Catching that when
+    /// the model is built turns the most dangerous mistake in a multi-tenant
+    /// system into a start-up failure naming the offending type, instead of a
+    /// data leak nobody notices.
+    /// </para>
+    /// </summary>
+    private static void GuardEveryEntityIsClassified(ModelBuilder builder)
+    {
+        var unclassified = builder.Model.GetEntityTypes()
+            .Where(e => !e.IsOwned())
+            .Select(e => e.ClrType)
+            .Where(t => !typeof(ITenantScoped).IsAssignableFrom(t))
+            .Where(t => !typeof(IGlobalEntity).IsAssignableFrom(t))
+            .Where(t => !IsFrameworkOwned(t))
+            .Select(t => t.Name)
+            .OrderBy(n => n)
+            .ToList();
+
+        if (unclassified.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These entity types are neither ITenantScoped nor IGlobalEntity, so they would be " +
+                $"visible to every tenant: {string.Join(", ", unclassified)}. Derive from TenantEntity " +
+                $"to place one inside the tenant boundary, or mark it IGlobalEntity if it really is " +
+                $"reference data shared by every practice.");
+        }
+    }
+
+    /// <summary>
+    /// Types owned by ASP.NET Core rather than this domain. Identity's own
+    /// tables are scoped through ApplicationUser, and the data protection key
+    /// ring is platform infrastructure that holds no tenant data.
+    /// </summary>
+    private static bool IsFrameworkOwned(Type type) =>
+        type == typeof(DataProtectionKey)
+        || type.Namespace?.StartsWith("Microsoft.AspNetCore.Identity", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// The two filters every read passes through: the tenant boundary, and soft
+    /// deletion.
+    /// <para>
+    /// They are combined into one expression because EF Core allows a single
+    /// filter per entity — defining them separately would silently discard the
+    /// first, which is exactly the sort of quiet failure this code cannot
+    /// afford.
+    /// </para>
+    /// <para>
+    /// The tenant predicate reads context properties rather than a captured
+    /// constant, so EF treats them as parameters and re-evaluates them per
+    /// query. That is what lets a pooled or factory-created context serve a
+    /// request whose tenant was resolved later.
+    /// </para>
+    /// </summary>
+    private void ApplyQueryFilters(ModelBuilder builder)
     {
         foreach (var entity in builder.Model.GetEntityTypes())
         {
             if (entity.IsOwned()) continue;
-            if (!typeof(ISoftDeletable).IsAssignableFrom(entity.ClrType)) continue;
 
-            var parameter = Expression.Parameter(entity.ClrType, "e");
-            var property = Expression.Property(parameter, nameof(ISoftDeletable.IsDeleted));
-            var filter = Expression.Lambda(Expression.Not(property), parameter);
-            entity.SetQueryFilter(filter);
+            var clr = entity.ClrType;
+            var scoped = typeof(ITenantScoped).IsAssignableFrom(clr);
+            var deletable = typeof(ISoftDeletable).IsAssignableFrom(clr);
+
+            if (!scoped && !deletable) continue;
+
+            var parameter = Expression.Parameter(clr, "e");
+            Expression? predicate = null;
+
+            if (scoped)
+            {
+                // e.TenantId == CurrentTenantId, waived inside a platform scope.
+                var tenantProperty = Expression.Property(parameter, nameof(ITenantScoped.TenantId));
+
+                var currentTenant = Expression.Convert(
+                    Expression.Property(Expression.Constant(this), nameof(CurrentTenantId)),
+                    typeof(Guid?));
+
+                var matchesTenant = Expression.Equal(
+                    Expression.Convert(tenantProperty, typeof(Guid?)),
+                    currentTenant);
+
+                var platform = Expression.Property(Expression.Constant(this), nameof(IsPlatformScope));
+
+                predicate = Expression.OrElse(platform, matchesTenant);
+            }
+
+            if (deletable)
+            {
+                var notDeleted = Expression.Not(
+                    Expression.Property(parameter, nameof(ISoftDeletable.IsDeleted)));
+
+                predicate = predicate is null ? notDeleted : Expression.AndAlso(predicate, notDeleted);
+            }
+
+            entity.SetQueryFilter(Expression.Lambda(predicate!, parameter));
+        }
+    }
+
+    /// <summary>
+    /// Makes every index on a tenant-scoped table tenant-aware.
+    /// <para>
+    /// Two jobs, and the second is a correctness fix rather than a performance
+    /// one. Every query now carries a tenant predicate, so <c>TenantId</c> is
+    /// the most selective column in the system and belongs at the front of each
+    /// index; without that a shared database degrades into full scans as
+    /// tenants are added.
+    /// </para>
+    /// <para>
+    /// More importantly, a <em>unique</em> index that does not mention the
+    /// tenant is enforced across the whole platform. "Patient number P-000001
+    /// is unique" then means unique across every practice, so the second
+    /// practice to open cannot register its first patient — and an attacker can
+    /// probe which identifiers another tenant holds by watching which inserts
+    /// fail. Every unique index on a scoped entity is therefore rewritten to
+    /// lead with TenantId, which scopes the constraint to one practice.
+    /// </para>
+    /// <para>
+    /// Applied as a convention rather than by editing each configuration, so an
+    /// index added later cannot forget.
+    /// </para>
+    /// </summary>
+    private static void ApplyTenantIndexes(ModelBuilder builder)
+    {
+        foreach (var entity in builder.Model.GetEntityTypes())
+        {
+            if (entity.IsOwned()) continue;
+            if (!typeof(ITenantScoped).IsAssignableFrom(entity.ClrType)) continue;
+
+            var tenantProperty = entity.FindProperty(nameof(ITenantScoped.TenantId));
+            if (tenantProperty is null) continue;
+
+            tenantProperty.IsNullable = false;
+
+            foreach (var index in entity.GetIndexes().ToList())
+            {
+                if (index.Properties.Contains(tenantProperty)) continue;
+
+                if (!index.IsUnique)
+                {
+                    // Non-unique indexes are only a performance concern; leave
+                    // them and add the tenant lookup separately below.
+                    continue;
+                }
+
+                var name = index.GetDatabaseName();
+                var properties = new List<IMutableProperty> { tenantProperty };
+                properties.AddRange(index.Properties.Cast<IMutableProperty>());
+
+                entity.RemoveIndex(index.Properties);
+
+                var replacement = entity.AddIndex(properties);
+                replacement.IsUnique = true;
+                if (!string.IsNullOrEmpty(name)) replacement.SetDatabaseName(name);
+            }
+
+            // A plain tenant lookup, for the many queries that filter on nothing else.
+            if (entity.FindIndex(tenantProperty) is null)
+                entity.AddIndex(tenantProperty);
         }
     }
 

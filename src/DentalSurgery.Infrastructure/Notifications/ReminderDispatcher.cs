@@ -2,6 +2,7 @@ using DentalSurgery.Application.Abstractions;
 using DentalSurgery.Domain.Entities;
 using DentalSurgery.Domain.Enums;
 using DentalSurgery.Infrastructure.Persistence;
+using DentalSurgery.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -97,17 +98,48 @@ public class ReminderDispatcher(
         catch (OperationCanceledException) { return false; }
     }
 
-    /// <summary>Sends every reminder whose scheduled time has passed. Returns how many were attempted.</summary>
+    /// <summary>
+    /// Sends every reminder whose scheduled time has passed, for every active
+    /// tenant. Returns how many were attempted across all of them.
+    /// <para>
+    /// A background sweep has no signed-in user and therefore no tenant, and the
+    /// query filters would match nothing at all — the worker would run happily
+    /// and send no reminders. It therefore enumerates tenants from a platform
+    /// scope and enters each in turn, so every query inside the sweep is still
+    /// confined to exactly one practice.
+    /// </para>
+    /// </summary>
     public async Task<int> DispatchDueAsync(CancellationToken ct)
+    {
+        // A hosted service is a singleton, so the per-request services this pass
+        // needs come from a scope of its own.
+        using var scope = scopeFactory.CreateScope();
+        var tenants = scope.ServiceProvider.GetRequiredService<TenantProvisioningService>();
+        var scopes = scope.ServiceProvider.GetRequiredService<ITenantScopeFactory>();
+
+        var attempted = 0;
+
+        foreach (var tenant in await tenants.ActiveTenantsAsync(ct))
+        {
+            if (ct.IsCancellationRequested) break;
+
+            using (scopes.EnterTenant(tenant.Id))
+            {
+                attempted += await DispatchForTenantAsync(scope.ServiceProvider, ct);
+            }
+        }
+
+        return attempted;
+    }
+
+    /// <summary>One tenant's due reminders. Always called inside that tenant's scope.</summary>
+    private async Task<int> DispatchForTenantAsync(IServiceProvider services, CancellationToken ct)
     {
         var now = clock.UtcNow;
         var abandonBefore = now.AddHours(-Math.Max(1, options.Value.AbandonAfterHours));
 
-        // A hosted service is a singleton, so the per-request services this pass needs
-        // — the context factory and the notification sender — come from a scope of its own.
-        using var scope = scopeFactory.CreateScope();
-        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DentalDbContext>>();
-        var notifications = scope.ServiceProvider.GetRequiredService<INotificationSender>();
+        var dbFactory = services.GetRequiredService<IDbContextFactory<DentalDbContext>>();
+        var notifications = services.GetRequiredService<INotificationSender>();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 

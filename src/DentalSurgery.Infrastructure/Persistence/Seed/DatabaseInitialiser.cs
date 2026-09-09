@@ -4,6 +4,7 @@ using DentalSurgery.Domain.Entities;
 using DentalSurgery.Domain.Enums;
 using DentalSurgery.Infrastructure.Identity;
 using DentalSurgery.Infrastructure.Services;
+using DentalSurgery.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -31,6 +32,8 @@ public class DatabaseInitialiser(
     RoleManager<ApplicationRole> roleManager,
     IOptions<SeedOptions> seedOptions,
     IHostEnvironment environment,
+    ITenantScopeFactory tenantScopeFactory,
+    TenantProvisioningService tenants,
     ILogger<DatabaseInitialiser> logger)
 {
     /// <summary>
@@ -47,21 +50,40 @@ public class DatabaseInitialiser(
     {
         var demo = ResolveDemoDataMode();
 
-        await PrepareSchemaAsync(ct);
-        await LoadKnownPermissionsAsync(ct);
-        await SeedRolesAsync(ct);
-        await SeedReferenceDataAsync(ct);
-        await SeedAdministratorAsync(ct);
-
-        if (demo)
+        // Schema, roles and the shared clinical catalogues belong to no tenant,
+        // so they are written from a platform scope.
+        using (tenantScopeFactory.EnterPlatformScope("database initialisation"))
         {
-            await SeedPracticeAsync(ct);
-            await SeedStaffAndUsersAsync(ct);
-            await SeedOperationalDataAsync(ct);
-            await new DemoDataBuilder(db, logger).BuildAsync(ct);
+            await PrepareSchemaAsync(ct);
+            await SeedReferenceDataAsync(ct);
         }
 
-        logger.LogInformation("Database initialisation complete.");
+        // Everything from here belongs to a practice, so a tenant has to exist
+        // before it can be written. On a fresh install this creates the first
+        // one; afterwards it returns the same tenant unchanged.
+        var tenant = await tenants.EnsureTenantAsync(
+            _options.TenantName, _options.TenantSlug, ct);
+
+        using (tenantScopeFactory.EnterTenant(tenant.Id))
+        {
+            // Roles and their permission grants belong to the tenant: each
+            // practice owns its own copy and may edit it without affecting
+            // anyone else.
+            await LoadKnownPermissionsAsync(ct);
+            await SeedRolesAsync(ct);
+            await SeedAdministratorAsync(tenant.Id, ct);
+
+            if (demo)
+            {
+                await SeedPracticeAsync(ct);
+                await SeedStaffAndUsersAsync(tenant.Id, ct);
+                await SeedOperationalDataAsync(ct);
+                await new DemoDataBuilder(db, logger).BuildAsync(ct);
+            }
+        }
+
+        logger.LogInformation(
+            "Database initialisation complete for tenant {Tenant} ({Slug}).", tenant.Name, tenant.Slug);
     }
 
     /// <summary>
@@ -556,7 +578,7 @@ public class DatabaseInitialiser(
 
     // ------------------------------------------------------------------ staff and logins
 
-    private async Task SeedStaffAndUsersAsync(CancellationToken ct)
+    private async Task SeedStaffAndUsersAsync(Guid tenantId, CancellationToken ct)
     {
         if (await db.Staff.AnyAsync(ct)) return;
 
@@ -704,7 +726,7 @@ public class DatabaseInitialiser(
         {
             var roles = new[] { definition.AppRole };
 
-            var user = await EnsureUserAsync(definition.Email, DemoPassword,
+            var user = await EnsureUserAsync(tenantId, definition.Email, DemoPassword,
                 definition.First, definition.Last, roles, staff.Id, ct);
 
             if (user is not null)
@@ -741,7 +763,7 @@ public class DatabaseInitialiser(
     /// bootstrap value cannot become a standing credential.
     /// </para>
     /// </summary>
-    private async Task SeedAdministratorAsync(CancellationToken ct)
+    private async Task SeedAdministratorAsync(Guid tenantId, CancellationToken ct)
     {
         var email = string.IsNullOrWhiteSpace(_options.AdminEmail)
             ? "admin@dentalsurgery.local"
@@ -776,7 +798,7 @@ public class DatabaseInitialiser(
                 "Development; other environments require Seed:AdminPassword.", email);
         }
 
-        var user = await EnsureUserAsync(email, password!, "System", "Administrator",
+        var user = await EnsureUserAsync(tenantId, email, password!, "System", "Administrator",
             new[] { Roles.Administrator }, null, ct);
 
         if (user is null) return;
@@ -796,7 +818,7 @@ public class DatabaseInitialiser(
     }
 
     private async Task<ApplicationUser?> EnsureUserAsync(
-        string email, string password, string firstName, string lastName,
+        Guid tenantId, string email, string password, string firstName, string lastName,
         IEnumerable<string> roles, Guid? staffId, CancellationToken ct)
     {
         var existing = await userManager.FindByEmailAsync(email);
@@ -804,6 +826,7 @@ public class DatabaseInitialiser(
 
         var user = new ApplicationUser
         {
+            TenantId = tenantId,
             UserName = email,
             Email = email,
             EmailConfirmed = true,
