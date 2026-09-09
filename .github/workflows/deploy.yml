@@ -237,12 +237,18 @@ jobs:
           SITE_HOST: ${{ vars.SITE_HOST || 'dental.sma-techno.net' }}
           MIGRATE_ON_STARTUP: ${{ vars.MIGRATE_ON_STARTUP || 'false' }}
           STDOUT_LOG: ${{ vars.STDOUT_LOG || 'false' }}
+          HOSTING_MODEL: ${{ vars.HOSTING_MODEL || 'inprocess' }}
           PRACTICE_NAME: ${{ vars.PRACTICE_NAME }}
           PRACTICE_SLUG: ${{ vars.PRACTICE_SLUG }}
         run: |
           set -o pipefail
           # Assembled with jq and piped on stdin, so no secret is ever a shell
           # word, a command argument or a line in the run log.
+          #
+          # HOSTING_MODEL is inprocess by default, which is right for a Blazor
+          # Server application: every interaction is a round trip, and
+          # outofprocess adds a second HTTP hop to each one. Some shared hosts
+          # cannot run it, so it stays switchable rather than compiled in.
           #
           # STDOUT_LOG drives two things at once, because they answer the same
           # question: @stdoutLogEnabled captures what the process writes before
@@ -257,7 +263,7 @@ jobs:
             --arg host "$SITE_HOST" \
             --arg migrate "$MIGRATE_ON_STARTUP" \
             --arg practice "$PRACTICE_NAME" \
-            --arg slug "$PRACTICE_SLUG"             --arg stdout "$STDOUT_LOG" \
+            --arg slug "$PRACTICE_SLUG"             --arg stdout "$STDOUT_LOG"             --arg hosting "$HOSTING_MODEL" \
             '{
                "ConnectionStrings__DefaultConnection": $conn,
                "Database__Provider": "SqlServer",
@@ -273,6 +279,7 @@ jobs:
                "SEED_MUST_CHANGE_PASSWORD": $mustChange,
 
                "@stdoutLogEnabled": $stdout,
+               "@hostingModel": $hosting,
                "ASPNETCORE_DETAILEDERRORS": $stdout
              }' | python3 deploy/inject-config.py "$PUBLISH_DIR/web.config"
 
