@@ -1,0 +1,293 @@
+name: Deploy
+
+# Deliberately manual. A push to main should not reach a system holding patient
+# records because someone merged a pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'What to do'
+        type: choice
+        default: probe
+        options:
+          - probe          # connect, list the deployment directory, change nothing
+          - build-only     # build, test and configure, upload nothing
+          - deploy         # the real thing
+      apply_migrations:
+        description: 'Apply pending database migrations (deploy only)'
+        type: boolean
+        default: true
+      prune:
+        description: 'Delete server files this release no longer contains. Leave off until one deploy has succeeded.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PUBLISH_DIR: publish
+
+jobs:
+  # A separate, tiny job so the first thing anyone runs against this hosting
+  # account cannot touch a file. FTP_REMOTE_DIR has to be right before anything
+  # destructive runs, and the control panel does not say whether the account
+  # lands inside the site folder or above it.
+  probe:
+    name: Inspect the deployment directory
+    if: ${{ inputs.mode == 'probe' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: List the remote directory
+        env:
+          FTP_HOST: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+          FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
+        run: |
+          if [ -z "$FTP_REMOTE_DIR" ]; then
+            echo "::error::Set the repository variable FTP_REMOTE_DIR first. Try / and then /dental; the listing below tells you which one holds the site."
+            exit 1
+          fi
+          echo "Listing $FTP_REMOTE_DIR on $FTP_HOST"
+          python3 deploy/ftp-session.py probe | lftp
+
+      - name: What to look for
+        run: |
+          echo "The right directory is the one that already holds the site IIS serves."
+          echo "On a fresh account that is usually a default holding page such as index.htm."
+          echo "If the listing shows other site folders instead, this is the account root:"
+          echo "point FTP_REMOTE_DIR one level deeper and probe again."
+
+  deploy:
+    name: Publish to myASP
+    if: ${{ inputs.mode != 'probe' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # A deployment missing a secret should stop here, naming it, rather than
+      # part-way through an upload with the site already taken offline.
+      - name: Check the configuration is complete
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          DATABASE_CONNECTION_STRING: ${{ secrets.DATABASE_CONNECTION_STRING }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+        run: |
+          missing=""
+          for name in FTP_SERVER FTP_USERNAME FTP_PASSWORD DATABASE_CONNECTION_STRING SEED_ADMIN_EMAIL; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            exit 1
+          fi
+          if [ "${{ inputs.mode }}" = "deploy" ] && [ -z "$FTP_REMOTE_DIR" ]; then
+            echo "::error::The repository variable FTP_REMOTE_DIR is not set. Run this workflow in probe mode first to find the right path."
+            exit 1
+          fi
+          echo "Configuration is complete."
+
+      - run: dotnet restore DentalSurgery.sln
+
+      - name: Build
+        run: dotnet build DentalSurgery.sln -c Release --no-restore -warnaserror
+
+      # The same suite CI runs. A release is not the place to discover a failure.
+      - name: Test
+        run: dotnet test tests/DentalSurgery.Tests -c Release --no-build
+
+      # ------------------------------------------------------------- migrations
+      #
+      # Applied as a release step rather than at start-up. The application
+      # verifies the schema when it boots and refuses to serve against an
+      # out-of-date one, so a skipped migration is a failed deployment instead of
+      # column errors scattered across unrelated screens for the next hour.
+      - name: Generate the migration script
+        if: ${{ inputs.apply_migrations }}
+        env:
+          DENTAL_MIGRATION_PROVIDER: SqlServer
+        run: |
+          dotnet tool restore
+          dotnet ef migrations script --idempotent --output migrate.sql \
+            --project src/DentalSurgery.Migrations.SqlServer \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
+      # Kept with the run, so there is a record of exactly what was applied to a
+      # database holding clinical records.
+      - name: Keep the migration script with the run
+        if: ${{ inputs.apply_migrations }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-script-${{ github.run_number }}
+          path: migrate.sql
+
+      - name: Apply migrations
+        if: ${{ inputs.apply_migrations && inputs.mode == 'deploy' }}
+        env:
+          DENTAL_MIGRATION_PROVIDER: SqlServer
+          Database__Provider: SqlServer
+          ConnectionStrings__DefaultConnection: ${{ secrets.DATABASE_CONNECTION_STRING }}
+        run: |
+          dotnet ef database update \
+            --project src/DentalSurgery.Migrations.SqlServer \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
+      # --------------------------------------------------------------- publish
+      - name: Publish
+        run: dotnet publish src/DentalSurgery.Web -c Release --no-build -o "$PUBLISH_DIR"
+
+      # A portable publish carries native libraries for every platform its
+      # dependencies support - Linux, macOS, WebAssembly, s390x. The target is
+      # IIS on Windows, which will never load any of them, and they are two
+      # thirds of the upload: 174 MB becomes 94 MB.
+      #
+      # Every Windows architecture is kept rather than just the expected one.
+      # Shared hosting decides the app pool's bitness, not this repository, and
+      # a 32-bit pool with only 64-bit natives loses PDF rendering and the SQL
+      # Server driver at runtime rather than at deploy time.
+      - name: Drop native libraries for platforms this host will never be
+        run: |
+          before=$(du -sm "$PUBLISH_DIR" | cut -f1)
+          find "$PUBLISH_DIR/runtimes" -maxdepth 1 -mindepth 1 -type d ! -name 'win*' -exec rm -rf {} +
+          after=$(du -sm "$PUBLISH_DIR" | cut -f1)
+          echo "Publish trimmed from ${before} MB to ${after} MB; kept: $(ls "$PUBLISH_DIR/runtimes" | tr '\n' ' ')"
+          for native in Microsoft.Data.SqlClient.SNI.dll QuestPdfSkia.dll; do
+            for arch in win-x86 win-x64; do
+              test -f "$PUBLISH_DIR/runtimes/$arch/native/$native" \
+                || { echo "::error::$arch/$native was removed by the trim. SQL Server or PDF rendering would fail at runtime."; exit 1; }
+            done
+          done
+          echo "Windows 32- and 64-bit natives are intact."
+
+      - name: Write the deployment settings into web.config
+        env:
+          CONNECTION: ${{ secrets.DATABASE_CONNECTION_STRING }}
+          ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          ACCOUNTS: ${{ secrets.SEED_ACCOUNTS_JSON }}
+          MUST_CHANGE: ${{ vars.SEED_MUST_CHANGE_PASSWORD || 'true' }}
+          SITE_HOST: ${{ vars.SITE_HOST || 'dental.sma-techno.net' }}
+          MIGRATE_ON_STARTUP: ${{ vars.MIGRATE_ON_STARTUP || 'false' }}
+          PRACTICE_NAME: ${{ vars.PRACTICE_NAME }}
+          PRACTICE_SLUG: ${{ vars.PRACTICE_SLUG }}
+        run: |
+          # Assembled with jq and piped on stdin, so no secret is ever a shell
+          # word, a command argument or a line in the run log.
+          jq -n \
+            --arg conn "$CONNECTION" \
+            --arg admin "$ADMIN_EMAIL" \
+            --arg accounts "$ACCOUNTS" \
+            --arg mustChange "$MUST_CHANGE" \
+            --arg host "$SITE_HOST" \
+            --arg migrate "$MIGRATE_ON_STARTUP" \
+            --arg practice "$PRACTICE_NAME" \
+            --arg slug "$PRACTICE_SLUG" \
+            '{
+               "ConnectionStrings__DefaultConnection": $conn,
+               "Database__Provider": "SqlServer",
+               "AllowedHosts": $host,
+               "Seed__AdminEmail": $admin,
+               "Seed__MigrateOnStartup": $migrate,
+               "Seed__DemoData": "false",
+               "Seed__AllowDemoDataOutsideDevelopment": "false",
+               "Seed__VerifySchemaOnStartup": "true",
+               "Seed__TenantName": $practice,
+               "Seed__TenantSlug": $slug,
+               "SEED_ACCOUNTS_JSON": $accounts,
+               "SEED_MUST_CHANGE_PASSWORD": $mustChange
+             }' | python3 deploy/inject-config.py "$PUBLISH_DIR/web.config"
+
+      - name: Check the build before uploading it
+        run: |
+          echo "Publish size: $(du -sh "$PUBLISH_DIR" | cut -f1)"
+          test -f "$PUBLISH_DIR/DentalSurgery.Web.dll" \
+            || { echo "::error::No entry point in the publish output."; exit 1; }
+          grep -q 'ConnectionStrings__DefaultConnection' "$PUBLISH_DIR/web.config" \
+            || { echo "::error::web.config has no connection string."; exit 1; }
+          test -f "$PUBLISH_DIR/wwwroot/brand/logo.png" \
+            || { echo "::error::The practice logo is missing from the publish output; PDFs would lose their letterhead."; exit 1; }
+          echo "Entry point, configuration and branding are present."
+
+      # ---------------------------------------------------------------- upload
+      - name: Install lftp
+        if: ${{ inputs.mode == 'deploy' }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Take the site offline
+        if: ${{ inputs.mode == 'deploy' }}
+        env:
+          FTP_HOST: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+          FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
+        run: |
+          cp deploy/app_offline.htm app_offline.htm
+          python3 deploy/ftp-session.py offline | lftp
+
+      - name: Upload the new version
+        if: ${{ inputs.mode == 'deploy' }}
+        env:
+          FTP_HOST: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+          FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
+          FTP_PRUNE: ${{ inputs.prune }}
+        run: python3 deploy/ftp-session.py mirror | lftp
+
+      - name: Bring the site back
+        if: ${{ inputs.mode == 'deploy' }}
+        env:
+          FTP_HOST: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+          FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
+        run: python3 deploy/ftp-session.py online | lftp
+
+      # ----------------------------------------------------------------- proof
+      #
+      # A deployment is not finished because an upload succeeded. The readiness
+      # probe answers only once the application has started and reached its
+      # database, which is the part that actually matters.
+      - name: Wait for the site to answer
+        if: ${{ inputs.mode == 'deploy' }}
+        env:
+          URL: ${{ vars.SITE_URL || 'https://dental.sma-techno.net' }}
+        run: |
+          for attempt in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$URL/health/ready" || echo 000)
+            echo "attempt $attempt: $code"
+            if [ "$code" = "200" ]; then
+              echo "The application is up and has reached its database."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$URL/health/ready did not answer 200 within five minutes."
+          echo "Set stdoutLogEnabled=\"true\" in web.config and read App_Data/logs/ to see why start-up failed."
+          exit 1
+
+      - name: Say what to do if this failed
+        if: ${{ failure() && inputs.mode == 'deploy' }}
+        run: |
+          echo "::warning::The deployment failed. If app_offline.htm is still on the server the site is showing the maintenance page. Fix the cause and re-run, or delete that one file over FTP to bring the previous version straight back."

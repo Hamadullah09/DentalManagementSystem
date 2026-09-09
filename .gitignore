@@ -62,3 +62,8 @@ TestResults/
 coverage*.xml
 coverage*.json
 migrate.sql
+
+# Deployment working files. The published tree and the maintenance page copied
+# to the repository root during a release are build output, not source.
+/publish/
+/app_offline.htm
