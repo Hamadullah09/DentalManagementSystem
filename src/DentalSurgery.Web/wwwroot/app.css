@@ -229,11 +229,8 @@ code, .mono { font-family: var(--ds-mono); font-size: .85em; }
 .brand-mark {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, var(--ds-primary) 0%, var(--ds-accent) 100%);
-    display: grid;
-    place-items: center;
     flex: 0 0 32px;
+    object-fit: contain;
 }
 
 .brand-name {
@@ -1635,4 +1632,27 @@ code, .mono { font-family: var(--ds-mono); font-size: .85em; }
 
 @media (max-width: 520px) {
     .help-panel { width: 100vw; }
+}
+
+
+/* ---------------------------------------------------------------- brand */
+
+/* The sign-in lockup. Sized by width with height following, so the artwork
+   keeps its proportions whatever it is replaced with later. */
+.auth-logo {
+    display: block;
+    width: min(320px, 78%);
+    height: auto;
+    margin-bottom: 1.25rem;
+}
+
+/* The mark beside the practice name on the light sign-in panel. Same treatment
+   as the sidebar: artwork on its own, no plate behind it. */
+.auth-mark.sm {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    object-fit: contain;
+    background: none;
+    border-radius: 0;
 }

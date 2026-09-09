@@ -4,6 +4,17 @@
     <UserSecretsId>aspnet-DentalSurgery.Web-9207d3fc-0bb1-439f-aeca-862eddf5c853</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <!--
+      The letterhead reads the practice logo off disk when it renders a PDF, and
+      resolves it relative to the application directory. Publishing puts wwwroot
+      there; a plain build does not, so documents would carry the logo in
+      production and silently fall back to typeset text in development - the
+      worst way round for noticing. Copying keeps the two the same.
+    -->
+    <Content Update="wwwroot\brand\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DentalSurgery.Infrastructure\DentalSurgery.Infrastructure.csproj" />
     <ProjectReference Include="..\DentalSurgery.Migrations.SqlServer\DentalSurgery.Migrations.SqlServer.csproj" />
     <ProjectReference Include="..\DentalSurgery.Migrations.Sqlite\DentalSurgery.Migrations.Sqlite.csproj" />

@@ -182,12 +182,15 @@ public static class DependencyInjection
         services.AddScoped<ClaimSubmissionService>();
 
         // ---- exporting --------------------------------------------------------
-        // The practice letterhead is cached across requests.
-        services.AddSingleton<IPracticeAccessor, PracticeAccessor>();
+        // Scoped, not singleton. The practice is tenant-scoped data, so
+        // anything reading it has to run inside the tenant asking for it - and
+        // the PDF exporter holds the accessor, so it follows. The letterhead is
+        // still cached; the cache is now keyed by tenant rather than shared.
+        services.AddScoped<IPracticeAccessor, PracticeAccessor>();
         services.AddSingleton<IReportExporter, CsvReportExporter>();
         services.AddSingleton<IReportExporter, JsonReportExporter>();
         services.AddSingleton<IReportExporter, ExcelReportExporter>();
-        services.AddSingleton<IReportExporter, PdfReportExporter>();
+        services.AddScoped<IReportExporter, PdfReportExporter>();
         services.AddScoped<ReportCatalogue>();
         services.AddScoped<ExportService>();
 

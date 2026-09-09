@@ -30,6 +30,42 @@ public static class PdfTheme
     public static TextStyle SubHeading => Body.FontSize(11).Bold();
     public static TextStyle TableHeader => Body.FontSize(SmallSize).Bold().FontColor(Muted);
 
+    /// <summary>
+    /// The practice logo, or null when there is none to draw.
+    /// <para>
+    /// Cached after the first read: a batch export renders the same letterhead
+    /// on every page of every document, and re-reading the file each time would
+    /// put thousands of disk reads behind one download.
+    /// </para>
+    /// </summary>
+    private static byte[]? _logo;
+    private static string? _logoPath;
+
+    private static byte[]? LoadLogo(Practice? practice)
+    {
+        var path = practice?.LogoPath;
+        if (string.IsNullOrWhiteSpace(path)) return null;
+
+        if (_logoPath == path) return _logo;
+
+        try
+        {
+            var resolved = Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(AppContext.BaseDirectory, "wwwroot", path);
+
+            _logo = File.Exists(resolved) ? File.ReadAllBytes(resolved) : null;
+        }
+        catch (IOException)
+        {
+            // An unreadable logo must not stop an invoice being produced.
+            _logo = null;
+        }
+
+        _logoPath = path;
+        return _logo;
+    }
+
     /// <summary>The practice letterhead used at the top of every document.</summary>
     public static void Letterhead(IContainer container, Practice? practice, string documentTitle, string? reference = null)
     {
@@ -39,7 +75,17 @@ public static class PdfTheme
             {
                 row.RelativeItem().Column(left =>
                 {
-                    left.Item().Text(practice?.Name ?? "Dental Surgery").Style(SubHeading).FontColor(Accent);
+                    // The logo replaces the typeset practice name rather than
+                    // sitting above it: the name is inside the artwork, and
+                    // printing both reads as a mistake. Where no logo is
+                    // configured, or the file has gone missing, the name is
+                    // typeset as before - a document must still render.
+                    var logo = LoadLogo(practice);
+
+                    if (logo is not null)
+                        left.Item().Height(34).AlignLeft().Image(logo).FitHeight();
+                    else
+                        left.Item().Text(practice?.Name ?? "Dental Surgery").Style(SubHeading).FontColor(Accent);
 
                     if (practice is not null)
                     {

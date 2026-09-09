@@ -14,10 +14,12 @@
 
     <section class="auth-brand" aria-hidden="true">
         <div class="auth-brand-inner">
-            <span class="auth-mark">
-                <Icon Name="tooth" Size="26" CssClass="text-white" />
-            </span>
-            <h2 class="auth-brand-name">@_practiceName</h2>
+            @* The full lockup, in the variant made for a dark ground. The
+               practice name is inside the artwork, so the heading beneath it
+               would only repeat itself - it stays for screen readers. *@
+            <img src="brand/logo-on-dark.png" class="auth-logo"
+                 alt="@_practiceName" width="320" height="99" />
+            <h2 class="auth-brand-name visually-hidden">@_practiceName</h2>
             <p class="auth-brand-line">Clinical and practice management</p>
 
             <ul class="auth-brand-points">
@@ -35,9 +37,7 @@
 
     <main class="auth-panel">
         <header class="auth-panel-head">
-            <span class="auth-mark sm">
-                <Icon Name="tooth" Size="18" CssClass="text-white" />
-            </span>
+            <img src="brand/mark.png" class="auth-mark sm" alt="" width="28" height="28" />
             <span class="auth-panel-name">@_practiceName</span>
         </header>
 

@@ -44,6 +44,12 @@ public class DatabaseInitialiser(
     /// </summary>
     public const string DemoPassword = "Dental#2026!";
 
+    /// <summary>
+    /// Where the practice logo lives, relative to the web root. Read by the PDF
+    /// letterhead as well as the browser, so it is one value rather than two.
+    /// </summary>
+    public const string DefaultLogoPath = "brand/logo.png";
+
     private readonly SeedOptions _options = seedOptions.Value;
 
     public async Task InitialiseAsync(CancellationToken ct = default)
@@ -403,10 +409,27 @@ public class DatabaseInitialiser(
 
     private async Task SeedPracticeAsync(CancellationToken ct)
     {
-        if (await db.Practices.AnyAsync(ct)) return;
+        var existing = await db.Practices.FirstOrDefaultAsync(ct);
+
+        if (existing is not null)
+        {
+            // The practice is only created once, so a detail added to this
+            // method later never reaches a database seeded before it. The logo
+            // is filled in where none has been chosen, and an operator who has
+            // set or deliberately cleared one is left alone.
+            if (string.IsNullOrWhiteSpace(existing.LogoPath))
+            {
+                existing.LogoPath = DefaultLogoPath;
+                await db.SaveChangesAsync(ct);
+                logger.LogInformation("Set the practice logo to {Path}.", DefaultLogoPath);
+            }
+
+            return;
+        }
 
         var practice = new Practice
         {
+            LogoPath = DefaultLogoPath,
             Name = "Meridian Dental Surgery",
             LegalName = "Meridian Dental Care Limited",
             RegistrationNumber = "09482716",
