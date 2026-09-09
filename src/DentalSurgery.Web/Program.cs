@@ -44,6 +44,20 @@ builder.Host.UseSerilog((context, services, configuration) =>
     else
     {
         configuration.WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter());
+
+        // A container has its console read by a log shipper. IIS does not: the
+        // worker process has no console at all, so console-only logging on
+        // Windows hosting means an application that logs nothing, anywhere,
+        // and an incident with no record of itself.
+        //
+        // Under App_Data, which IIS refuses to serve - these lines name
+        // patients and staff.
+        configuration.WriteTo.File(
+            new Serilog.Formatting.Compact.CompactJsonFormatter(),
+            Path.Combine(context.HostingEnvironment.ContentRootPath, "App_Data", "logs", "dental-.log"),
+            rollingInterval: Serilog.RollingInterval.Day,
+            retainedFileCountLimit: 14,
+            shared: true);
     }
 });
 
@@ -217,10 +231,26 @@ var rateLimitingEnabled = builder.Configuration.RateLimitingEnabled();
 var app = builder.Build();
 
 // ---------------------------------------------------------------- database
-await using (var scope = app.Services.CreateAsyncScope())
+try
 {
+    await using var scope = app.Services.CreateAsyncScope();
     var initialiser = scope.ServiceProvider.GetRequiredService<DatabaseInitialiser>();
     await initialiser.InitialiseAsync();
+}
+catch (Exception ex)
+{
+    // A start-up failure has to leave a record somewhere a person can read.
+    //
+    // Under IIS it otherwise leaves none. The logger writes to the console,
+    // and a Windows host has no console to write to; the module's stdout
+    // capture is off unless someone thought to enable it before the failure;
+    // and IIS answers the browser with a bare 500. The result is an
+    // application that is definitely broken and says nothing about why.
+    //
+    // This writes straight to a file with no logger, no configuration and no
+    // dependency injection, because those are among the things that fail here.
+    StartupFailureLog.Write(app.Environment.ContentRootPath, ex);
+    throw;
 }
 
 // ---------------------------------------------------------------- pipeline
@@ -312,7 +342,15 @@ if (rateLimitingEnabled) components.ApplySignInRateLimit();
 
 app.MapAdditionalIdentityEndpoints();
 
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    StartupFailureLog.Write(app.Environment.ContentRootPath, ex);
+    throw;
+}
 
 /// <summary>
 /// Top-level statements compile to an internal <c>Program</c>, which
