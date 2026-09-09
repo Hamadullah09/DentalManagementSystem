@@ -223,7 +223,7 @@ else
                     <div class="col-6">
                         <label class="form-label">Start time</label>
                         <input type="time" class="form-control form-control-sm"
-                               value="@_bookingTime.ToString("HH\\:mm")"
+                               value="@Ui.TimeOfDay(_bookingTime)"
                                @onchange="e => _bookingTime = TimeSpan.TryParse(e.Value?.ToString(), out var t) ? t : _bookingTime" />
                     </div>
                     <div class="col-6">

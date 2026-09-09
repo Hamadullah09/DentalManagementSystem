@@ -23,6 +23,20 @@ public static class Ui
     public static string DateTimeLocal(DateTime? value) => value?.ToString("d MMM yyyy HH:mm") ?? "-";
     public static string Time(DateTime? value) => value?.ToString("HH:mm") ?? "-";
 
+    /// <summary>
+    /// A time of day held as a <see cref="TimeSpan"/>, as "09:30".
+    /// <para>
+    /// Separate from <see cref="Time(DateTime?)"/> because the two types do not
+    /// share format specifiers. TimeSpan's are case-sensitive and have no "HH":
+    /// formatting one with a DateTime pattern throws at render time, which
+    /// presents to the user as a page that simply will not open. Both callers go
+    /// through here so the pattern is written once and can be tested.
+    /// </para>
+    /// </summary>
+    public static string TimeOfDay(TimeSpan value) => value.ToString(@"hh\:mm");
+
+    public static string TimeOfDay(TimeSpan? value) => value is { } v ? TimeOfDay(v) : "-";
+
     /// <summary>"3 days ago", "in 2 weeks", and so on.</summary>
     public static string Relative(DateOnly? value, DateOnly? today = null)
     {

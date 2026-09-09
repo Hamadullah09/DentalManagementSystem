@@ -118,7 +118,7 @@
                                 <div class="d-flex justify-content-between" style="font-size:.78rem;">
                                     <span>@slot.DayOfWeek</span>
                                     <span class="mono">
-                                        @slot.StartTime.ToString(@"hh\:mm") - @slot.EndTime.ToString(@"hh\:mm")
+                                        @Ui.TimeOfDay(slot.StartTime) - @Ui.TimeOfDay(slot.EndTime)
                                     </span>
                                 </div>
                             }
