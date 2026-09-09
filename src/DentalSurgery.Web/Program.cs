@@ -185,7 +185,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(DependencyInjection.ConfigureI
     .AddClaimsPrincipalFactory<DentalClaimsPrincipalFactory>()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+// Scoped, not singleton: it sends through the practice's configured SMTP
+// gateway, which is a scoped service.
+builder.Services.AddScoped<IEmailSender<ApplicationUser>, IdentityEmailSender>();
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 // ---------------------------------------------------------------- authorisation

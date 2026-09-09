@@ -26,6 +26,22 @@ public class Patient : TenantEntity
     public string? Ethnicity { get; set; }
     public string? PhotoPath { get; set; }
 
+    // --- data protection ---------------------------------------------------
+
+    /// <summary>
+    /// True once the identifying details have been removed under a right-to-erasure
+    /// request. The clinical and financial records remain: the treatment that
+    /// happened is a fact about the practice as well as about the patient, and
+    /// deleting it would falsify the clinical audit trail and break the ledger.
+    /// What is gone is everything that could attribute those records to a person.
+    /// </summary>
+    public bool IsErased { get; set; }
+
+    public DateTime? ErasedAtUtc { get; set; }
+
+    /// <summary>Why the erasure was carried out. Required, and kept afterwards.</summary>
+    public string? ErasureReason { get; set; }
+
     public PatientStatus Status { get; set; } = PatientStatus.Active;
     public DateOnly RegistrationDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
     public DateOnly? InactiveDate { get; set; }

@@ -23,6 +23,21 @@ public static class Permissions
     public const string PatientsEdit = "Patients.Edit";
     public const string PatientsDelete = "Patients.Delete";
 
+    // ------------------------------------------------------- data protection
+    // Answering a data-protection request is a distinct duty from ordinary
+    // clinical work: it reaches a patient's entire record at once and, in the
+    // case of erasure, is irreversible. It is therefore held separately from
+    // Patients.View and Patients.Delete rather than folded into them.
+
+    /// <summary>Produce a patient's complete record for a subject access request.</summary>
+    public const string DataProtectionExport = "DataProtection.Export";
+
+    /// <summary>Erase a patient's identifying details once retention has expired.</summary>
+    public const string DataProtectionErase = "DataProtection.Erase";
+
+    /// <summary>See what the retention policy is currently holding and what it has removed.</summary>
+    public const string DataProtectionReview = "DataProtection.Review";
+
     /// <summary>Read the medical history, allergies and risk assessment.</summary>
     public const string MedicalHistoryView = "MedicalHistory.View";
     public const string MedicalHistoryEdit = "MedicalHistory.Edit";
@@ -151,7 +166,7 @@ public static class Permissions
     /// </summary>
     public static readonly string[] ModuleOrder =
     [
-        "Patients", "MedicalHistory", "ClinicalRecords", "DentalChart", "Periodontal",
+        "Patients", "DataProtection", "MedicalHistory", "ClinicalRecords", "DentalChart", "Periodontal",
         "Procedures", "Prescriptions", "Imaging", "Surgery", "Implants",
         "Appointments", "WaitingRoom", "Recalls", "TreatmentPlans",
         "Billing", "Insurance",
@@ -169,6 +184,10 @@ public static class Permissions
             [PatientsCreate] = "Register a new patient.",
             [PatientsEdit] = "Change patient demographics and contact details.",
             [PatientsDelete] = "Archive a patient record.",
+
+            [DataProtectionExport] = "Export a patient's complete record to answer a subject access request.",
+            [DataProtectionErase] = "Erase a patient's identifying details once the retention period has expired.",
+            [DataProtectionReview] = "Review the retention policy and what it has removed.",
 
             [MedicalHistoryView] = "Read medical history, allergies and the risk assessment.",
             [MedicalHistoryEdit] = "Record and update medical history.",

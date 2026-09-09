@@ -193,6 +193,8 @@ public static class DependencyInjection
 
         // ---- documents and pricing ----------------------------------------------
         services.AddScoped<DocumentService>();
+        services.AddScoped<DataProtectionService>();
+        services.AddScoped<StorageIntegrityService>();
         services.AddScoped<FeeScheduleImporter>();
 
         services.AddScoped<IFileStorage>(provider =>

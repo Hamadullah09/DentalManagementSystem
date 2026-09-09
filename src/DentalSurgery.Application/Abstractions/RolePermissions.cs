@@ -131,6 +131,11 @@ public static class RolePermissions
     [
         Permissions.PatientsView, Permissions.PatientsCreate, Permissions.PatientsEdit,
 
+        // Answering data-protection requests is usually the practice manager's
+        // job. Export and review, but not erasure: that is irreversible and
+        // stays with an administrator.
+        Permissions.DataProtectionExport, Permissions.DataProtectionReview,
+
         Permissions.AppointmentsView, Permissions.AppointmentsCreate,
         Permissions.AppointmentsEdit, Permissions.AppointmentsCancel,
         Permissions.WaitingRoomView, Permissions.WaitingRoomManage,

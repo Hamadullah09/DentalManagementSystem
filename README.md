@@ -140,6 +140,38 @@ Documents are written to `App_Data` on local disk. That is correct for a single
 instance; for more than one, mount shared storage or replace `IFileStorage`
 with an object-storage implementation.
 
+### Data protection
+
+The three duties a practice owes a patient over their own data are implemented
+and permission-gated, under `DataProtection.Export`, `.Erase` and `.Review`.
+
+- **Subject access.** `GET /api/data-protection/patients/{id}/export` produces
+  the practice's complete electronic record for one patient as JSON — 29
+  sections, from medical history through to the ledger — with stored documents
+  listed alongside. A month is the legal window; this makes it a click.
+- **Erasure.** Anonymisation, not deletion. Names, contacts, addresses,
+  identifiers and documents go; the clinical and financial records stay, because
+  the treatment that happened is a fact about the practice as well as about the
+  patient, and deleting it would falsify the clinical audit trail and break the
+  ledger. Year of birth is kept, nothing finer.
+- **Retention outranks erasure.** A record is held for ten years after the last
+  treatment, or until the patient's 25th birthday, whichever is later, and while
+  an account is unsettled. Erasure is refused with the date it clears, and the
+  override is explicit and logged.
+- **`Security.AuditRetentionYears` is enforced**, not merely displayed. Audit
+  rows past it are removed by `POST /api/data-protection/retention/purge`.
+- **Storage integrity.** `GET /api/data-protection/storage/integrity` compares
+  the document store against the database and answers 409 when they disagree.
+  Documents live on disk and their records live in SQL, and most hosts back
+  those up separately — a restore can otherwise leave a radiograph record,
+  complete with dose and clinical justification, pointing at an image that is
+  gone. **Run this after a restore, before trusting the restore.**
+
+Account email — password resets and address confirmations — goes through the
+practice's configured SMTP gateway. Where none is configured the reset page says
+so plainly and the link is written to the log for an administrator to pass on;
+it never claims to have sent something it has not.
+
 ### Tenancy
 
 Every record belongs to a tenant — one dental business — and the boundary is

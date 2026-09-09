@@ -3965,6 +3965,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         .HasMaxLength(160)
                         .HasColumnType("nvarchar(160)");
 
+                    b.Property<DateTime?>("ErasedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ErasureReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Ethnicity")
                         .HasColumnType("nvarchar(max)");
 
@@ -3991,6 +3997,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsErased")
                         .HasColumnType("bit");
 
                     b.Property<DateOnly?>("LastExamDate")
