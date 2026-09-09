@@ -84,6 +84,18 @@ public class SeedOptions
     /// which surfaces as scattered runtime failures instead of one clear one.
     /// </summary>
     public bool VerifySchemaOnStartup { get; set; } = true;
+
+    /// <summary>
+    /// How many surgeries the first site is created with, on an install that is
+    /// not seeded with demonstration data.
+    /// <para>
+    /// It matters because sites and surgeries are shown but not editable in the
+    /// application: whatever is created here is what the appointment book has to
+    /// work with. Four is a common size for a first practice; set it to the
+    /// number of chairs actually in use.
+    /// </para>
+    /// </summary>
+    public int Surgeries { get; set; } = 4;
 }
 
 

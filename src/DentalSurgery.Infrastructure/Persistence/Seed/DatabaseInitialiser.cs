@@ -78,6 +78,12 @@ public class DatabaseInitialiser(
                 await SeedOperationalDataAsync(ct);
                 await new DemoDataBuilder(db, logger).BuildAsync(ct);
             }
+            else
+            {
+                // Not demonstration data - the minimum a dental practice cannot
+                // operate without. See SeedEssentialPracticeAsync.
+                await SeedEssentialPracticeAsync(ct);
+            }
 
             // Last, so a configured account can attach itself to a staff record
             // the demonstration data has just created.
@@ -753,6 +759,133 @@ public class DatabaseInitialiser(
 
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Seeded {Count} staff records, none of them with a login.", staffList.Count);
+    }
+
+    /// <summary>
+    /// Creates the minimum a practice cannot operate without, on an install that
+    /// is not seeded with demonstration data.
+    /// <para>
+    /// A production install used to get catalogues, roles and logins and nothing
+    /// else - no practice record, no site, no surgeries. That is not a spare
+    /// system waiting to be filled in, it is a broken one: the configuration
+    /// screen renders the practice tab only when a practice row exists, so the
+    /// page came up blank with no control anywhere to create one, and the
+    /// appointment book had no surgery to put an appointment in. Sites and
+    /// surgeries are shown but not editable, so there was no way out of it from
+    /// inside the application either.
+    /// </para>
+    /// <para>
+    /// What is created here is deliberately bare - a name, a site, its opening
+    /// hours and its chairs. The details an operator must supply are left empty
+    /// rather than filled with plausible-looking invention, because a wrong
+    /// address on a letterhead is worse than an obviously missing one. The
+    /// practice tab edits all of it.
+    /// </para>
+    /// </summary>
+    private async Task SeedEssentialPracticeAsync(CancellationToken ct)
+    {
+        if (await db.Practices.AnyAsync(ct))
+        {
+            logger.LogInformation("The practice record already exists.");
+            return;
+        }
+
+        var practice = new Practice
+        {
+            LogoPath = DefaultLogoPath,
+            Name = _options.TenantName,
+            LegalName = _options.TenantName,
+
+            // Country is the one part of an address that is not a guess. The
+            // rest is left for the operator: an empty line on a letterhead
+            // reads as unfinished, an invented one reads as correct.
+            Address = new Address { Country = "United Kingdom" },
+            Contact = new ContactDetails { PreferredContactMethod = "Email" },
+
+            // UK defaults, matching the rest of the system: sterling, GMT, and
+            // the recall and payment intervals used throughout.
+            CurrencyCode = "GBP",
+            CurrencySymbol = "£",
+            TimeZoneId = "GMT Standard Time",
+            DefaultAppointmentMinutes = 30,
+            DefaultRecallIntervalMonths = 6,
+            InvoicePaymentTermDays = 30,
+            InvoiceFooterText = "Payment is due within 30 days."
+        };
+
+        var site = new Location
+        {
+            PracticeId = practice.Id,
+            Code = "MAIN",
+            Name = _options.TenantName,
+            Address = new Address { Country = "United Kingdom" },
+            Contact = new ContactDetails { PreferredContactMethod = "Email" },
+            IsPrimary = true,
+            ColourHex = "#1266d6"
+        };
+
+        // A working week, so the diary opens on something sensible. Closed at
+        // the weekend, which a practice that opens on Saturday can change.
+        foreach (var day in Enum.GetValues<DayOfWeek>())
+        {
+            var closed = day is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+            site.BusinessHours.Add(new BusinessHours
+            {
+                LocationId = site.Id,
+                DayOfWeek = day,
+                OpenTime = new TimeSpan(9, 0, 0),
+                CloseTime = new TimeSpan(17, 30, 0),
+                IsClosed = closed,
+                BreakStart = closed ? null : new TimeSpan(13, 0, 0),
+                BreakEnd = closed ? null : new TimeSpan(14, 0, 0)
+            });
+        }
+
+        // At least one, however the option is set: a practice with no surgery
+        // cannot take a booking, and a configuration mistake should not be able
+        // to produce that.
+        var surgeries = Math.Clamp(_options.Surgeries, 1, 50);
+
+        for (var index = 1; index <= surgeries; index++)
+        {
+            site.Operatories.Add(new Operatory
+            {
+                LocationId = site.Id,
+                Code = $"S{index}",
+                Name = $"Surgery {index}",
+                DisplayOrder = index * 10,
+                HasXRay = true,
+                ColourHex = "#1266d6"
+            });
+        }
+
+        practice.Locations.Add(site);
+        db.Practices.Add(practice);
+        await db.SaveChangesAsync(ct);
+
+        // Pricing resolves through a default schedule, so there has to be one
+        // for a fee to attach to. It is created empty: the practice's own fees
+        // are theirs to import, and inventing them would put numbers in front
+        // of a patient that nobody at the practice had agreed to.
+        if (!await db.FeeSchedules.AnyAsync(f => f.IsDefault, ct))
+        {
+            db.FeeSchedules.Add(new FeeSchedule
+            {
+                Name = "Practice Fee Schedule",
+                Description = "The practice's own fees. Empty until they are imported.",
+                ScheduleType = FeeScheduleType.Practice,
+                EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow),
+                IsDefault = true
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        logger.LogInformation(
+            "Created the practice record for {Name}, one site and {Surgeries} surgeries. " +
+            "The address, telephone number and fees are empty and must be entered under Configuration.",
+            practice.Name, surgeries);
     }
 
     // ------------------------------------------------------------------ administrator
