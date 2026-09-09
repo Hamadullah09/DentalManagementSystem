@@ -1,8 +1,18 @@
-﻿@if (!string.IsNullOrEmpty(DisplayMessage))
+﻿@*
+    The result of the last action, carried across the redirect that followed it.
+
+    Uses the application's own alert rather than Bootstrap's, so a confirmation
+    on a settings page looks like a confirmation everywhere else. The scaffold
+    decided success or failure by testing whether the text began with "Error",
+    which is kept because every caller writes messages that way - but the test
+    is named here rather than repeated inline.
+*@
+
+@if (!string.IsNullOrEmpty(DisplayMessage))
 {
-    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
-    <div class="alert alert-@statusMessageClass" role="alert">
-        @DisplayMessage
+    <div class="alert-ds a-@Severity mb-3" role="@(IsError ? "alert" : "status")">
+        <Icon Name="@(IsError ? "alert-triangle" : "check-circle")" Size="16" />
+        <div class="flex-grow-1">@DisplayMessage</div>
     </div>
 }
 
@@ -16,6 +26,11 @@
     private HttpContext HttpContext { get; set; } = default!;
 
     private string? DisplayMessage => Message ?? messageFromCookie;
+
+    private bool IsError =>
+        DisplayMessage?.StartsWith("Error", StringComparison.OrdinalIgnoreCase) == true;
+
+    private string Severity => IsError ? "danger" : "success";
 
     protected override void OnInitialized()
     {

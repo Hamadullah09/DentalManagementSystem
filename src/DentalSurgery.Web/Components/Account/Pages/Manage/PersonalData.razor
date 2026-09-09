@@ -2,48 +2,65 @@
 
 @inject IdentityUserAccessor UserAccessor
 
-<PageTitle>Personal data</PageTitle>
+<PageTitle>Personal data - Meridian Dental Surgery</PageTitle>
 
 <StatusMessage />
-<h3>Personal data</h3>
 
-<div class="row">
-    <div class="col-md-7">
-        <p>
-            This account holds the personal data you gave the practice when it was
-            issued: your name, email address, contact number and job title. You can
-            download a copy of it at any time.
+<div class="card-ds mb-3">
+    <div class="card-ds-header">
+        <h3>Your personal data</h3>
+    </div>
+
+    <div class="card-ds-body">
+        <p class="settings-lede">
+            This is about <strong>you as a member of staff</strong>, not about patients.
+            It holds what the practice recorded when your account was issued: your
+            name, email address, contact number and job title.
         </p>
 
-        @*
-            The scaffolded "delete my account" control has been removed rather
-            than hidden. A login here is the author of clinical notes,
-            prescriptions and financial entries, and deleting it would break the
-            attribution those records depend on — and the audit trail is
-            append-only by design. Withdrawing someone's access is a
-            deactivation, carried out by an administrator, which stops the
-            account working while leaving what it signed intact.
-        *@
+        <p class="text-muted settings-note">
+            A patient asking for their own record is a different request, answered
+            from the patient's file rather than from here.
+        </p>
+    </div>
+
+    <div class="card-ds-footer">
         <form action="Account/Manage/DownloadPersonalData" method="post">
             <AntiforgeryToken />
-            <button class="btn btn-primary" type="submit">Download my data</button>
+            <button class="btn btn-sm btn-primary" type="submit">
+                <Icon Name="download" Size="14" /> Download my data
+            </button>
         </form>
-
-        <div class="alert alert-secondary mt-4" role="note">
-            <strong>Closing your account.</strong>
-            An account cannot be deleted from here. Records you have signed must keep
-            naming their author, so access is withdrawn by deactivation instead. Ask a
-            practice administrator to deactivate the account when you leave.
-        </div>
+        <span class="text-faint" style="font-size:.78rem;">Downloads as a JSON file.</span>
     </div>
 </div>
 
-@code {
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = default!;
+@*
+    The scaffolded "delete my account" control has been removed rather than
+    hidden. A login here is the author of clinical notes, prescriptions and
+    financial entries, and deleting it would break the attribution those records
+    depend on — the audit trail is append-only by design. Withdrawing someone's
+    access is a deactivation, carried out by an administrator, which stops the
+    account working while leaving what it signed intact.
 
-    protected override async Task OnInitializedAsync()
-    {
-        _ = await UserAccessor.GetRequiredUserAsync(HttpContext);
-    }
-}
+    Saying so is better than silence: someone who came looking for a delete
+    button needs to know what to do instead, not to conclude the page is broken.
+*@
+<div class="card-ds">
+    <div class="card-ds-header">
+        <h3>Closing your account</h3>
+    </div>
+
+    <div class="card-ds-body">
+        <p class="settings-lede">
+            An account cannot be deleted from here, and that is deliberate. Clinical
+            notes, prescriptions and ledger entries you have signed must keep naming
+            their author, or the record stops being evidence of who did what.
+        </p>
+        <p class="text-muted settings-note">
+            When you leave, a practice administrator deactivates the account instead.
+            It stops working immediately — sign-in is refused and any open session
+            ends — while everything you signed stays attributed to you.
+        </p>
+    </div>
+</div>

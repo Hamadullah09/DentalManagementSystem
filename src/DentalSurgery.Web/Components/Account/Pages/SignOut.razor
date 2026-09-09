@@ -17,18 +17,27 @@
     mis-clicked sign-out in the middle of charting loses the operator their place.
 *@
 
-<h2>Sign out</h2>
-<p class="text-muted">You are signed in as <strong>@_userName</strong>.</p>
+<div class="confirm-wrap">
+    <div class="confirm-card">
+        <span class="confirm-mark">
+            <Icon Name="shield" Size="22" />
+        </span>
 
-<form action="/Account/Logout" method="post">
-    <AntiforgeryToken />
-    <input type="hidden" name="ReturnUrl" value="@_returnUrl" />
+        <h2 class="confirm-title">Sign out?</h2>
+        <p class="confirm-lede">
+            You are signed in as <strong>@_userName</strong>. Anything you have saved
+            is kept; anything half-typed on an open screen is not.
+        </p>
 
-    <div class="d-flex gap-2 mt-3">
-        <button type="submit" class="btn btn-primary">Sign out</button>
-        <a class="btn btn-outline-secondary" href="@_cancelUrl">Cancel</a>
+        <form action="/Account/Logout" method="post" class="confirm-actions">
+            <AntiforgeryToken />
+            <input type="hidden" name="ReturnUrl" value="@_returnUrl" />
+
+            <button type="submit" class="btn btn-primary">Sign out</button>
+            <a class="btn btn-outline-secondary" href="@_cancelUrl">Stay signed in</a>
+        </form>
     </div>
-</form>
+</div>
 
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;

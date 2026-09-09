@@ -1,17 +1,39 @@
 ﻿@inherits LayoutComponentBase
 @layout AccountLayout
+@inject NavigationManager Navigation
 
-<h1>Manage your account</h1>
+@*
+    The account settings shell.
 
-<div>
-    <h2>Change your account settings</h2>
-    <hr />
-    <div class="row">
-        <div class="col-md-3">
-            <ManageNavMenu />
-        </div>
-        <div class="col-md-9">
-            @Body
-        </div>
+    These pages arrived as the ASP.NET scaffold - a bare h1, an <hr> and a
+    column of Bootstrap pills - and read as a different product from the rest of
+    the application. They are laid out here the way every other screen is: a
+    page header, a navigation rail that states what each section is for, and the
+    page itself in a card.
+
+    The rail becomes a horizontal scroller on a narrow screen rather than
+    stacking above the content, so the section a user is on stays visible
+    without pushing the form off the bottom.
+*@
+
+<PageHeader Title="Your account"
+            Subtitle="@($"Signed in as {_email}")" />
+
+<div class="settings-shell">
+    <nav class="settings-nav" aria-label="Account settings">
+        <ManageNavMenu />
+    </nav>
+
+    <div class="settings-body">
+        @Body
     </div>
 </div>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? _email;
+
+    protected override void OnInitialized() =>
+        _email = HttpContext?.User.Identity?.Name;
+}

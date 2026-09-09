@@ -9,64 +9,132 @@
 @inject IdentityUserAccessor UserAccessor
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Two-factor authentication (2FA)</PageTitle>
+<PageTitle>Two-factor authentication - Meridian Dental Surgery</PageTitle>
 
 <StatusMessage />
-<h3>Two-factor authentication (2FA)</h3>
-@if (canTrack)
-{
-    if (is2faEnabled)
-    {
-        if (recoveryCodesLeft == 0)
-        {
-            <div class="alert alert-danger">
-                <strong>You have no recovery codes left.</strong>
-                <p>You must <a href="Account/Manage/GenerateRecoveryCodes">generate a new set of recovery codes</a> before you can log in with a recovery code.</p>
-            </div>
-        }
-        else if (recoveryCodesLeft == 1)
-        {
-            <div class="alert alert-danger">
-                <strong>You have 1 recovery code left.</strong>
-                <p>You can <a href="Account/Manage/GenerateRecoveryCodes">generate a new set of recovery codes</a>.</p>
-            </div>
-        }
-        else if (recoveryCodesLeft <= 3)
-        {
-            <div class="alert alert-warning">
-                <strong>You have @recoveryCodesLeft recovery codes left.</strong>
-                <p>You should <a href="Account/Manage/GenerateRecoveryCodes">generate a new set of recovery codes</a>.</p>
-            </div>
-        }
 
-        if (isMachineRemembered)
+@*
+    Led by whether it is on, because that is the only thing most people come
+    here to find out. The scaffold opened with a heading and a row of five
+    identically-styled blue buttons - "Disable 2FA" beside "Reset recovery
+    codes" beside "Add authenticator app" - with nothing to say which mattered
+    or what state the account was in.
+*@
+
+<div class="card-ds mb-3">
+    <div class="card-ds-header">
+        <h3>Two-factor authentication</h3>
+        <span class="badge-ds b-@(is2faEnabled ? "success" : "neutral") ms-auto">
+            @(is2faEnabled ? "On" : "Off")
+        </span>
+    </div>
+
+    <div class="card-ds-body">
+        @if (!canTrack)
         {
-            <form style="display: inline-block" @formname="forget-browser" @onsubmit="OnSubmitForgetBrowserAsync" method="post">
+            <div class="alert-ds a-warning" role="alert">
+                <Icon Name="alert-triangle" Size="16" />
+                <div>
+                    <strong>The cookie policy has not been accepted.</strong>
+                    Two-factor authentication cannot be switched on until it has.
+                </div>
+            </div>
+        }
+        else if (is2faEnabled)
+        {
+            <p class="settings-lede">
+                Signing in asks for a code from your authenticator app as well as your
+                password. Someone who learns your password still cannot get in.
+            </p>
+
+            @if (recoveryCodesLeft == 0)
+            {
+                <div class="alert-ds a-danger" role="alert">
+                    <Icon Name="alert-triangle" Size="16" />
+                    <div>
+                        <strong>No recovery codes left.</strong>
+                        Lose your phone now and you lose access to this account.
+                        <a href="Account/Manage/GenerateRecoveryCodes">Generate a new set</a>.
+                    </div>
+                </div>
+            }
+            else if (recoveryCodesLeft <= 3)
+            {
+                <div class="alert-ds a-warning" role="alert">
+                    <Icon Name="alert-circle" Size="16" />
+                    <div>
+                        <strong>@recoveryCodesLeft recovery code@(recoveryCodesLeft == 1 ? "" : "s") left.</strong>
+                        These are what get you in if you lose your phone.
+                        <a href="Account/Manage/GenerateRecoveryCodes">Generate a new set</a>.
+                    </div>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted settings-note">
+                    <Icon Name="check-circle" Size="14" />
+                    @recoveryCodesLeft recovery codes remaining.
+                </p>
+            }
+        }
+        else
+        {
+            <p class="settings-lede">
+                Your password is the only thing standing between someone else and this
+                practice's patient records. Two-factor authentication adds a code from
+                your phone, so a stolen password on its own is not enough.
+            </p>
+        }
+    </div>
+
+    @if (canTrack)
+    {
+        <div class="card-ds-footer">
+            @if (!hasAuthenticator)
+            {
+                <a href="Account/Manage/EnableAuthenticator" class="btn btn-sm btn-primary">
+                    <Icon Name="shield" Size="14" /> Set up authenticator app
+                </a>
+            }
+            else
+            {
+                <a href="Account/Manage/GenerateRecoveryCodes" class="btn btn-sm btn-outline-secondary">
+                    Reset recovery codes
+                </a>
+                <a href="Account/Manage/ResetAuthenticator" class="btn btn-sm btn-outline-secondary">
+                    Change authenticator app
+                </a>
+
+                @* Turning the protection off is the destructive choice here, so it
+                   is set apart from the two maintenance actions rather than
+                   sitting third in a row of identical buttons. *@
+                <a href="Account/Manage/Disable2fa" class="btn btn-sm btn-outline-danger ms-auto">
+                    Turn off
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@if (canTrack && is2faEnabled && isMachineRemembered)
+{
+    <div class="card-ds">
+        <div class="card-ds-header">
+            <h3>This browser</h3>
+        </div>
+        <div class="card-ds-body">
+            <p class="settings-lede">
+                This browser is remembered, so it does not ask for a code. Forget it if
+                the device is shared, or if you are signing in somewhere you do not
+                control.
+            </p>
+        </div>
+        <div class="card-ds-footer">
+            <form @formname="forget-browser" @onsubmit="OnSubmitForgetBrowserAsync" method="post">
                 <AntiforgeryToken />
-                <button type="submit" class="btn btn-primary">Forget this browser</button>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Forget this browser</button>
             </form>
-        }
-
-        <a href="Account/Manage/Disable2fa" class="btn btn-primary">Disable 2FA</a>
-        <a href="Account/Manage/GenerateRecoveryCodes" class="btn btn-primary">Reset recovery codes</a>
-    }
-
-    <h4>Authenticator app</h4>
-    @if (!hasAuthenticator)
-    {
-        <a href="Account/Manage/EnableAuthenticator" class="btn btn-primary">Add authenticator app</a>
-    }
-    else
-    {
-        <a href="Account/Manage/EnableAuthenticator" class="btn btn-primary">Set up authenticator app</a>
-        <a href="Account/Manage/ResetAuthenticator" class="btn btn-primary">Reset authenticator app</a>
-    }
-}
-else
-{
-    <div class="alert alert-danger">
-        <strong>Privacy and cookie policy have not been accepted.</strong>
-        <p>You must accept the policy before you can enable two factor authentication.</p>
+        </div>
     </div>
 }
 
@@ -95,7 +163,7 @@ else
         await SignInManager.ForgetTwoFactorClientAsync();
 
         RedirectManager.RedirectToCurrentPageWithStatus(
-            "The current browser has been forgotten. When you login again from this browser you will be prompted for your 2fa code.",
+            "This browser has been forgotten. It will ask for a code next time you sign in.",
             HttpContext);
     }
 }

@@ -1,6 +1,7 @@
 ﻿@page "/Account/Manage"
 
 @using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Identity
 @using DentalSurgery.Infrastructure.Identity
 
@@ -9,34 +10,82 @@
 @inject IdentityUserAccessor UserAccessor
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Profile</PageTitle>
+<PageTitle>Profile - Meridian Dental Surgery</PageTitle>
 
-<h3>Profile</h3>
 <StatusMessage />
 
-<div class="row">
-    <div class="col-md-6">
-        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
-            <DataAnnotationsValidator />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <input type="text" value="@username" class="form-control" placeholder="Please choose your username." disabled />
-                <label for="username" class="form-label">Username</label>
-            </div>
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.PhoneNumber" class="form-control" placeholder="Please enter your phone number." />
-                <label for="phone-number" class="form-label">Phone number</label>
-                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
-        </EditForm>
+<div class="card-ds mb-3">
+    <div class="card-ds-header">
+        <h3>Profile</h3>
     </div>
+
+    <div class="card-ds-body">
+        @*
+            Who the account is, before what can be edited on it. Most of this is
+            set by an administrator and cannot be changed here, and saying so
+            plainly is kinder than rendering disabled boxes and letting the
+            reader work out why they will not accept anything.
+        *@
+        <div class="settings-identity">
+            <span class="avatar lg">@_initials</span>
+            <div>
+                <div class="settings-identity-name">@_displayName</div>
+                <div class="text-muted" style="font-size:.85rem;">@_email</div>
+                @if (_roles.Count > 0)
+                {
+                    <div class="mt-1">
+                        @foreach (var role in _roles)
+                        {
+                            <span class="badge-ds b-neutral me-1">@Ui.Humanise(role)</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <p class="text-muted settings-note">
+            Your name, job title and role are set by a practice administrator.
+            Ask them if any of it is wrong.
+        </p>
+    </div>
+</div>
+
+<div class="card-ds">
+    <div class="card-ds-header">
+        <h3>Contact number</h3>
+    </div>
+
+    <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+        <DataAnnotationsValidator />
+
+        <div class="card-ds-body">
+            <ValidationSummary class="validation-summary" role="alert" />
+
+            <label class="form-label" for="phone">Phone number</label>
+            <InputText @bind-Value="Input.PhoneNumber" id="phone" class="form-control settings-field"
+                       autocomplete="tel" placeholder="07700 900000" />
+            <ValidationMessage For="() => Input.PhoneNumber" class="field-error" />
+
+            <p class="form-hint">
+                Used when a colleague needs to reach you about a patient. It is not
+                shown to patients.
+            </p>
+        </div>
+
+        <div class="card-ds-footer">
+            <button type="submit" class="btn btn-sm btn-primary">Save changes</button>
+        </div>
+    </EditForm>
 </div>
 
 @code {
     private ApplicationUser user = default!;
-    private string? username;
     private string? phoneNumber;
+
+    private string? _email;
+    private string? _displayName;
+    private string _initials = "?";
+    private List<string> _roles = [];
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -47,8 +96,12 @@
     protected override async Task OnInitializedAsync()
     {
         user = await UserAccessor.GetRequiredUserAsync(HttpContext);
-        username = await UserManager.GetUserNameAsync(user);
         phoneNumber = await UserManager.GetPhoneNumberAsync(user);
+
+        _email = await UserManager.GetUserNameAsync(user);
+        _displayName = user.DisplayName;
+        _initials = user.Initials;
+        _roles = HttpContext.User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
 
         Input.PhoneNumber ??= phoneNumber;
     }
@@ -60,17 +113,18 @@
             var setPhoneResult = await UserManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
             if (!setPhoneResult.Succeeded)
             {
-                RedirectManager.RedirectToCurrentPageWithStatus("Error: Failed to set phone number.", HttpContext);
+                RedirectManager.RedirectToCurrentPageWithStatus(
+                    "Error: that phone number could not be saved.", HttpContext);
             }
         }
 
         await SignInManager.RefreshSignInAsync(user);
-        RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+        RedirectManager.RedirectToCurrentPageWithStatus("Your contact number has been saved.", HttpContext);
     }
 
     private sealed class InputModel
     {
-        [Phone]
+        [Phone(ErrorMessage = "That does not look like a phone number.")]
         [Display(Name = "Phone number")]
         public string? PhoneNumber { get; set; }
     }

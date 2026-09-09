@@ -1,23 +1,43 @@
-@*
+﻿@*
     External logins are not offered. Staff accounts are provisioned by an
     administrator against the practice's own directory, so there is no
     self-service link-an-external-provider flow to navigate to.
+
+    Each entry carries a line saying what it is for. Account settings are
+    visited rarely and under mild stress - someone has forgotten a password or
+    is leaving - and a column of one-word labels makes the reader open pages to
+    find out what they do.
 *@
 
-<ul class="nav nav-pills flex-column">
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage" Match="NavLinkMatch.All">Profile</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/Email">Email</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/ChangePassword">Password</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/TwoFactorAuthentication">Two-factor authentication</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/PersonalData">Personal data</NavLink>
-    </li>
+<ul class="settings-nav-list">
+    @foreach (var item in Items)
+    {
+        <li>
+            <NavLink class="settings-nav-link" href="@item.Href" Match="@item.Match">
+                <Icon Name="@item.Icon" Size="16" />
+                <span class="settings-nav-text">
+                    <span class="settings-nav-label">@item.Label</span>
+                    <span class="settings-nav-hint">@item.Hint</span>
+                </span>
+            </NavLink>
+        </li>
+    }
 </ul>
+
+@code {
+    private record Item(string Href, string Icon, string Label, string Hint, NavLinkMatch Match);
+
+    private static readonly Item[] Items =
+    [
+        new("Account/Manage", "user", "Profile",
+            "Your name and contact number", NavLinkMatch.All),
+        new("Account/Manage/Email", "mail", "Email address",
+            "Where the practice writes to you", NavLinkMatch.Prefix),
+        new("Account/Manage/ChangePassword", "shield", "Password",
+            "Change the password you sign in with", NavLinkMatch.Prefix),
+        new("Account/Manage/TwoFactorAuthentication", "check-circle", "Two-factor authentication",
+            "Add a second step at sign-in", NavLinkMatch.Prefix),
+        new("Account/Manage/PersonalData", "file-text", "Personal data",
+            "Download what is held about you", NavLinkMatch.Prefix)
+    ];
+}
