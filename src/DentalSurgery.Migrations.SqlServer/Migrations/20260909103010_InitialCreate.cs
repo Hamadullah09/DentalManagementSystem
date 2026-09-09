@@ -58,7 +58,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -71,6 +72,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     TimestampUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
                     Action = table.Column<int>(type: "int", nullable: false),
                     EntityName = table.Column<string>(type: "nvarchar(160)", maxLength: 160, nullable: false),
@@ -116,7 +118,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     SortOrder = table.Column<int>(type: "int", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    IsSystem = table.Column<bool>(type: "bit", nullable: false)
+                    IsSystem = table.Column<bool>(type: "bit", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -169,7 +172,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -214,7 +218,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -328,7 +333,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     SortOrder = table.Column<int>(type: "int", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    IsSystem = table.Column<bool>(type: "bit", nullable: false)
+                    IsSystem = table.Column<bool>(type: "bit", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -354,7 +360,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -390,7 +397,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -420,7 +428,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     SortOrder = table.Column<int>(type: "int", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    IsSystem = table.Column<bool>(type: "bit", nullable: false)
+                    IsSystem = table.Column<bool>(type: "bit", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -467,7 +476,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -528,6 +538,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     IsSystemRole = table.Column<bool>(type: "bit", nullable: false),
                     SortOrder = table.Column<int>(type: "int", nullable: false),
@@ -559,7 +570,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -599,7 +611,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -641,10 +654,35 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Tenants",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Slug = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    IsActive = table.Column<bool>(type: "bit", nullable: false),
+                    SuspendedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    SuspendedReason = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    ModifiedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    ModifiedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Tenants", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Users",
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     FirstName = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     LastName = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     StaffId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
@@ -698,7 +736,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -707,8 +746,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_FeeSchedules_InsuranceCarriers_InsuranceCarrierId",
                         column: x => x.InsuranceCarrierId,
                         principalTable: "InsuranceCarriers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -741,7 +779,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -755,7 +794,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "RoleClaims",
+                name: "AspNetRoleClaims",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
@@ -766,9 +805,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_RoleClaims", x => x.Id);
+                    table.PrimaryKey("PK_AspNetRoleClaims", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_RoleClaims_Roles_RoleId",
+                        name: "FK_AspNetRoleClaims_Roles_RoleId",
                         column: x => x.RoleId,
                         principalTable: "Roles",
                         principalColumn: "Id",
@@ -817,7 +856,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -826,8 +866,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InventoryItems_Suppliers_PreferredSupplierId",
                         column: x => x.PreferredSupplierId,
                         principalTable: "Suppliers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -859,7 +898,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -873,7 +913,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "UserClaims",
+                name: "AspNetUserClaims",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
@@ -884,9 +924,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserClaims", x => x.Id);
+                    table.PrimaryKey("PK_AspNetUserClaims", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_UserClaims_Users_UserId",
+                        name: "FK_AspNetUserClaims_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -894,7 +934,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "UserLogins",
+                name: "AspNetUserLogins",
                 columns: table => new
                 {
                     LoginProvider = table.Column<string>(type: "nvarchar(450)", nullable: false),
@@ -904,9 +944,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserLogins", x => new { x.LoginProvider, x.ProviderKey });
+                    table.PrimaryKey("PK_AspNetUserLogins", x => new { x.LoginProvider, x.ProviderKey });
                     table.ForeignKey(
-                        name: "FK_UserLogins_Users_UserId",
+                        name: "FK_AspNetUserLogins_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -914,7 +954,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "UserRoles",
+                name: "AspNetUserRoles",
                 columns: table => new
                 {
                     UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
@@ -922,15 +962,15 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserRoles", x => new { x.UserId, x.RoleId });
+                    table.PrimaryKey("PK_AspNetUserRoles", x => new { x.UserId, x.RoleId });
                     table.ForeignKey(
-                        name: "FK_UserRoles_Roles_RoleId",
+                        name: "FK_AspNetUserRoles_Roles_RoleId",
                         column: x => x.RoleId,
                         principalTable: "Roles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_UserRoles_Users_UserId",
+                        name: "FK_AspNetUserRoles_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -938,7 +978,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "UserTokens",
+                name: "AspNetUserTokens",
                 columns: table => new
                 {
                     UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
@@ -948,9 +988,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserTokens", x => new { x.UserId, x.LoginProvider, x.Name });
+                    table.PrimaryKey("PK_AspNetUserTokens", x => new { x.UserId, x.LoginProvider, x.Name });
                     table.ForeignKey(
-                        name: "FK_UserTokens_Users_UserId",
+                        name: "FK_AspNetUserTokens_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -975,7 +1015,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1036,7 +1077,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1045,8 +1087,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InsurancePlans_FeeSchedules_FeeScheduleId",
                         column: x => x.FeeScheduleId,
                         principalTable: "FeeSchedules",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_InsurancePlans_InsuranceCarriers_InsuranceCarrierId",
                         column: x => x.InsuranceCarrierId,
@@ -1074,7 +1115,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1104,7 +1146,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1141,7 +1184,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1218,7 +1262,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1227,8 +1272,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Staff_Locations_DefaultLocationId",
                         column: x => x.DefaultLocationId,
                         principalTable: "Locations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1257,7 +1301,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1266,8 +1311,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Sterilisers_Locations_LocationId",
                         column: x => x.LocationId,
                         principalTable: "Locations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1293,7 +1337,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1308,8 +1353,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InventoryLots_PurchaseOrders_PurchaseOrderId",
                         column: x => x.PurchaseOrderId,
                         principalTable: "PurchaseOrders",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1333,7 +1377,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1387,6 +1432,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     RequiresInterpreter = table.Column<bool>(type: "bit", nullable: false),
                     Ethnicity = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     PhotoPath = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    IsErased = table.Column<bool>(type: "bit", nullable: false),
+                    ErasedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    ErasureReason = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Status = table.Column<int>(type: "int", nullable: false),
                     RegistrationDate = table.Column<DateOnly>(type: "date", nullable: false),
                     InactiveDate = table.Column<DateOnly>(type: "date", nullable: true),
@@ -1421,7 +1469,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1430,32 +1479,27 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Patients_Locations_PreferredLocationId",
                         column: x => x.PreferredLocationId,
                         principalTable: "Locations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Patients_Patients_GuarantorPatientId",
                         column: x => x.GuarantorPatientId,
                         principalTable: "Patients",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Patients_Patients_ReferredByPatientId",
                         column: x => x.ReferredByPatientId,
                         principalTable: "Patients",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Patients_Staff_PrimaryHygienistId",
                         column: x => x.PrimaryHygienistId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Patients_Staff_PrimaryProviderId",
                         column: x => x.PrimaryProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1481,7 +1525,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1496,8 +1541,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_StaffScheduleSlots_Operatories_DefaultOperatoryId",
                         column: x => x.DefaultOperatoryId,
                         principalTable: "Operatories",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_StaffScheduleSlots_Staff_StaffId",
                         column: x => x.StaffId,
@@ -1528,7 +1572,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1574,7 +1619,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1583,8 +1629,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_SterilisationCycles_Staff_OperatorStaffId",
                         column: x => x.OperatorStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_SterilisationCycles_Sterilisers_SteriliserId",
                         column: x => x.SteriliserId,
@@ -1619,7 +1664,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1634,8 +1680,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_StockMovements_InventoryLots_InventoryLotId",
                         column: x => x.InventoryLotId,
                         principalTable: "InventoryLots",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1659,7 +1704,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1723,7 +1769,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1738,8 +1785,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Appointments_Operatories_OperatoryId",
                         column: x => x.OperatoryId,
                         principalTable: "Operatories",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Appointments_Patients_PatientId",
                         column: x => x.PatientId,
@@ -1750,8 +1796,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Appointments_Staff_AssistantId",
                         column: x => x.AssistantId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Appointments_Staff_ProviderId",
                         column: x => x.ProviderId,
@@ -1790,7 +1835,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1805,8 +1851,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_CommunicationLogs_Staff_StaffId",
                         column: x => x.StaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1844,7 +1889,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1853,14 +1899,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Invoices_Locations_LocationId",
                         column: x => x.LocationId,
                         principalTable: "Locations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Invoices_Patients_GuarantorPatientId",
                         column: x => x.GuarantorPatientId,
                         principalTable: "Patients",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Invoices_Patients_PatientId",
                         column: x => x.PatientId,
@@ -1871,8 +1915,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Invoices_Staff_ProviderId",
                         column: x => x.ProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1925,7 +1968,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1946,8 +1990,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_LabCases_Staff_ProviderId",
                         column: x => x.ProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1976,7 +2019,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2024,7 +2068,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2039,8 +2084,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_MedicalHistoryReviews_Staff_ReviewedByStaffId",
                         column: x => x.ReviewedByStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2064,7 +2108,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2099,7 +2144,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2148,7 +2194,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2169,14 +2216,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_PatientConsents_Staff_ClinicianStaffId",
                         column: x => x.ClinicianStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_PatientConsents_Staff_WitnessStaffId",
                         column: x => x.WitnessStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2214,7 +2259,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2252,7 +2298,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2267,14 +2314,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_PatientDiagnoses_Staff_DiagnosedByStaffId",
                         column: x => x.DiagnosedByStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_PatientDiagnoses_Teeth_ToothId",
                         column: x => x.ToothId,
                         principalTable: "Teeth",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2305,7 +2350,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2355,7 +2401,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2395,7 +2442,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2438,7 +2486,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2486,7 +2535,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2530,7 +2580,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2545,8 +2596,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_PeriodontalCharts_Staff_ExaminerStaffId",
                         column: x => x.ExaminerStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2578,7 +2628,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2593,14 +2644,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Prescriptions_Pharmacies_PharmacyId",
                         column: x => x.PharmacyId,
                         principalTable: "Pharmacies",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Prescriptions_Staff_PrescriberStaffId",
                         column: x => x.PrescriberStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2629,7 +2678,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2644,8 +2694,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_RecallSchedules_Staff_PreferredProviderId",
                         column: x => x.PreferredProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2690,7 +2739,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2705,8 +2755,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Referrals_Staff_InternalProviderId",
                         column: x => x.InternalProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2747,7 +2796,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2798,7 +2848,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2807,8 +2858,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_TreatmentPlans_FeeSchedules_FeeScheduleId",
                         column: x => x.FeeScheduleId,
                         principalTable: "FeeSchedules",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_TreatmentPlans_Patients_PatientId",
                         column: x => x.PatientId,
@@ -2819,8 +2869,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_TreatmentPlans_Staff_ProviderId",
                         column: x => x.ProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2850,7 +2899,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2865,8 +2915,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_VitalSignRecords_Staff_RecordedByStaffId",
                         column: x => x.RecordedByStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2905,7 +2954,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2914,8 +2964,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_WaitlistEntries_Locations_LocationId",
                         column: x => x.LocationId,
                         principalTable: "Locations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_WaitlistEntries_Patients_PatientId",
                         column: x => x.PatientId,
@@ -2926,8 +2975,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_WaitlistEntries_Staff_PreferredProviderId",
                         column: x => x.PreferredProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -2956,7 +3004,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -2971,8 +3020,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_WorkTasks_Staff_AssignedToStaffId",
                         column: x => x.AssignedToStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3001,7 +3049,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3010,8 +3059,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InstrumentSets_SterilisationCycles_LastCycleId",
                         column: x => x.LastCycleId,
                         principalTable: "SterilisationCycles",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3039,7 +3087,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3091,7 +3140,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3100,8 +3150,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_ClinicalNotes_Appointments_AppointmentId",
                         column: x => x.AppointmentId,
                         principalTable: "Appointments",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_ClinicalNotes_Patients_PatientId",
                         column: x => x.PatientId,
@@ -3112,8 +3161,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_ClinicalNotes_Staff_ProviderId",
                         column: x => x.ProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3142,7 +3190,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3157,14 +3206,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InvoiceLines_ProcedureCodes_ProcedureCodeId",
                         column: x => x.ProcedureCodeId,
                         principalTable: "ProcedureCodes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_InvoiceLines_Teeth_ToothId",
                         column: x => x.ToothId,
                         principalTable: "Teeth",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3205,7 +3252,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3214,8 +3262,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_RadiographRecords_PatientDocuments_DocumentId",
                         column: x => x.DocumentId,
                         principalTable: "PatientDocuments",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_RadiographRecords_Patients_PatientId",
                         column: x => x.PatientId,
@@ -3226,8 +3273,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_RadiographRecords_Staff_TakenByStaffId",
                         column: x => x.TakenByStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3272,7 +3318,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3281,8 +3328,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InsuranceClaims_Invoices_InvoiceId",
                         column: x => x.InvoiceId,
                         principalTable: "Invoices",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_InsuranceClaims_PatientInsurances_PatientInsuranceId",
                         column: x => x.PatientInsuranceId,
@@ -3299,8 +3345,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InsuranceClaims_Staff_ProviderId",
                         column: x => x.ProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3325,7 +3370,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3364,7 +3410,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3408,7 +3455,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3447,7 +3495,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3480,7 +3529,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3511,7 +3561,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3556,7 +3607,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3565,8 +3617,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Payments_InsuranceClaims_InsuranceClaimId",
                         column: x => x.InsuranceClaimId,
                         principalTable: "InsuranceClaims",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Payments_Patients_PatientId",
                         column: x => x.PatientId,
@@ -3608,7 +3659,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3623,14 +3675,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_TreatmentPlanItems_Staff_ProviderId",
                         column: x => x.ProviderId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_TreatmentPlanItems_Teeth_ToothId",
                         column: x => x.ToothId,
                         principalTable: "Teeth",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_TreatmentPlanItems_TreatmentPlanPhases_TreatmentPlanPhaseId",
                         column: x => x.TreatmentPlanPhaseId,
@@ -3657,7 +3707,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3699,7 +3750,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3720,14 +3772,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_AppointmentProcedures_Teeth_ToothId",
                         column: x => x.ToothId,
                         principalTable: "Teeth",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_AppointmentProcedures_TreatmentPlanItems_TreatmentPlanItemId",
                         column: x => x.TreatmentPlanItemId,
                         principalTable: "TreatmentPlanItems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3771,7 +3821,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3780,20 +3831,17 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Procedures_Appointments_AppointmentId",
                         column: x => x.AppointmentId,
                         principalTable: "Appointments",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Procedures_InvoiceLines_InvoiceLineId",
                         column: x => x.InvoiceLineId,
                         principalTable: "InvoiceLines",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Procedures_Locations_LocationId",
                         column: x => x.LocationId,
                         principalTable: "Locations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Procedures_Patients_PatientId",
                         column: x => x.PatientId,
@@ -3810,8 +3858,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Procedures_Staff_AssistantId",
                         column: x => x.AssistantId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Procedures_Staff_ProviderId",
                         column: x => x.ProviderId,
@@ -3822,14 +3869,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_Procedures_Teeth_ToothId",
                         column: x => x.ToothId,
                         principalTable: "Teeth",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Procedures_TreatmentPlanItems_TreatmentPlanItemId",
                         column: x => x.TreatmentPlanItemId,
                         principalTable: "TreatmentPlanItems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3871,7 +3916,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3886,8 +3932,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_AnaesthesiaRecords_Staff_AdministeredByStaffId",
                         column: x => x.AdministeredByStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -3938,7 +3983,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -3953,14 +3999,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_DentalImplants_Procedures_PlacementProcedureId",
                         column: x => x.PlacementProcedureId,
                         principalTable: "Procedures",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_DentalImplants_Staff_SurgeonStaffId",
                         column: x => x.SurgeonStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_DentalImplants_Teeth_ToothId",
                         column: x => x.ToothId,
@@ -3997,7 +4041,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -4018,14 +4063,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_InsuranceClaimLines_Procedures_ProcedureId",
                         column: x => x.ProcedureId,
                         principalTable: "Procedures",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_InsuranceClaimLines_Teeth_ToothId",
                         column: x => x.ToothId,
                         principalTable: "Teeth",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -4046,7 +4089,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -4061,8 +4105,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_ProcedureMaterialUsages_InventoryLots_InventoryLotId",
                         column: x => x.InventoryLotId,
                         principalTable: "InventoryLots",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_ProcedureMaterialUsages_Procedures_ProcedureId",
                         column: x => x.ProcedureId,
@@ -4119,7 +4162,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -4128,8 +4172,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_SurgicalRecords_InstrumentSets_InstrumentSetId",
                         column: x => x.InstrumentSetId,
                         principalTable: "InstrumentSets",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_SurgicalRecords_Procedures_ProcedureId",
                         column: x => x.ProcedureId,
@@ -4168,7 +4211,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -4183,14 +4227,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_ToothConditionRecords_Procedures_ProcedureId",
                         column: x => x.ProcedureId,
                         principalTable: "Procedures",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_ToothConditionRecords_Staff_RecordedByStaffId",
                         column: x => x.RecordedByStaffId,
                         principalTable: "Staff",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_ToothConditionRecords_Teeth_ToothId",
                         column: x => x.ToothId,
@@ -4201,8 +4243,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                         name: "FK_ToothConditionRecords_ToothConditionRecords_SupersedesId",
                         column: x => x.SupersedesId,
                         principalTable: "ToothConditionRecords",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -4232,7 +4273,8 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -4251,6 +4293,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "PatientId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AccountAdjustments_TenantId",
+                table: "AccountAdjustments",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Allergens_Code",
                 table: "Allergens",
                 column: "Code",
@@ -4262,6 +4309,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "AnaesthesiaRecordId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AnaesthesiaAgentDoses_TenantId",
+                table: "AnaesthesiaAgentDoses",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_AnaesthesiaRecords_AdministeredByStaffId",
                 table: "AnaesthesiaRecords",
                 column: "AdministeredByStaffId");
@@ -4269,8 +4321,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_AnaesthesiaRecords_ProcedureId",
                 table: "AnaesthesiaRecords",
+                columns: new[] { "TenantId", "ProcedureId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AnaesthesiaRecords_ProcedureId1",
+                table: "AnaesthesiaRecords",
                 column: "ProcedureId",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AnaesthesiaRecords_TenantId",
+                table: "AnaesthesiaRecords",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AppointmentProcedures_AppointmentId",
@@ -4281,6 +4344,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_AppointmentProcedures_ProcedureCodeId",
                 table: "AppointmentProcedures",
                 column: "ProcedureCodeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AppointmentProcedures_TenantId",
+                table: "AppointmentProcedures",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AppointmentProcedures_ToothId",
@@ -4303,9 +4371,14 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "ScheduledForUtc" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_AppointmentReminders_TenantId",
+                table: "AppointmentReminders",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Appointments_AppointmentNumber",
                 table: "Appointments",
-                column: "AppointmentNumber",
+                columns: new[] { "TenantId", "AppointmentNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -4344,10 +4417,40 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Appointments_TenantId",
+                table: "Appointments",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_AppSettings_Key",
                 table: "AppSettings",
-                column: "Key",
+                columns: new[] { "TenantId", "Key" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AppSettings_TenantId",
+                table: "AppSettings",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetRoleClaims_RoleId",
+                table: "AspNetRoleClaims",
+                column: "RoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserClaims_UserId",
+                table: "AspNetUserClaims",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserLogins_UserId",
+                table: "AspNetUserLogins",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserRoles_RoleId",
+                table: "AspNetUserRoles",
+                column: "RoleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AuditLogs_EntityName_EntityId",
@@ -4360,6 +4463,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "PatientId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AuditLogs_TenantId",
+                table: "AuditLogs",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_AuditLogs_TimestampUtc",
                 table: "AuditLogs",
                 column: "TimestampUtc");
@@ -4370,9 +4478,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "LocationId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_BusinessHours_TenantId",
+                table: "BusinessHours",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ClinicalNoteAddenda_ClinicalNoteId",
                 table: "ClinicalNoteAddenda",
                 column: "ClinicalNoteId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ClinicalNoteAddenda_TenantId",
+                table: "ClinicalNoteAddenda",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ClinicalNotes_AppointmentId",
@@ -4390,9 +4508,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "ProviderId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ClinicalNotes_TenantId",
+                table: "ClinicalNotes",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ClinicClosures_LocationId",
                 table: "ClinicClosures",
                 column: "LocationId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ClinicClosures_TenantId",
+                table: "ClinicClosures",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CommunicationLogs_PatientId_OccurredAtUtc",
@@ -4405,10 +4533,20 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "StaffId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_CommunicationLogs_TenantId",
+                table: "CommunicationLogs",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ConsentFormTemplates_Code",
                 table: "ConsentFormTemplates",
-                column: "Code",
+                columns: new[] { "TenantId", "Code" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ConsentFormTemplates_TenantId",
+                table: "ConsentFormTemplates",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DentalImplants_LotNumber",
@@ -4431,14 +4569,29 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "SurgeonStaffId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_DentalImplants_TenantId",
+                table: "DentalImplants",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_DentalImplants_ToothId",
                 table: "DentalImplants",
                 column: "ToothId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_DentalLaboratories_TenantId",
+                table: "DentalLaboratories",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FeeScheduleItems_FeeScheduleId",
+                table: "FeeScheduleItems",
+                column: "FeeScheduleId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_FeeScheduleItems_FeeScheduleId_ProcedureCodeId",
                 table: "FeeScheduleItems",
-                columns: new[] { "FeeScheduleId", "ProcedureCodeId" },
+                columns: new[] { "TenantId", "FeeScheduleId", "ProcedureCodeId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -4447,9 +4600,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "ProcedureCodeId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_FeeScheduleItems_TenantId",
+                table: "FeeScheduleItems",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_FeeSchedules_InsuranceCarrierId",
                 table: "FeeSchedules",
                 column: "InsuranceCarrierId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FeeSchedules_TenantId",
+                table: "FeeSchedules",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InstrumentSets_LastCycleId",
@@ -4459,8 +4622,13 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_InstrumentSets_SetCode",
                 table: "InstrumentSets",
-                column: "SetCode",
+                columns: new[] { "TenantId", "SetCode" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InstrumentSets_TenantId",
+                table: "InstrumentSets",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InstrumentSetUsages_InstrumentSetId",
@@ -4468,9 +4636,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "InstrumentSetId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_InstrumentSetUsages_TenantId",
+                table: "InstrumentSetUsages",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_InstrumentSetUsages_UsedAtUtc",
                 table: "InstrumentSetUsages",
                 column: "UsedAtUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InsuranceCarriers_TenantId",
+                table: "InsuranceCarriers",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InsuranceClaimLines_InsuranceClaimId",
@@ -4488,6 +4666,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "ProcedureId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_InsuranceClaimLines_TenantId",
+                table: "InsuranceClaimLines",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_InsuranceClaimLines_ToothId",
                 table: "InsuranceClaimLines",
                 column: "ToothId");
@@ -4495,7 +4678,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_InsuranceClaims_ClaimNumber",
                 table: "InsuranceClaims",
-                column: "ClaimNumber",
+                columns: new[] { "TenantId", "ClaimNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -4524,6 +4707,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "SubmittedOn" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_InsuranceClaims_TenantId",
+                table: "InsuranceClaims",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_InsurancePlans_FeeScheduleId",
                 table: "InsurancePlans",
                 column: "FeeScheduleId");
@@ -4532,6 +4720,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_InsurancePlans_InsuranceCarrierId",
                 table: "InsurancePlans",
                 column: "InsuranceCarrierId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InsurancePlans_TenantId",
+                table: "InsurancePlans",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InventoryItems_Category_IsActive",
@@ -4546,8 +4739,13 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_InventoryItems_Sku",
                 table: "InventoryItems",
-                column: "Sku",
+                columns: new[] { "TenantId", "Sku" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InventoryItems_TenantId",
+                table: "InventoryItems",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InventoryLots_ExpiryDate",
@@ -4565,6 +4763,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "PurchaseOrderId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_InventoryLots_TenantId",
+                table: "InventoryLots",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_InvoiceLines_InvoiceId",
                 table: "InvoiceLines",
                 column: "InvoiceId");
@@ -4573,6 +4776,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_InvoiceLines_ProcedureCodeId",
                 table: "InvoiceLines",
                 column: "ProcedureCodeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InvoiceLines_TenantId",
+                table: "InvoiceLines",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InvoiceLines_ToothId",
@@ -4587,7 +4795,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Invoices_InvoiceNumber",
                 table: "Invoices",
-                column: "InvoiceNumber",
+                columns: new[] { "TenantId", "InvoiceNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -4611,9 +4819,14 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "DueDate" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Invoices_TenantId",
+                table: "Invoices",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_LabCases_CaseNumber",
                 table: "LabCases",
-                column: "CaseNumber",
+                columns: new[] { "TenantId", "CaseNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -4637,20 +4850,35 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "DueDate" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_LabCases_TenantId",
+                table: "LabCases",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_LedgerEntries_PatientId_EntryDate",
                 table: "LedgerEntries",
                 columns: new[] { "PatientId", "EntryDate" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_LedgerEntries_TenantId",
+                table: "LedgerEntries",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Locations_Code",
                 table: "Locations",
-                column: "Code",
+                columns: new[] { "TenantId", "Code" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Locations_PracticeId",
                 table: "Locations",
                 column: "PracticeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Locations_TenantId",
+                table: "Locations",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_MedicalConditions_Code",
@@ -4669,6 +4897,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "ReviewedByStaffId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_MedicalHistoryReviews_TenantId",
+                table: "MedicalHistoryReviews",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Medications_Code",
                 table: "Medications",
                 column: "Code",
@@ -4682,25 +4915,50 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_MessageTemplates_Code",
                 table: "MessageTemplates",
-                column: "Code",
+                columns: new[] { "TenantId", "Code" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MessageTemplates_TenantId",
+                table: "MessageTemplates",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_NumberSequences_Name",
                 table: "NumberSequences",
-                column: "Name",
+                columns: new[] { "TenantId", "Name" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NumberSequences_TenantId",
+                table: "NumberSequences",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Operatories_LocationId",
+                table: "Operatories",
+                column: "LocationId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Operatories_LocationId_Code",
                 table: "Operatories",
-                columns: new[] { "LocationId", "Code" },
+                columns: new[] { "TenantId", "LocationId", "Code" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Operatories_TenantId",
+                table: "Operatories",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PatientAlerts_PatientId_IsActive",
                 table: "PatientAlerts",
                 columns: new[] { "PatientId", "IsActive" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PatientAlerts_TenantId",
+                table: "PatientAlerts",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PatientAllergies_AllergenId",
@@ -4711,6 +4969,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_PatientAllergies_PatientId_IsActive",
                 table: "PatientAllergies",
                 columns: new[] { "PatientId", "IsActive" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PatientAllergies_TenantId",
+                table: "PatientAllergies",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PatientConsents_ClinicianStaffId",
@@ -4728,6 +4991,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "PatientId", "Status" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PatientConsents_TenantId",
+                table: "PatientConsents",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PatientConsents_WitnessStaffId",
                 table: "PatientConsents",
                 column: "WitnessStaffId");
@@ -4736,6 +5004,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_PatientContacts_PatientId",
                 table: "PatientContacts",
                 column: "PatientId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PatientContacts_TenantId",
+                table: "PatientContacts",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PatientDiagnoses_DiagnosedByStaffId",
@@ -4748,6 +5021,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "PatientId", "Status" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PatientDiagnoses_TenantId",
+                table: "PatientDiagnoses",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PatientDiagnoses_ToothId",
                 table: "PatientDiagnoses",
                 column: "ToothId");
@@ -4756,6 +5034,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_PatientDocuments_PatientId_DocumentType",
                 table: "PatientDocuments",
                 columns: new[] { "PatientId", "DocumentType" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PatientDocuments_TenantId",
+                table: "PatientDocuments",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PatientInsurances_InsurancePlanId",
@@ -4768,6 +5051,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "PatientId", "Priority" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PatientInsurances_TenantId",
+                table: "PatientInsurances",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PatientMedicalConditions_MedicalConditionId",
                 table: "PatientMedicalConditions",
                 column: "MedicalConditionId");
@@ -4778,6 +5066,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "PatientId", "Status" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PatientMedicalConditions_TenantId",
+                table: "PatientMedicalConditions",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PatientMedications_MedicationId",
                 table: "PatientMedications",
                 column: "MedicationId");
@@ -4786,6 +5079,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_PatientMedications_PatientId_IsCurrent",
                 table: "PatientMedications",
                 columns: new[] { "PatientId", "IsCurrent" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PatientMedications_TenantId",
+                table: "PatientMedications",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Patients_DateOfBirth",
@@ -4810,7 +5108,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Patients_PatientNumber",
                 table: "Patients",
-                column: "PatientNumber",
+                columns: new[] { "TenantId", "PatientNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -4839,6 +5137,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Patients_TenantId",
+                table: "Patients",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PaymentAllocations_InvoiceId",
                 table: "PaymentAllocations",
                 column: "InvoiceId");
@@ -4849,15 +5152,30 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "PaymentId", "InvoiceId" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PaymentAllocations_TenantId",
+                table: "PaymentAllocations",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentPlanInstallments_PaymentPlanId",
+                table: "PaymentPlanInstallments",
+                column: "PaymentPlanId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PaymentPlanInstallments_PaymentPlanId_InstallmentNumber",
                 table: "PaymentPlanInstallments",
-                columns: new[] { "PaymentPlanId", "InstallmentNumber" },
+                columns: new[] { "TenantId", "PaymentPlanId", "InstallmentNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_PaymentPlanInstallments_Status_DueDate",
                 table: "PaymentPlanInstallments",
                 columns: new[] { "Status", "DueDate" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentPlanInstallments_TenantId",
+                table: "PaymentPlanInstallments",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PaymentPlans_PatientId",
@@ -4867,8 +5185,13 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_PaymentPlans_PlanNumber",
                 table: "PaymentPlans",
-                column: "PlanNumber",
+                columns: new[] { "TenantId", "PlanNumber" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentPlans_TenantId",
+                table: "PaymentPlans",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Payments_InsuranceClaimId",
@@ -4883,8 +5206,13 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Payments_PaymentNumber",
                 table: "Payments",
-                column: "PaymentNumber",
+                columns: new[] { "TenantId", "PaymentNumber" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Payments_TenantId",
+                table: "Payments",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PeriodontalCharts_ExaminerStaffId",
@@ -4897,10 +5225,25 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "PatientId", "ExamDate" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PeriodontalCharts_TenantId",
+                table: "PeriodontalCharts",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PeriodontalMeasurements_PeriodontalChartId",
+                table: "PeriodontalMeasurements",
+                column: "PeriodontalChartId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PeriodontalMeasurements_PeriodontalChartId_ToothId_Site",
                 table: "PeriodontalMeasurements",
-                columns: new[] { "PeriodontalChartId", "ToothId", "Site" },
+                columns: new[] { "TenantId", "PeriodontalChartId", "ToothId", "Site" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PeriodontalMeasurements_TenantId",
+                table: "PeriodontalMeasurements",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PeriodontalMeasurements_ToothId",
@@ -4908,10 +5251,25 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "ToothId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Pharmacies_TenantId",
+                table: "Pharmacies",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PostOperativeInstructions_Code",
                 table: "PostOperativeInstructions",
-                column: "Code",
+                columns: new[] { "TenantId", "Code" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PostOperativeInstructions_TenantId",
+                table: "PostOperativeInstructions",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Practices_TenantId",
+                table: "Practices",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PrescriptionItems_MedicationId",
@@ -4922,6 +5280,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_PrescriptionItems_PrescriptionId",
                 table: "PrescriptionItems",
                 column: "PrescriptionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PrescriptionItems_TenantId",
+                table: "PrescriptionItems",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Prescriptions_PatientId_IssueDate",
@@ -4941,8 +5304,13 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Prescriptions_PrescriptionNumber",
                 table: "Prescriptions",
-                column: "PrescriptionNumber",
+                columns: new[] { "TenantId", "PrescriptionNumber" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Prescriptions_TenantId",
+                table: "Prescriptions",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ProcedureCodes_Category_IsActive",
@@ -4969,6 +5337,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_ProcedureMaterialUsages_ProcedureId",
                 table: "ProcedureMaterialUsages",
                 column: "ProcedureId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProcedureMaterialUsages_TenantId",
+                table: "ProcedureMaterialUsages",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Procedures_AppointmentId",
@@ -5011,6 +5384,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "DateOfService" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Procedures_TenantId",
+                table: "Procedures",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Procedures_ToothId",
                 table: "Procedures",
                 column: "ToothId");
@@ -5031,15 +5409,25 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "PurchaseOrderId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PurchaseOrderLines_TenantId",
+                table: "PurchaseOrderLines",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PurchaseOrders_OrderNumber",
                 table: "PurchaseOrders",
-                column: "OrderNumber",
+                columns: new[] { "TenantId", "OrderNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_PurchaseOrders_SupplierId",
                 table: "PurchaseOrders",
                 column: "SupplierId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PurchaseOrders_TenantId",
+                table: "PurchaseOrders",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RadiographRecords_DocumentId",
@@ -5057,6 +5445,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "TakenByStaffId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_RadiographRecords_TenantId",
+                table: "RadiographRecords",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RecallSchedules_PatientId_RecallType",
                 table: "RecallSchedules",
                 columns: new[] { "PatientId", "RecallType" });
@@ -5072,6 +5465,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "DueDate" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_RecallSchedules_TenantId",
+                table: "RecallSchedules",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Referrals_InternalProviderId",
                 table: "Referrals",
                 column: "InternalProviderId");
@@ -5084,18 +5482,23 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Referrals_ReferralNumber",
                 table: "Referrals",
-                column: "ReferralNumber",
+                columns: new[] { "TenantId", "ReferralNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_RoleClaims_RoleId",
-                table: "RoleClaims",
-                column: "RoleId");
+                name: "IX_Referrals_TenantId",
+                table: "Referrals",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Roles_TenantId",
+                table: "Roles",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "RoleNameIndex",
                 table: "Roles",
-                column: "NormalizedName",
+                columns: new[] { "TenantId", "NormalizedName" },
                 unique: true,
                 filter: "[NormalizedName] IS NOT NULL");
 
@@ -5105,9 +5508,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Module", "OwnerUserId" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_SavedViews_TenantId",
+                table: "SavedViews",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SocialHistories_PatientId_RecordedOn",
                 table: "SocialHistories",
                 columns: new[] { "PatientId", "RecordedOn" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SocialHistories_TenantId",
+                table: "SocialHistories",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Staff_ApplicationUserId",
@@ -5127,8 +5540,13 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Staff_StaffNumber",
                 table: "Staff",
-                column: "StaffNumber",
+                columns: new[] { "TenantId", "StaffNumber" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Staff_TenantId",
+                table: "Staff",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_StaffScheduleSlots_DefaultOperatoryId",
@@ -5146,9 +5564,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "StaffId", "DayOfWeek" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_StaffScheduleSlots_TenantId",
+                table: "StaffScheduleSlots",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_StaffTimeOff_StaffId_StartUtc",
                 table: "StaffTimeOff",
                 columns: new[] { "StaffId", "StartUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_StaffTimeOff_TenantId",
+                table: "StaffTimeOff",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SterilisationCycles_OperatorStaffId",
@@ -5161,15 +5589,30 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "StartedAtUtc");
 
             migrationBuilder.CreateIndex(
+                name: "IX_SterilisationCycles_SteriliserId",
+                table: "SterilisationCycles",
+                column: "SteriliserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SterilisationCycles_SteriliserId_CycleNumber",
                 table: "SterilisationCycles",
-                columns: new[] { "SteriliserId", "CycleNumber" },
+                columns: new[] { "TenantId", "SteriliserId", "CycleNumber" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SterilisationCycles_TenantId",
+                table: "SterilisationCycles",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Sterilisers_LocationId",
                 table: "Sterilisers",
                 column: "LocationId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Sterilisers_TenantId",
+                table: "Sterilisers",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_StockMovements_InventoryItemId_MovementDateUtc",
@@ -5182,6 +5625,16 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "InventoryLotId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_StockMovements_TenantId",
+                table: "StockMovements",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Suppliers_TenantId",
+                table: "Suppliers",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SurgicalRecords_InstrumentSetId",
                 table: "SurgicalRecords",
                 column: "InstrumentSetId");
@@ -5189,8 +5642,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_SurgicalRecords_ProcedureId",
                 table: "SurgicalRecords",
+                columns: new[] { "TenantId", "ProcedureId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SurgicalRecords_ProcedureId1",
+                table: "SurgicalRecords",
                 column: "ProcedureId",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SurgicalRecords_TenantId",
+                table: "SurgicalRecords",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Teeth_ChartOrder",
@@ -5229,6 +5693,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "SupersedesId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ToothConditionRecords_TenantId",
+                table: "ToothConditionRecords",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ToothConditionRecords_ToothId",
                 table: "ToothConditionRecords",
                 column: "ToothId");
@@ -5249,6 +5718,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
+                name: "IX_TreatmentPlanItems_TenantId",
+                table: "TreatmentPlanItems",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_TreatmentPlanItems_ToothId",
                 table: "TreatmentPlanItems",
                 column: "ToothId");
@@ -5257,6 +5731,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_TreatmentPlanItems_TreatmentPlanPhaseId",
                 table: "TreatmentPlanItems",
                 column: "TreatmentPlanPhaseId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TreatmentPlanPhases_TenantId",
+                table: "TreatmentPlanPhases",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_TreatmentPlanPhases_TreatmentPlanId",
@@ -5276,7 +5755,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_TreatmentPlans_PlanNumber",
                 table: "TreatmentPlans",
-                column: "PlanNumber",
+                columns: new[] { "TenantId", "PlanNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -5285,19 +5764,9 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "ProviderId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserClaims_UserId",
-                table: "UserClaims",
-                column: "UserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_UserLogins_UserId",
-                table: "UserLogins",
-                column: "UserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_UserRoles_RoleId",
-                table: "UserRoles",
-                column: "RoleId");
+                name: "IX_TreatmentPlans_TenantId",
+                table: "TreatmentPlans",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "EmailIndex",
@@ -5305,9 +5774,14 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 column: "NormalizedEmail");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Users_TenantId",
+                table: "Users",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "UserNameIndex",
                 table: "Users",
-                column: "NormalizedUserName",
+                columns: new[] { "TenantId", "NormalizedUserName" },
                 unique: true,
                 filter: "[NormalizedUserName] IS NOT NULL");
 
@@ -5320,6 +5794,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_VitalSignRecords_RecordedByStaffId",
                 table: "VitalSignRecords",
                 column: "RecordedByStaffId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VitalSignRecords_TenantId",
+                table: "VitalSignRecords",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_WaitlistEntries_LocationId",
@@ -5342,6 +5821,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 columns: new[] { "Status", "Priority" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_WaitlistEntries_TenantId",
+                table: "WaitlistEntries",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_WorkTasks_AssignedToStaffId",
                 table: "WorkTasks",
                 column: "AssignedToStaffId");
@@ -5355,6 +5839,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "IX_WorkTasks_PatientId",
                 table: "WorkTasks",
                 column: "PatientId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WorkTasks_TenantId",
+                table: "WorkTasks",
+                column: "TenantId");
         }
 
         /// <inheritdoc />
@@ -5374,6 +5863,21 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
             migrationBuilder.DropTable(
                 name: "AppSettings");
+
+            migrationBuilder.DropTable(
+                name: "AspNetRoleClaims");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserClaims");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserLogins");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserRoles");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
                 name: "AuditLogs");
@@ -5472,9 +5976,6 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "Referrals");
 
             migrationBuilder.DropTable(
-                name: "RoleClaims");
-
-            migrationBuilder.DropTable(
                 name: "SavedViews");
 
             migrationBuilder.DropTable(
@@ -5493,19 +5994,10 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 name: "SurgicalRecords");
 
             migrationBuilder.DropTable(
+                name: "Tenants");
+
+            migrationBuilder.DropTable(
                 name: "ToothConditionRecords");
-
-            migrationBuilder.DropTable(
-                name: "UserClaims");
-
-            migrationBuilder.DropTable(
-                name: "UserLogins");
-
-            migrationBuilder.DropTable(
-                name: "UserRoles");
-
-            migrationBuilder.DropTable(
-                name: "UserTokens");
 
             migrationBuilder.DropTable(
                 name: "VitalSignRecords");
@@ -5518,6 +6010,12 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
             migrationBuilder.DropTable(
                 name: "AnaesthesiaRecords");
+
+            migrationBuilder.DropTable(
+                name: "Roles");
+
+            migrationBuilder.DropTable(
+                name: "Users");
 
             migrationBuilder.DropTable(
                 name: "ClinicalNotes");
@@ -5557,12 +6055,6 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
             migrationBuilder.DropTable(
                 name: "InstrumentSets");
-
-            migrationBuilder.DropTable(
-                name: "Roles");
-
-            migrationBuilder.DropTable(
-                name: "Users");
 
             migrationBuilder.DropTable(
                 name: "Procedures");

@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DentalSurgery.Migrations.SqlServer.Migrations
 {
     [DbContext(typeof(DentalDbContext))]
-    [Migration("20260909073313_AddPatientErasureMarkers")]
-    partial class AddPatientErasureMarkers
+    [Migration("20260909103010_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -9021,8 +9021,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "AdministeredByStaff")
                         .WithMany()
-                        .HasForeignKey("AdministeredByStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("AdministeredByStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Procedure", "Procedure")
                         .WithOne("AnaesthesiaRecord")
@@ -9039,8 +9038,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Assistant")
                         .WithMany()
-                        .HasForeignKey("AssistantId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("AssistantId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "Location")
                         .WithMany()
@@ -9050,8 +9048,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Operatory", "Operatory")
                         .WithMany()
-                        .HasForeignKey("OperatoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("OperatoryId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Appointments")
@@ -9091,13 +9088,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
-                        .HasForeignKey("ToothId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ToothId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.TreatmentPlanItem", "TreatmentPlanItem")
                         .WithMany()
-                        .HasForeignKey("TreatmentPlanItemId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("TreatmentPlanItemId");
 
                     b.Navigation("Appointment");
 
@@ -9145,8 +9140,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Appointment", "Appointment")
                         .WithMany()
-                        .HasForeignKey("AppointmentId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("AppointmentId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("ClinicalNotes")
@@ -9156,8 +9150,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Provider")
                         .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProviderId");
 
                     b.Navigation("Appointment");
 
@@ -9187,8 +9180,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Staff")
                         .WithMany()
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("StaffId");
 
                     b.Navigation("Patient");
 
@@ -9205,13 +9197,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Procedure", "PlacementProcedure")
                         .WithMany()
-                        .HasForeignKey("PlacementProcedureId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PlacementProcedureId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "SurgeonStaff")
                         .WithMany()
-                        .HasForeignKey("SurgeonStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("SurgeonStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
@@ -9328,8 +9318,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.InsuranceCarrier", "InsuranceCarrier")
                         .WithMany()
-                        .HasForeignKey("InsuranceCarrierId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InsuranceCarrierId");
 
                     b.Navigation("InsuranceCarrier");
                 });
@@ -9357,8 +9346,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.SterilisationCycle", "LastCycle")
                         .WithMany("Sets")
-                        .HasForeignKey("LastCycleId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("LastCycleId");
 
                     b.Navigation("LastCycle");
                 });
@@ -9519,8 +9507,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Invoice", "Invoice")
                         .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InvoiceId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany()
@@ -9536,8 +9523,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Provider")
                         .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProviderId");
 
                     b.Navigation("Invoice");
 
@@ -9564,13 +9550,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Procedure", "Procedure")
                         .WithMany()
-                        .HasForeignKey("ProcedureId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProcedureId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
-                        .HasForeignKey("ToothId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ToothId");
 
                     b.Navigation("InsuranceClaim");
 
@@ -9585,8 +9569,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.FeeSchedule", "FeeSchedule")
                         .WithMany()
-                        .HasForeignKey("FeeScheduleId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("FeeScheduleId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.InsuranceCarrier", "InsuranceCarrier")
                         .WithMany("Plans")
@@ -9603,8 +9586,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Supplier", "PreferredSupplier")
                         .WithMany("Items")
-                        .HasForeignKey("PreferredSupplierId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PreferredSupplierId");
 
                     b.Navigation("PreferredSupplier");
                 });
@@ -9619,8 +9601,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.PurchaseOrder", "PurchaseOrder")
                         .WithMany()
-                        .HasForeignKey("PurchaseOrderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PurchaseOrderId");
 
                     b.Navigation("InventoryItem");
 
@@ -9631,13 +9612,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "GuarantorPatient")
                         .WithMany()
-                        .HasForeignKey("GuarantorPatientId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("GuarantorPatientId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "Location")
                         .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("LocationId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Invoices")
@@ -9647,8 +9626,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Provider")
                         .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProviderId");
 
                     b.Navigation("GuarantorPatient");
 
@@ -9669,13 +9647,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.ProcedureCode", "ProcedureCode")
                         .WithMany()
-                        .HasForeignKey("ProcedureCodeId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProcedureCodeId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
-                        .HasForeignKey("ToothId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ToothId");
 
                     b.Navigation("Invoice");
 
@@ -9700,8 +9676,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Provider")
                         .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProviderId");
 
                     b.Navigation("DentalLaboratory");
 
@@ -9835,8 +9810,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "ReviewedByStaff")
                         .WithMany()
-                        .HasForeignKey("ReviewedByStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ReviewedByStaffId");
 
                     b.Navigation("Patient");
 
@@ -9858,28 +9832,23 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "GuarantorPatient")
                         .WithMany()
-                        .HasForeignKey("GuarantorPatientId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("GuarantorPatientId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "PreferredLocation")
                         .WithMany()
-                        .HasForeignKey("PreferredLocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PreferredLocationId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "PrimaryHygienist")
                         .WithMany()
-                        .HasForeignKey("PrimaryHygienistId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PrimaryHygienistId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "PrimaryProvider")
                         .WithMany()
-                        .HasForeignKey("PrimaryProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PrimaryProviderId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "ReferredByPatient")
                         .WithMany()
-                        .HasForeignKey("ReferredByPatientId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ReferredByPatientId");
 
                     b.OwnsOne("DentalSurgery.Domain.Common.Address", "Address", b1 =>
                         {
@@ -10072,8 +10041,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "ClinicianStaff")
                         .WithMany()
-                        .HasForeignKey("ClinicianStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ClinicianStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.ConsentFormTemplate", "ConsentFormTemplate")
                         .WithMany()
@@ -10089,8 +10057,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "WitnessStaff")
                         .WithMany()
-                        .HasForeignKey("WitnessStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("WitnessStaffId");
 
                     b.Navigation("ClinicianStaff");
 
@@ -10257,8 +10224,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "DiagnosedByStaff")
                         .WithMany()
-                        .HasForeignKey("DiagnosedByStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("DiagnosedByStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Diagnoses")
@@ -10268,8 +10234,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
-                        .HasForeignKey("ToothId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ToothId");
 
                     b.Navigation("DiagnosedByStaff");
 
@@ -10395,8 +10360,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.InsuranceClaim", "InsuranceClaim")
                         .WithMany()
-                        .HasForeignKey("InsuranceClaimId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InsuranceClaimId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Payments")
@@ -10454,8 +10418,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "ExaminerStaff")
                         .WithMany()
-                        .HasForeignKey("ExaminerStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ExaminerStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("PeriodontalCharts")
@@ -10689,13 +10652,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Pharmacy", "Pharmacy")
                         .WithMany()
-                        .HasForeignKey("PharmacyId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PharmacyId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "PrescriberStaff")
                         .WithMany()
-                        .HasForeignKey("PrescriberStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PrescriberStaffId");
 
                     b.Navigation("Patient");
 
@@ -10726,23 +10687,19 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Appointment", "Appointment")
                         .WithMany("CompletedProcedures")
-                        .HasForeignKey("AppointmentId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("AppointmentId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Assistant")
                         .WithMany()
-                        .HasForeignKey("AssistantId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("AssistantId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.InvoiceLine", "InvoiceLine")
                         .WithMany()
-                        .HasForeignKey("InvoiceLineId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InvoiceLineId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "Location")
                         .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("LocationId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Procedures")
@@ -10763,13 +10720,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
-                        .HasForeignKey("ToothId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ToothId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.TreatmentPlanItem", "TreatmentPlanItem")
                         .WithMany()
-                        .HasForeignKey("TreatmentPlanItemId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("TreatmentPlanItemId");
 
                     b.Navigation("Appointment");
 
@@ -10800,8 +10755,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.InventoryLot", "InventoryLot")
                         .WithMany()
-                        .HasForeignKey("InventoryLotId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InventoryLotId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Procedure", "Procedure")
                         .WithMany("MaterialsUsed")
@@ -10850,8 +10804,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.PatientDocument", "Document")
                         .WithMany()
-                        .HasForeignKey("DocumentId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("DocumentId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Radiographs")
@@ -10861,8 +10814,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "TakenByStaff")
                         .WithMany()
-                        .HasForeignKey("TakenByStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("TakenByStaffId");
 
                     b.Navigation("Document");
 
@@ -10881,8 +10833,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "PreferredProvider")
                         .WithMany()
-                        .HasForeignKey("PreferredProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PreferredProviderId");
 
                     b.Navigation("Patient");
 
@@ -10893,8 +10844,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "InternalProvider")
                         .WithMany()
-                        .HasForeignKey("InternalProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InternalProviderId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("Referrals")
@@ -11011,8 +10961,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "DefaultLocation")
                         .WithMany()
-                        .HasForeignKey("DefaultLocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("DefaultLocationId");
 
                     b.OwnsOne("DentalSurgery.Domain.Common.Address", "Address", b1 =>
                         {
@@ -11166,8 +11115,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Operatory", "DefaultOperatory")
                         .WithMany()
-                        .HasForeignKey("DefaultOperatoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("DefaultOperatoryId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "Location")
                         .WithMany()
@@ -11203,8 +11151,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "OperatorStaff")
                         .WithMany()
-                        .HasForeignKey("OperatorStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("OperatorStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Steriliser", "Steriliser")
                         .WithMany("Cycles")
@@ -11221,8 +11168,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "Location")
                         .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("LocationId");
 
                     b.Navigation("Location");
                 });
@@ -11237,8 +11183,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.InventoryLot", "InventoryLot")
                         .WithMany()
-                        .HasForeignKey("InventoryLotId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InventoryLotId");
 
                     b.Navigation("InventoryItem");
 
@@ -11345,8 +11290,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.InstrumentSet", "InstrumentSet")
                         .WithMany()
-                        .HasForeignKey("InstrumentSetId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InstrumentSetId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Procedure", "Procedure")
                         .WithOne("SurgicalRecord")
@@ -11369,18 +11313,15 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Procedure", "Procedure")
                         .WithMany()
-                        .HasForeignKey("ProcedureId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProcedureId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "RecordedByStaff")
                         .WithMany()
-                        .HasForeignKey("RecordedByStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("RecordedByStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.ToothConditionRecord", "Supersedes")
                         .WithMany()
-                        .HasForeignKey("SupersedesId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("SupersedesId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany("Conditions")
@@ -11403,8 +11344,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.FeeSchedule", "FeeSchedule")
                         .WithMany()
-                        .HasForeignKey("FeeScheduleId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("FeeScheduleId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany("TreatmentPlans")
@@ -11414,8 +11354,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Provider")
                         .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProviderId");
 
                     b.Navigation("FeeSchedule");
 
@@ -11434,13 +11373,11 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "Provider")
                         .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ProviderId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Tooth", "Tooth")
                         .WithMany()
-                        .HasForeignKey("ToothId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ToothId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.TreatmentPlanPhase", "TreatmentPlanPhase")
                         .WithMany("Items")
@@ -11478,8 +11415,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "RecordedByStaff")
                         .WithMany()
-                        .HasForeignKey("RecordedByStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("RecordedByStaffId");
 
                     b.Navigation("Patient");
 
@@ -11490,8 +11426,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Location", "Location")
                         .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("LocationId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany()
@@ -11501,8 +11436,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
 
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "PreferredProvider")
                         .WithMany()
-                        .HasForeignKey("PreferredProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("PreferredProviderId");
 
                     b.Navigation("Location");
 
@@ -11515,8 +11449,7 @@ namespace DentalSurgery.Migrations.SqlServer.Migrations
                 {
                     b.HasOne("DentalSurgery.Domain.Entities.Staff", "AssignedToStaff")
                         .WithMany()
-                        .HasForeignKey("AssignedToStaffId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("AssignedToStaffId");
 
                     b.HasOne("DentalSurgery.Domain.Entities.Patient", "Patient")
                         .WithMany()

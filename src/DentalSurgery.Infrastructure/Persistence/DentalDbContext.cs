@@ -170,7 +170,7 @@ public class DentalDbContext(
         ApplyQueryFilters(builder);
         ApplyTenantIndexes(builder);
         ApplyConcurrencyTokens(builder, IsSqlite);
-        RestrictCascadeDeletes(builder);
+        RestrictDatabaseDeleteActions(builder);
     }
 
     /// <summary>Gives the Identity tables friendlier names alongside the domain tables.</summary>
@@ -443,14 +443,37 @@ public class DentalDbContext(
     /// Clinical history must not disappear because a parent row was removed,
     /// so cascade delete is turned off wherever it is not an owned aggregate.
     /// </summary>
-    private static void RestrictCascadeDeletes(ModelBuilder builder)
+    private static void RestrictDatabaseDeleteActions(ModelBuilder builder)
     {
         foreach (var relationship in builder.Model.GetEntityTypes()
                      .Where(t => !t.IsOwned())
                      .SelectMany(t => t.GetForeignKeys())
-                     .Where(fk => !fk.IsOwnership && fk.DeleteBehavior == DeleteBehavior.Cascade))
+                     .Where(fk => !fk.IsOwnership))
         {
-            relationship.DeleteBehavior = DeleteBehavior.Restrict;
+            relationship.DeleteBehavior = relationship.DeleteBehavior switch
+            {
+                DeleteBehavior.Cascade => DeleteBehavior.Restrict,
+
+                // ClientSetNull keeps the behaviour EF gives a loaded graph -
+                // the dependent's foreign key is set to null - while asking the
+                // database for NO ACTION instead of ON DELETE SET NULL.
+                //
+                // SQL Server cannot express the alternative. It rejects SET NULL
+                // on a self-reference outright, and rejects two SET NULL paths
+                // arriving at the same table, both with error 1785: "may cause
+                // cycles or multiple cascade paths". Patients has all of it -
+                // Guarantor and ReferredBy point back at Patients, and
+                // PrimaryProvider and PrimaryHygienist both point at Staff - so
+                // the very first migration could not create the table.
+                //
+                // SQLite accepts every one of those definitions, which is why
+                // this survived to a deployment: the schema was valid in
+                // development and invalid in production, and nothing in between
+                // ever built it on SQL Server.
+                DeleteBehavior.SetNull => DeleteBehavior.ClientSetNull,
+
+                var unchanged => unchanged
+            };
         }
     }
 }

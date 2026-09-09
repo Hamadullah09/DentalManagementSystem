@@ -111,6 +111,77 @@ jobs:
           name: migration-script
           path: migrate.sql
 
+  # Generating the script proves it can be written, not that a database will
+  # accept it. Those are different things, and the difference reached production:
+  # the schema scaffolded and passed every check here, then failed on the real
+  # server with "may cause cycles or multiple cascade paths" because SQL Server
+  # refuses ON DELETE SET NULL on a self-reference and SQLite does not. Nothing
+  # in between ever built the schema on SQL Server.
+  #
+  # So this builds it, on the version the deployment actually runs.
+  sqlserver-schema:
+    name: The schema builds on SQL Server
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        env:
+          ACCEPT_EULA: Y
+          # Not a secret: a throwaway container that exists for one job, holds
+          # nothing, and is destroyed with the runner. Varied per run so it is
+          # never a standing value anyone could come to rely on.
+          MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-Xy
+        ports:
+          - 1433:1433
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - run: dotnet tool restore
+      - run: dotnet restore DentalSurgery.sln
+
+      - name: Wait for SQL Server to accept connections
+        run: |
+          for attempt in $(seq 1 40); do
+            if (echo > /dev/tcp/127.0.0.1/1433) 2>/dev/null; then
+              echo "SQL Server is listening."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::SQL Server did not start."
+          exit 1
+
+      # The real test: apply every migration to an empty SQL Server database and
+      # let the server judge the schema.
+      - name: Apply the migrations
+        env:
+          DENTAL_MIGRATION_PROVIDER: SqlServer
+          ConnectionStrings__DefaultConnection: >-
+            Server=127.0.0.1,1433;Database=DentalSurgery-CI;User Id=sa;Password=Ci-${{ github.run_id }}-Xy;Encrypt=True;TrustServerCertificate=True;Connect Timeout=60
+        run: |
+          dotnet ef database update \
+            --project src/DentalSurgery.Migrations.SqlServer \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
+      # Applying twice proves the script is safe to re-run, which is what the
+      # deployment relies on when a release is repeated.
+      - name: Apply them again
+        env:
+          DENTAL_MIGRATION_PROVIDER: SqlServer
+          ConnectionStrings__DefaultConnection: >-
+            Server=127.0.0.1,1433;Database=DentalSurgery-CI;User Id=sa;Password=Ci-${{ github.run_id }}-Xy;Encrypt=True;TrustServerCertificate=True;Connect Timeout=60
+        run: |
+          dotnet ef database update \
+            --project src/DentalSurgery.Migrations.SqlServer \
+            --startup-project src/DentalSurgery.Web \
+            --context DentalDbContext
+
   container:
     name: Container builds
     runs-on: ubuntu-latest
