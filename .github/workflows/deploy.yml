@@ -240,12 +240,24 @@ jobs:
           MIGRATE_ON_STARTUP: ${{ vars.MIGRATE_ON_STARTUP || 'false' }}
           STDOUT_LOG: ${{ vars.STDOUT_LOG || 'false' }}
           HOSTING_MODEL: ${{ vars.HOSTING_MODEL || 'inprocess' }}
+          PROCESS_PATH: ${{ vars.PROCESS_PATH || 'dotnet' }}
+          # Derived, not configured. The two belong together - "dotnet" needs the
+          # dll as an argument and the apphost takes none - and a variable that
+          # has to be set to the empty string to be correct is a trap.
+          PROCESS_ARGS: ${{ (vars.PROCESS_PATH == '' || vars.PROCESS_PATH == 'dotnet') && '.\DentalSurgery.Web.dll' || '' }}
           PRACTICE_NAME: ${{ vars.PRACTICE_NAME }}
           PRACTICE_SLUG: ${{ vars.PRACTICE_SLUG }}
         run: |
           set -o pipefail
           # Assembled with jq and piped on stdin, so no secret is ever a shell
           # word, a command argument or a line in the run log.
+          #
+          # PROCESS_PATH is what the module executes. Publishing writes
+          # "dotnet" with the dll as an argument, which requires dotnet to be on
+          # the app pool's PATH - not a given on shared hosting, and when it is
+          # missing the process never starts, no managed code runs, and nothing
+          # is written anywhere. The published apphost, .\DentalSurgery.Web.exe,
+          # finds the runtime itself and takes no arguments.
           #
           # HOSTING_MODEL is inprocess by default, which is right for a Blazor
           # Server application: every interaction is a round trip, and
@@ -265,7 +277,11 @@ jobs:
             --arg host "$SITE_HOST" \
             --arg migrate "$MIGRATE_ON_STARTUP" \
             --arg practice "$PRACTICE_NAME" \
-            --arg slug "$PRACTICE_SLUG"             --arg stdout "$STDOUT_LOG"             --arg hosting "$HOSTING_MODEL" \
+            --arg slug "$PRACTICE_SLUG" \
+            --arg stdout "$STDOUT_LOG" \
+            --arg hosting "$HOSTING_MODEL" \
+            --arg processPath "$PROCESS_PATH" \
+            --arg processArgs "$PROCESS_ARGS" \
             '{
                "ConnectionStrings__DefaultConnection": $conn,
                "Database__Provider": "SqlServer",
@@ -282,6 +298,8 @@ jobs:
 
                "@stdoutLogEnabled": $stdout,
                "@hostingModel": $hosting,
+               "@processPath": $processPath,
+               "@arguments": $processArgs,
                "ASPNETCORE_DETAILEDERRORS": $stdout
              }' | python3 deploy/inject-config.py "$PUBLISH_DIR/web.config"
 

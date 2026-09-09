@@ -77,8 +77,15 @@ def main() -> int:
     if accounts_raw:
         settings.update(expand_accounts(accounts_raw, must_change))
 
-    # An empty value is a value the operator did not supply. Writing it would
-    # overwrite a good default with nothing, so it is dropped instead.
+    # Attributes are separated before the empty-value rule below, because that
+    # rule is wrong for them. An empty environment variable is one the operator
+    # did not supply, and writing it would replace a good default with nothing.
+    # An empty attribute is a real instruction: arguments="" is exactly what the
+    # published apphost needs, and dropping it leaves the ".dll" argument meant
+    # for "dotnet" attached to an executable that takes none.
+    attributes = {k[1:]: v for k, v in settings.items() if k.startswith("@")}
+    settings = {k: v for k, v in settings.items() if not k.startswith("@")}
+
     settings = {k: v for k, v in settings.items() if str(v).strip()}
 
     tree = ET.parse(path)
@@ -91,9 +98,6 @@ def main() -> int:
         raise SystemExit(f"{path} has no <aspNetCore> element to configure.")
 
     # Attributes on <aspNetCore> itself, before the environment variables.
-    attributes = {k[1:]: v for k, v in settings.items() if k.startswith("@")}
-    settings = {k: v for k, v in settings.items() if not k.startswith("@")}
-
     for name, value in sorted(attributes.items()):
         node.set(name, str(value))
 
