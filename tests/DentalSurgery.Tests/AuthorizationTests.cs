@@ -530,7 +530,10 @@ public class ReturnUrlTests
 
         var baseUri = new Uri(BaseUri);
 
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
+        // Mirrors IdentityRedirectManager: a rooted path is relative, settled
+        // before any absolute parse. On Linux "/patients" otherwise parses as
+        // file:///patients and is judged to leave this origin.
+        if (!normalised.StartsWith('/') && Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
         {
             return SameOrigin(absolute, baseUri)
                 ? absolute.PathAndQuery + absolute.Fragment

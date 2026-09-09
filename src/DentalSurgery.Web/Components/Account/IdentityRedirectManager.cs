@@ -67,13 +67,27 @@ internal sealed class IdentityRedirectManager(NavigationManager navigationManage
 
         var baseUri = new Uri(navigationManager.BaseUri);
 
-        // Anything carrying a scheme — https:, javascript:, data: — is judged as
-        // absolute, and survives only if it names this very origin.
-        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absoluteCandidate))
+        // A rooted path is always relative to this site, and is settled here
+        // before anything tries to parse it as absolute.
+        //
+        // That ordering matters, and only shows itself off Windows: on Linux
+        // "/patients" parses happily as an absolute URI with the file: scheme,
+        // so it would be compared against this origin, judged foreign, and
+        // replaced with the home page. The application would send every user to
+        // the dashboard after sign-in instead of where they were going - on the
+        // deployment target only, never on a developer's machine.
+        if (!normalised.StartsWith('/'))
         {
-            return SameOrigin(absoluteCandidate, baseUri)
-                ? absoluteCandidate.PathAndQuery + absoluteCandidate.Fragment
-                : home;
+            // Anything carrying a scheme — https:, javascript:, data: — is judged
+            // as absolute, and survives only if it names this very origin. A
+            // scheme this application never serves cannot match one, so it is
+            // refused without needing to be listed.
+            if (Uri.TryCreate(candidate, UriKind.Absolute, out var absoluteCandidate))
+            {
+                return SameOrigin(absoluteCandidate, baseUri)
+                    ? absoluteCandidate.PathAndQuery + absoluteCandidate.Fragment
+                    : home;
+            }
         }
 
         // Rooted or relative. Resolve against the base so an application hosted
