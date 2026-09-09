@@ -60,11 +60,17 @@ def main() -> int:
 
     # No default. A guessed deployment directory is the one mistake here that
     # damages something other than this application.
-    remote = require("FTP_REMOTE_DIR").rstrip("/") or ""
-    if not remote.startswith("/"):
+    #
+    # Validated before the trailing slash is stripped, not after: "/" is the
+    # server root and a perfectly ordinary answer, but stripping first turns it
+    # into "" and the check then rejects it. Paths are built by appending, so
+    # the empty string is exactly the right internal form for the root.
+    raw = require("FTP_REMOTE_DIR")
+    if not raw.startswith("/"):
         raise SystemExit(
-            f"FTP_REMOTE_DIR must be an absolute path on the server, for example /dental. Got: {remote!r}"
+            f"FTP_REMOTE_DIR must be an absolute path on the server, for example / or /dental. Got: {raw!r}"
         )
+    remote = raw.rstrip("/")
 
     require_tls = os.environ.get("FTP_REQUIRE_TLS", "true").lower() != "false"
     prune = os.environ.get("FTP_PRUNE", "false").lower() == "true"

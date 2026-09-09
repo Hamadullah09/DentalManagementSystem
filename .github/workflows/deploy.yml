@@ -58,6 +58,7 @@ jobs:
             exit 1
           fi
           echo "Listing $FTP_REMOTE_DIR on $FTP_HOST"
+          set -o pipefail
           python3 deploy/ftp-session.py probe | lftp
 
       - name: What to look for
@@ -189,6 +190,7 @@ jobs:
           PRACTICE_NAME: ${{ vars.PRACTICE_NAME }}
           PRACTICE_SLUG: ${{ vars.PRACTICE_SLUG }}
         run: |
+          set -o pipefail
           # Assembled with jq and piped on stdin, so no secret is ever a shell
           # word, a command argument or a line in the run log.
           jq -n \
@@ -240,6 +242,7 @@ jobs:
           FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
           FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
         run: |
+          set -o pipefail
           cp deploy/app_offline.htm app_offline.htm
           python3 deploy/ftp-session.py offline | lftp
 
@@ -252,7 +255,9 @@ jobs:
           FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
           FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
           FTP_PRUNE: ${{ inputs.prune }}
-        run: python3 deploy/ftp-session.py mirror | lftp
+        run: |
+          set -o pipefail
+          python3 deploy/ftp-session.py mirror | lftp
 
       - name: Bring the site back
         if: ${{ inputs.mode == 'deploy' }}
@@ -262,7 +267,9 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
           FTP_REQUIRE_TLS: ${{ vars.FTP_REQUIRE_TLS || 'true' }}
-        run: python3 deploy/ftp-session.py online | lftp
+        run: |
+          set -o pipefail
+          python3 deploy/ftp-session.py online | lftp
 
       # ----------------------------------------------------------------- proof
       #
