@@ -601,14 +601,42 @@ public class DatabaseInitialiser(
             2, main.Operatories.Count + satellite.Operatories.Count);
     }
 
+    /// <summary>
+    /// The practice's main site, whatever it happens to be called.
+    /// <para>
+    /// The demonstration data used to find it by the literal code "HARLEY",
+    /// which is the code the demonstration practice gives its own main site. On
+    /// any install that already had a practice - which is every install seeded
+    /// without demonstration data, where the site is coded "MAIN" - that lookup
+    /// found nothing. Staff seeding threw on it, and the operational and
+    /// demonstration builders returned quietly, so switching demonstration data
+    /// on afterwards either took the application down or appeared to do nothing
+    /// at all.
+    /// </para>
+    /// </summary>
+    private async Task<Location?> PrimaryLocationAsync(CancellationToken ct) =>
+        await db.Locations.FirstOrDefaultAsync(l => l.IsPrimary, ct)
+        ?? await db.Locations.OrderBy(l => l.Code).FirstOrDefaultAsync(ct);
+
     // ------------------------------------------------------------------ staff and logins
 
     private async Task SeedStaffAndUsersAsync(Guid tenantId, CancellationToken ct)
     {
         if (await db.Staff.AnyAsync(ct)) return;
 
-        var main = await db.Locations.FirstAsync(l => l.Code == "HARLEY", ct);
-        var satellite = await db.Locations.FirstAsync(l => l.Code == "RIVERSIDE", ct);
+        var main = await PrimaryLocationAsync(ct);
+
+        if (main is null)
+        {
+            logger.LogWarning("No site exists, so no staff were created.");
+            return;
+        }
+
+        // Optional. A practice that was not built from the demonstration data
+        // has one site, and the only thing the second is used for is the
+        // hygienist's Saturday clinic below.
+        var satellite = await db.Locations.FirstOrDefaultAsync(l => l.Id != main.Id, ct);
+
         var operatories = await db.Operatories.Where(o => o.LocationId == main.Id)
             .OrderBy(o => o.DisplayOrder).ToListAsync(ct);
 
@@ -727,8 +755,9 @@ public class DatabaseInitialiser(
                 });
             }
 
-            // The hygienist also covers the satellite clinic on Saturdays.
-            if (staff.Role == StaffRole.DentalHygienist)
+            // The hygienist also covers the satellite clinic on Saturdays, where
+            // there is one.
+            if (staff.Role == StaffRole.DentalHygienist && satellite is not null)
             {
                 db.StaffScheduleSlots.Add(new StaffScheduleSlot
                 {
@@ -1106,7 +1135,7 @@ public class DatabaseInitialiser(
 
     private async Task SeedOperationalDataAsync(CancellationToken ct)
     {
-        var main = await db.Locations.FirstOrDefaultAsync(l => l.Code == "HARLEY", ct);
+        var main = await PrimaryLocationAsync(ct);
         if (main is null) return;
 
         if (!await db.Suppliers.AnyAsync(ct))

@@ -156,7 +156,12 @@ public class DemoDataBuilder(DentalDbContext db, ILogger logger)
         var staff = await db.Staff.ToListAsync(ct);
         var teeth = await db.Teeth.ToListAsync(ct);
         var codes = await db.ProcedureCodes.ToListAsync(ct);
-        var location = await db.Locations.FirstOrDefaultAsync(l => l.Code == "HARLEY", ct);
+        // The primary site, whatever it is called. Looking for the literal code
+        // "HARLEY" only ever matched a practice built by the demonstration
+        // seeder itself: on an install that already had a practice, this
+        // returned null and the whole build silently did nothing.
+        var location = await db.Locations.FirstOrDefaultAsync(l => l.IsPrimary, ct)
+                       ?? await db.Locations.OrderBy(l => l.Code).FirstOrDefaultAsync(ct);
 
         if (staff.Count == 0 || teeth.Count == 0 || codes.Count == 0 || location is null) return null;
 

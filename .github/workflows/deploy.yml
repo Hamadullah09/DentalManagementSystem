@@ -146,6 +146,10 @@ jobs:
             echo "::error::The repository variable FTP_REMOTE_DIR is not set. Run this workflow in probe mode first to find the right path."
             exit 1
           fi
+          if [ "${{ vars.DEMO_DATA }}" = "true" ] && [ "${{ vars.ENVIRONMENT || 'Production' }}" = "Production" ]; then
+            echo "::error::DEMO_DATA is on while ENVIRONMENT is Production. The application refuses to start in that combination, on purpose: demonstration data fabricates patients. Set the ENVIRONMENT variable to Staging for a demonstration instance, or turn DEMO_DATA off."
+            exit 1
+          fi
           echo "Configuration is complete."
 
       # Before the build, not after it. The driver's own complaint about a
@@ -250,6 +254,8 @@ jobs:
           MUST_CHANGE: ${{ vars.SEED_MUST_CHANGE_PASSWORD || 'true' }}
           SITE_HOST: ${{ vars.SITE_HOST || 'dental.sma-techno.net' }}
           MIGRATE_ON_STARTUP: ${{ vars.MIGRATE_ON_STARTUP || 'false' }}
+          DEMO_DATA: ${{ vars.DEMO_DATA || 'false' }}
+          ENVIRONMENT: ${{ vars.ENVIRONMENT || 'Production' }}
           STDOUT_LOG: ${{ vars.STDOUT_LOG || 'false' }}
           HOSTING_MODEL: ${{ vars.HOSTING_MODEL || 'inprocess' }}
           PROCESS_PATH: ${{ vars.PROCESS_PATH || 'dotnet' }}
@@ -263,6 +269,20 @@ jobs:
           set -o pipefail
           # Assembled with jq and piped on stdin, so no secret is ever a shell
           # word, a command argument or a line in the run log.
+          #
+          # DEMO_DATA is off unless someone deliberately turns it on, and turning
+          # it on sets both flags: the application requires a second, separate
+          # opt-in precisely so that demonstration data cannot arrive by
+          # inheriting a developer's setting. It fabricates patients, clinical
+          # notes and invoices, so an instance that will ever hold real records
+          # must not have it.
+          #
+          # ENVIRONMENT exists because of that. The application refuses to start
+          # at all with demonstration data enabled in Production - which is the
+          # rule working, not an obstacle - so an instance holding fabricated
+          # patients has to be labelled for what it is, usually Staging. Setting
+          # it back to Production is what makes the refusal bite again, and is
+          # the step that turns a demonstration into a real practice.
           #
           # PROCESS_PATH is what the module executes. Publishing writes
           # "dotnet" with the dll as an argument, which requires dotnet to be on
@@ -288,6 +308,7 @@ jobs:
             --arg mustChange "$MUST_CHANGE" \
             --arg host "$SITE_HOST" \
             --arg migrate "$MIGRATE_ON_STARTUP" \
+            --arg demo "$DEMO_DATA"             --arg environment "$ENVIRONMENT" \
             --arg practice "$PRACTICE_NAME" \
             --arg slug "$PRACTICE_SLUG" \
             --arg stdout "$STDOUT_LOG" \
@@ -295,13 +316,14 @@ jobs:
             --arg processPath "$PROCESS_PATH" \
             --arg processArgs "$PROCESS_ARGS" \
             '{
+               "ASPNETCORE_ENVIRONMENT": $environment,
                "ConnectionStrings__DefaultConnection": $conn,
                "Database__Provider": "SqlServer",
                "AllowedHosts": $host,
                "Seed__AdminEmail": $admin,
                "Seed__MigrateOnStartup": $migrate,
-               "Seed__DemoData": "false",
-               "Seed__AllowDemoDataOutsideDevelopment": "false",
+               "Seed__DemoData": $demo,
+               "Seed__AllowDemoDataOutsideDevelopment": $demo,
                "Seed__VerifySchemaOnStartup": "true",
                "Seed__TenantName": $practice,
                "Seed__TenantSlug": $slug,
